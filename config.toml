@@ -1,0 +1,12 @@
+[llm]
+host = "http://localhost:11434"
+model = "qwen3:14b"       # main model: quality checks and real use
+fast_model = "qwen3:8b"   # fast model: quick checks while developing (--fast)
+think = false             # Qwen3 "thinking" mode; slower but can help multi-step tasks
+temperature = 0.2         # low = more consistent tool calls
+num_ctx = 8192            # context window in tokens
+
+[agent]
+max_steps = 8             # stop if the model keeps calling tools without answering
+workspace = "."           # file tools cannot read outside this folder
+log_dir = "logs"          # JSONL traces of every session
