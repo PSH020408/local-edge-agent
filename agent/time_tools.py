@@ -50,9 +50,16 @@ _WEEKDAY_LOOKUP = {name: i for i, name in enumerate(WEEKDAYS)} | {name[:3]: i fo
 _UNITS = {"day": "days", "week": "weeks", "month": "months", "year": "years"}
 
 DATE_INPUT_HELP = (
-    "Use 'today', 'now', 'tomorrow', 'yesterday', 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM', 'HH:MM', "
-    "or a phrase supported by resolve_date (e.g. 'next friday')."
+    "Use 'today', 'now', 'tomorrow', 'yesterday', 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM', 'HH:MM', '9:30 AM', "
+    "'tomorrow 3 PM', or a phrase supported by resolve_date (e.g. 'next friday')."
 )
+
+# Time of day with an optional day: "9:30 AM", "3 pm", "14:05:10", "today 9:30 AM",
+# "tomorrow at 14:00", "2026-11-02 3:15 PM", "9:30 AM tomorrow". Run 7: "9:30 AM" was rejected.
+_TIME = r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?(?::(?P<s>\d{2}))?\s*(?P<ampm>[ap]\.?\s?m\.?)?"
+_DAY = r"(?P<day>today|tomorrow|yesterday|\d{4}-\d{2}-\d{2})"
+_DAY_THEN_TIME = re.compile(rf"(?:{_DAY}\s+(?:at\s+)?)?{_TIME}")
+_TIME_THEN_DAY = re.compile(rf"{_TIME}\s+{_DAY}")
 
 
 # ---------- time zones ----------
@@ -106,6 +113,28 @@ def _now(zone: ZoneInfo | None = None) -> datetime:
 
 # ---------- parsing and formatting ----------
 
+def _parse_clock(text: str, today: datetime) -> datetime | None:
+    """Parse a time of day with an optional day. Returns None if text is not a time."""
+    match = _DAY_THEN_TIME.fullmatch(text) or _TIME_THEN_DAY.fullmatch(text)
+    if not match or not (match.group("m") or match.group("ampm")):
+        return None  # "15" alone is not a time; "15:00" and "3 pm" are
+    hour, minute, second = int(match.group("h")), int(match.group("m") or 0), int(match.group("s") or 0)
+    ampm = (match.group("ampm") or "").replace(".", "").replace(" ", "")
+    if ampm:
+        if not 1 <= hour <= 12:
+            raise ValueError(f"'{text}': hour must be 1-12 with AM/PM")
+        hour = hour % 12 + (12 if ampm == "pm" else 0)
+    if hour > 23 or minute > 59 or second > 59:
+        raise ValueError(f"'{text}' is not a valid time of day")
+    day = match.group("day") or "today"
+    base = {
+        "today": today,
+        "tomorrow": today + timedelta(days=1),
+        "yesterday": today - timedelta(days=1),
+    }.get(day) or datetime.strptime(day, "%Y-%m-%d")
+    return base.replace(hour=hour, minute=minute, second=second)
+
+
 def _parse(value: str) -> tuple[datetime, bool]:
     """Parse a date input. Returns (naive local datetime, has_time)."""
     raw = value.strip()
@@ -121,9 +150,9 @@ def _parse(value: str) -> tuple[datetime, bool]:
         return today - timedelta(days=1), False
     if re.fullmatch(r"\d{9,11}", v):  # Unix timestamp
         return datetime.fromtimestamp(int(v)), True
-    if re.fullmatch(r"\d{1,2}:\d{2}", v):  # time today
-        hour, minute = map(int, v.split(":"))
-        return today.replace(hour=hour, minute=minute), True
+    clock = _parse_clock(v, today)
+    if clock is not None:
+        return clock, True
     for fmt, has_time in (
         ("%Y-%m-%d", False),
         ("%Y/%m/%d", False),
@@ -145,7 +174,10 @@ def _parse(value: str) -> tuple[datetime, bool]:
 
 def _fmt(moment: datetime | Date, has_time: bool = False) -> str:
     if has_time:
-        return moment.strftime("%Y-%m-%d %H:%M (%A)")
+        # Give both 24-hour and 12-hour forms so the model never converts in its head.
+        clock = "%H:%M:%S" if moment.second else "%H:%M"
+        twelve = moment.strftime(("%I:%M:%S" if moment.second else "%I:%M") + " %p").lstrip("0")
+        return moment.strftime(f"%Y-%m-%d {clock}") + f" ({twelve}, {moment:%A})"
     return moment.strftime("%Y-%m-%d (%A)")
 
 
@@ -266,7 +298,7 @@ def register_time_tools(registry: ToolRegistry) -> None:
         """Convert a time from one time zone to another. Example: 3 PM in London to Seoul time.
 
         Args:
-            time: 'HH:MM' (today), 'YYYY-MM-DD HH:MM', or 'now'.
+            time: 'HH:MM' or '3 PM' (today), 'YYYY-MM-DD HH:MM', or 'now'.
             from_timezone: IANA name or city. Omit for the user's local time zone.
             to_timezone: IANA name or city. Omit for the user's local time zone.
         """
@@ -277,10 +309,9 @@ def register_time_tools(registry: ToolRegistry) -> None:
         if raw == "now":
             moment = _now(src)
         else:
-            if re.fullmatch(r"\d{1,2}:\d{2}", raw):
-                hour, minute = map(int, raw.split(":"))
-                naive = datetime.combine(_now(src).date(), Time(hour, minute))
-            else:
+            # A bare clock time ("15:00", "3 PM") means that time today in the source zone.
+            naive = _parse_clock(raw, datetime.combine(_now(src).date(), Time()))
+            if naive is None:
                 naive, has_time = _parse(time)
                 if not has_time:
                     raise ValueError("include a time, e.g. '15:00' or '2026-11-02 15:00'")
@@ -298,23 +329,29 @@ def register_time_tools(registry: ToolRegistry) -> None:
         months: int = 0,
         weeks: int = 0,
         days: int = 0,
-        hours: int = 0,
-        minutes: int = 0,
+        hours: float = 0,
+        minutes: float = 0,
         start_is_day_one: bool = False,
     ) -> str:
-        """Add or subtract time from a date. Use for "100 days from today", "3 months ago", "2 weeks after 2026-12-01", "now plus 90 minutes". Use negative numbers to go back.
+        """Add or subtract time from a date or a clock time. Use for "100 days from today", "3 months ago", "2 weeks after 2026-12-01", "now plus 90 minutes", "leave at 9:30 AM and drive 5.625 hours". Use negative numbers to go back.
 
         Args:
-            date: Start date. 'today', 'now', 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM' or 'HH:MM'.
+            date: Start. 'today', 'now', 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM', '9:30 AM', 'tomorrow 14:00'. To add hours or minutes, the start must include a time of day.
             years: Years to add.
             months: Months to add.
             weeks: Weeks to add.
             days: Days to add.
-            hours: Hours to add. Use date='now' or a time for clock arithmetic.
-            minutes: Minutes to add.
+            hours: Hours to add. Fractions are fine, e.g. 5.625.
+            minutes: Minutes to add. Fractions are fine.
             start_is_day_one: True for Korean-style anniversaries where the start date counts as day 1 (the 100th day is 99 days later).
         """
         start, has_time = _parse(date)
+        if (hours or minutes) and not has_time:
+            # Run 7: "today" + 5.625 hours silently started from midnight and returned 05:37.
+            raise ValueError(
+                f"'{date}' has no time of day, so adding hours or minutes would start from midnight. "
+                "Give a start time such as '9:30 AM', 'today 14:00' or 'now'."
+            )
         result = _add_months(start, years * 12 + months)
         day_offset = weeks * 7 + days - (1 if start_is_day_one and (weeks or days) else 0)
         result += timedelta(days=day_offset, hours=hours, minutes=minutes)

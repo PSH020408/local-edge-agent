@@ -45,6 +45,30 @@ class TimeToolTests(unittest.TestCase):
         self.assertIn("Q4", out)
         self.assertIn("Leap year: no", out)
 
+    # Run 7: "I start driving 450 km at 80 km/h at 9:30 AM today. What time will I arrive?"
+    def test_twelve_hour_clock_and_fractional_hours(self):
+        out = self.call("add_to_date", date="2026-10-31 9:30 AM", hours=5.625)
+        self.assertIn("= 2026-10-31 15:07:30 (3:07:30 PM, Saturday)", out)
+        out = self.call("add_to_date", date="9:30 AM", hours=5.625)
+        self.assertIn("15:07:30 (3:07:30 PM", out)
+
+    def test_hours_on_a_date_without_time_is_an_error(self):
+        # Run 7: date="today" + 5.625 hours silently started at midnight (05:37).
+        out = self.call("add_to_date", date="today", hours=5.625)
+        self.assertIn("has no time of day", out)
+
+    def test_clock_formats(self):
+        for text, expected in [
+            ("2026-10-31 3 PM", "15:00"), ("2026-10-31 12:15 am", "00:15"), ("2026-10-31 12 p.m.", "12:00"),
+            ("2026-11-02 at 9:05", "09:05"), ("tomorrow 14:00", "14:00"), ("9:30 AM tomorrow", "09:30"),
+        ]:
+            self.assertIn(expected, self.call("add_to_date", date=text, minutes=0), text)
+        self.assertIn("Error", self.call("add_to_date", date="13 PM", minutes=1))
+
+    def test_convert_timezone_accepts_am_pm(self):
+        out = self.call("convert_timezone", time="2026-11-02 3 PM", from_timezone="London", to_timezone="Seoul")
+        self.assertIn("= 2026-11-03 00:00", out)
+
     # add_to_date
     def test_month_end_is_clamped(self):
         self.assertIn("= 2027-02-28", self.call("add_to_date", date="2027-01-31", months=1))

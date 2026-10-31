@@ -77,7 +77,7 @@ class BuiltinToolTests(unittest.TestCase):
 
     def test_calculator(self):
         self.assertEqual(self.registry.call("calculator", {"expression": "(12.5 * 4) / 2"}), "25")
-        self.assertEqual(self.registry.call("calculator", {"expression": "1847*293/3"}), "180390.3333")
+        self.assertEqual(self.registry.call("calculator", {"expression": "1847*293/3"}), "180390.333333")
         self.assertIn("Error", self.registry.call("calculator", {"expression": "__import__('os')"}))
 
     def test_file_tools_stay_inside_workspace(self):
@@ -102,6 +102,29 @@ class AgentLoopTests(unittest.TestCase):
         llm = FakeLLM([tool_call("get_current_time")] * 3)
         agent = Agent(llm, self.registry, max_steps=3)
         self.assertIn("Stopped after 3 steps", agent.run("loop forever"))
+
+    def test_repeated_failing_call_is_blocked(self):
+        # Run 6: the same failing calculator call was sent six times.
+        bad = tool_call("calculator", expression="(100 km/h) / 8 s")
+        llm = FakeLLM([bad, bad, bad, answer("unused")])
+        agent = Agent(llm, self.registry)
+        result = agent.run("acceleration?")
+        self.assertIn("Stopped: the same calculator call failed 2 times", result)
+        tool_messages = [m["content"] for m in agent.messages if m["role"] == "tool"]
+        self.assertIn("calculate_with_units", tool_messages[0])
+        self.assertIn("already made this exact call", tool_messages[1])
+
+    def test_empty_reply_is_retried_once(self):
+        # Run 8: the model returned an empty reply with no tool call.
+        llm = FakeLLM([answer(""), answer("It is 42.")])
+        agent = Agent(llm, self.registry)
+        self.assertEqual(agent.run("what is 6*7?"), "It is 42.")
+        self.assertIn("last reply was empty", llm.calls[1][-1]["content"])
+
+    def test_two_empty_replies_give_a_clear_message(self):
+        llm = FakeLLM([answer(""), answer("")])
+        agent = Agent(llm, self.registry)
+        self.assertEqual(agent.run("hello"), "[The model returned an empty answer.]")
 
     def test_confirmation_can_deny(self):
         registry = ToolRegistry()

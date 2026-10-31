@@ -1,0 +1,6 @@
+# Math libraries used by the math tools (agent/math_tools.py).
+# The agent core (loop, tool registry, Ollama client) uses the standard library only.
+numpy==2.5.4
+scipy==1.18.1
+sympy==1.14.0
+pint==0.26.2

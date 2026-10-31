@@ -13,7 +13,7 @@ DEFAULT_SYSTEM_PROMPT = """You are a local assistant running on the user's Mac.
 You can call tools to get real information. Rules:
 - Use a tool whenever it gives a more accurate answer than guessing (time, math, files).
 - For dates, weekdays, durations and time zones, always use the date tools. Never do calendar math yourself or with the calculator.
-- Report dates and numbers exactly as the tool returned them.
+- Report dates and numbers exactly as the tool returned them. Never convert units, angles or rounding in your head; if you need another form, call a tool again.
 - Never invent file contents; read the file first.
 - If a tool returns an error, fix the arguments or explain the problem.
 - Keep final answers short and direct. Answer in the user's language."""
@@ -47,6 +47,7 @@ class Agent:
         registry: ToolRegistry,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         max_steps: int = 8,
+        max_repeated_failures: int = 2,
         confirm: Callable[[str, dict], bool] | None = None,
         on_tool_call: Callable[[str, dict, str], None] | None = None,
         logger: TraceLogger | None = None,
@@ -55,6 +56,7 @@ class Agent:
         self.registry = registry
         self.system_prompt = system_prompt
         self.max_steps = max_steps
+        self.max_repeated_failures = max_repeated_failures
         self.confirm = confirm or (lambda name, args: False)
         self.on_tool_call = on_tool_call
         self.logger = logger or TraceLogger(None)
@@ -66,6 +68,10 @@ class Agent:
     def run(self, user_input: str) -> str:
         self.messages.append({"role": "user", "content": user_input})
         self.logger.log("user", content=user_input)
+        # Run 6: qwen3:14b sent the same failing calculator call six times in a row.
+        # Track failed calls so a repeat gets a clear "change your approach" message.
+        self._failed_calls: dict[str, int] = {}
+        empty_retries = 0
 
         for step in range(1, self.max_steps + 1):
             response = self.llm.chat(self.messages, tools=self.registry.schemas())
@@ -83,7 +89,16 @@ class Agent:
             )
 
             if not tool_calls:
-                return message.get("content", "").strip()
+                content = message.get("content", "").strip()
+                if content or empty_retries >= 1:
+                    return content or "[The model returned an empty answer.]"
+                # Run 8: qwen3:8b returned an empty reply with no tool call. Ask once more.
+                empty_retries += 1
+                self.messages.append(
+                    {"role": "user", "content": "Your last reply was empty. Answer the question, or call a tool if you need one."}
+                )
+                self.logger.log("empty_reply_retry", step=step)
+                continue
 
             for call in tool_calls:
                 name = call["function"]["name"]
@@ -93,7 +108,22 @@ class Agent:
                         args = json.loads(args)
                     except json.JSONDecodeError:
                         args = {}
-                result = self._execute(name, args)
+                key = f"{name}:{json.dumps(args, sort_keys=True, ensure_ascii=False)}"
+                if self._failed_calls.get(key, 0) >= self.max_repeated_failures:
+                    self.logger.log("stopped", reason="repeated_failure", call=key)
+                    return (
+                        f"[Stopped: the same {name} call failed {self._failed_calls[key]} times. "
+                        "The question may need a different tool or approach.]"
+                    )
+                if key in self._failed_calls:
+                    result = (
+                        "Error: you already made this exact call and it failed. Do not repeat it. "
+                        "Change the arguments or use a different tool."
+                    )
+                else:
+                    result = self._execute(name, args)
+                if result.startswith("Error"):
+                    self._failed_calls[key] = self._failed_calls.get(key, 0) + 1
                 self.messages.append({"role": "tool", "tool_name": name, "content": result})
                 self.logger.log("tool", step=step, name=name, arguments=args, result=result)
                 if self.on_tool_call:

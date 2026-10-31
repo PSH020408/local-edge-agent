@@ -1,6 +1,6 @@
 # Local LLM Agent
 
-A tool-using agent that runs entirely on a MacBook Pro (Apple M4 Pro, 24 GB) with a local LLM served by Ollama. No cloud APIs, no third-party Python dependencies.
+A tool-using agent that runs entirely on a MacBook Pro (Apple M4 Pro, 24 GB) with a local LLM served by Ollama. No cloud APIs. The agent core uses only the Python standard library; the math tools use numpy, scipy, sympy and pint.
 
 Author: PARK, SEHO
 
@@ -39,13 +39,26 @@ final answer
 ./scripts/setup_ollama.sh          # installs Ollama via Homebrew and pulls a model
 ollama pull qwen3:14b
 ollama pull qwen3:8b
+
+python3 -m venv .venv              # Python 3.11+
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
+
+## Tools
+
+| Group | Tools |
+|---|---|
+| Time and date (`agent/time_tools.py`) | `get_current_time`, `convert_timezone`, `add_to_date`, `date_difference`, `date_info`, `resolve_date` |
+| Math (`agent/math_tools.py`) | `calculator` (engineering functions, lists, sequences, decibels, complex numbers, number bases, physical constants), `convert_units`, `calculate_with_units` (formulas with units) |
+| Files (`agent/builtin_tools.py`) | `list_files`, `read_file` |
 
 ## Usage
 
 ```bash
-python3 main.py          # main model (qwen3:14b)
-python3 main.py --fast   # fast model (qwen3:8b) for quick checks
+source .venv/bin/activate
+python main.py          # main model (qwen3:14b)
+python main.py --fast   # fast model (qwen3:8b) for quick checks
 ```
 
 Commands inside the session: `/tools`, `/reset`, `/exit`.
@@ -53,10 +66,10 @@ Commands inside the session: `/tools`, `/reset`, `/exit`.
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -v
+python -m unittest discover -s tests -v
 ```
 
-Tests use a scripted fake model, so they run without Ollama.
+Tests use a scripted fake model and fixed dates, so they run without Ollama.
 
 ## Benchmarks
 

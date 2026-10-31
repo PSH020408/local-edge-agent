@@ -150,3 +150,87 @@ When the right tool is missing, the model forces the closest available tool and 
 - Model size no longer mattered: both scored 5/5. The tools, not the model, now determine correctness.
 - Scoring only the final answer is not enough. Two of ten correct answers came from flawed tool calls. Tool-call traces must be reviewed too.
 - Tool descriptions are prompts. One phrase ("Empty means the user's local time") directly caused a wrong tool call.
+
+## Run 6 — Math tools, basic set (2026-10-31)
+
+- New: `agent/math_tools.py` with an engineering `calculator` (functions, decibels, complex numbers, number bases, physical constants) and `convert_units` (pint, including Korean units pyeong/geun/don)
+- Math libraries: numpy, scipy, sympy, pint (`requirements.txt`). The agent core still uses only the standard library
+
+| # | Question | Ground truth | qwen3:8b |
+|---|---|---|---|
+| 1 | Square root of 2 times the sine of 30 degrees | 0.7071 | ✅ `calculator("sqrt(2) * sind(30)")` |
+| 2 | 100 km/h in m/s | 27.78 | ✅ `convert_units` |
+| 3 | 25 °C in °F | 77 | ✅ `convert_units` |
+| 4 | 20 dBm in watts | 0.1 | ✅ `convert_units("dBm" -> "watts")` |
+| 5 | 32 pyeong in m² | 105.79 | ✅ `convert_units` |
+
+Score: 8B 5/5. Every question gave the formula or units directly, so this set only checks tool selection.
+
+## Run 7 — Math tools, word problems and iterative fixes (2026-10-31)
+
+Five problems where the model has to choose a formula itself: acceleration (0-100 km/h in 8 s), RL impedance at 60 Hz, Shannon capacity at 30 dB SNR, free-fall speed from 10 m, `0xFF XOR 0b1010`.
+
+| Round | Model | Score | Main failure |
+|---|---|---|---|
+| Before fixes | qwen3:14b | 4/5 | Sent units to `calculator` six times in a row; built `sqrt(R²+X²) + jX` for impedance |
+| After fix 1 | qwen3:14b | 4/5 | `^` was now always a power, but the model used `0xFF ^ 0b1010` for XOR and got 255¹⁰ |
+| After fix 2 | qwen3:14b | 3/3 rechecked | Converted radians to degrees in its head (off by 0.01°) |
+| After all fixes | qwen3:8b | 5/5 | Each wrong first tool choice was corrected in one step by the error message |
+
+Fixes, each with a regression test:
+- Agent loop blocks an identical failed call: first a warning, then a stop
+- `^` is a power, except next to hex/binary literals, where it is XOR. Rewritten on tokens, because in Python `^` binds more loosely than `+`. The result states how `^` was read
+- New tool `calculate_with_units` (pint). Number-unit pairs are wrapped in parentheses, because pint reads `12 V / 4 ohm` as `(12 V / 4) * ohm`
+- Inverse trig results also report degrees; system prompt forbids converting units, angles or rounding in the model's head
+
+## Run 8 — Harder multi-step problems (2026-10-31 to 2026-11-01)
+
+Five problems: RC charge time to 90%, softmax of [2.0, 1.0, 0.1], birthday problem (23 people), arrival time for 450 km at 80 km/h from 9:30 AM, tensile stress in a 20 mm rod under 50 kN.
+
+| Round | qwen3:8b | qwen3:14b |
+|---|---|---|
+| Before fixes | 3/5 | — |
+| After fixes | **5/5** | **5/5** |
+
+Failures found and fixed:
+- **Silent wrong answer:** `add_to_date(date="today", hours=5.625)` started from midnight and returned 05:37. Adding hours to a date without a time of day is now an error. 12-hour times (`9:30 AM`, `tomorrow 3 PM`) and fractional hours are supported; results show both 24-hour and 12-hour forms
+- **Bug in our tool:** `Ω` was replaced with ` ohm `, so `kΩ` became `k ohm` and pint read `k` as the Boltzmann constant. Fixed to `kohm`
+- Long products: `seq(start, end)` and `prod()`; hints for `...`, loop syntax and loop variables; function aliases (`product`, `arctan`, `nCr`, ...)
+- Functions inside unit formulas (`ln`, `exp`, `sqrt`, ...), evaluated innermost-first; arguments must be dimensionless
+- Lists work element by element: `exp([2, 1, 0.1]) / sum(exp([2, 1, 0.1]))`
+- Lone letters in unit formulas (`R * C`) are reported as what pint reads them as (gas constant, coulomb)
+- Misplaced arguments name the tool that accepts them; `convert_units` accepts a formula as its value; an empty model reply is retried once
+
+## Run 9 — Final holdout test: seven unseen problems (2026-11-01)
+
+These problems were written after all fixes and were not used to tune any tool. Tools were not changed between the 8B and 14B runs.
+
+| # | Domain | Question | Ground truth | qwen3:8b | qwen3:14b |
+|---|---|---|---|---|---|
+| 1 | Mechanical | Braking force: 1200 kg, 90 km/h to 0 in 40 m | 9.375 kN | ❌ stopped | ✅ 9.375 kN |
+| 2 | Electrical | 100 Ω, 220 Ω, 470 Ω in parallel | 59.98 Ω | ✅ | ✅ |
+| 3 | Telecom | 2 W, +10 dBi, −100 dB path loss, +3 dBi | −53.99 dBm | ❌ −84 dBm | ❌ −85 dBm |
+| 4 | AI | Binary cross-entropy, p = 0.8, label 1 | 0.2231 | ✅ | ✅ |
+| 5 | Computer | Address bits for 64 GiB | 36 | ✅ | ✅ |
+| 6 | Probability | Exactly three sixes in 10 rolls | 0.1550 | ✅ | ✅ |
+| 7 | Thermal | 2 kW kettle, 1.5 L, 20 → 100 °C | 251.2 s | ✅ | ✅ |
+| | | | **Score** | **5/7** | **6/7** |
+
+### Failure analysis
+
+- **Q3, both models: domain knowledge.** 8B used `10*log10(2)`, which is dBW, as dBm (off by exactly 30). 14B treated 2 W as 2 dBm. The calculator already had `watts_to_dbm`, but neither model used it.
+- **Q1, 8B: unit expectation.** The formula v²/(2d) was right, but it asked for `m^2/s^2` instead of `m/s^2`. The error said "[length] / [time] ** 2"; the model did not recognize this as an acceleration and repeated the call until the loop stopped it. 14B solved the same problem in one step with the work-energy relation (½mv² / d).
+- No failure was caused by a tool bug. All remaining failures were model knowledge or reasoning.
+
+| | Problems used for tuning | Unseen problems |
+|---|---|---|
+| qwen3:8b | 5/5 | 5/7 |
+| qwen3:14b | 5/5 | 6/7 |
+
+## Run 10 — Fixes after the holdout test (2026-11-01)
+
+- Dimension errors now use plain names: "the formula gives an acceleration (m/s²), but 'm^2/s^2' is an energy per mass (J/kg = m²/s²)"
+- Formulas with decibels get a link-budget hint: dB values are added, `watts_to_dbm(P) + gains − losses`, and 10·log10(W) is dBW, not dBm
+- New functions `watts_to_dbw`, `dbw_to_watts`; the calculator description includes a link-budget example
+- The Run 9 scores above are kept as the honest holdout result. A new unseen set is needed to measure these fixes
+- 72 offline tests pass

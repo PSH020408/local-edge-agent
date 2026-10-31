@@ -78,14 +78,20 @@ def build_tool(func: Callable[..., Any], requires_confirmation: bool = False) ->
 
 
 def _coerce(value: Any, json_type: str) -> Any:
-    """Models sometimes send numbers or booleans as strings ("100", "true"). Convert them."""
+    """Models sometimes send numbers or booleans as strings ("100", "true"). Convert them.
+
+    If a string cannot be converted, it is passed through unchanged so the tool
+    itself can handle it (for example, convert_units evaluates a formula).
+    """
     if not isinstance(value, str):
         return value
     text = value.strip()
-    if json_type == "integer":
-        return int(float(text))
-    if json_type == "number":
-        return float(text)
+    if json_type in ("integer", "number"):
+        try:
+            number = float(text)
+        except ValueError:
+            return value
+        return int(number) if json_type == "integer" and number.is_integer() else number
     if json_type == "boolean":
         if text.lower() in ("true", "yes", "1"):
             return True
@@ -126,7 +132,17 @@ class ToolRegistry:
         props = tool.parameters["properties"]
         unknown = set(arguments) - set(props)
         if unknown:
-            return f"Error: unexpected arguments {sorted(unknown)} for tool '{name}'."
+            # Run 7: the model sent to_unit to calculator. Point to tools that accept it.
+            # Prefer tools that accept every argument given, then any that accept the unknown ones.
+            others = [t for t in self._tools.values() if t.name != name]
+            owners = [t.name for t in others if set(arguments) <= set(t.parameters["properties"])] or [
+                t.name for t in others if unknown <= set(t.parameters["properties"])
+            ]
+            hint = f" Tools that accept {sorted(unknown)}: {', '.join(owners)}." if owners else ""
+            return (
+                f"Error: unexpected arguments {sorted(unknown)} for tool '{name}'. "
+                f"It accepts: {', '.join(props) or 'no arguments'}.{hint}"
+            )
         missing = [p for p in tool.parameters["required"] if p not in arguments]
         if missing:
             return f"Error: missing required arguments {missing} for tool '{name}'."
