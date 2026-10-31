@@ -12,6 +12,8 @@ from .tools import ToolRegistry
 DEFAULT_SYSTEM_PROMPT = """You are a local assistant running on the user's Mac.
 You can call tools to get real information. Rules:
 - Use a tool whenever it gives a more accurate answer than guessing (time, math, files).
+- For dates, weekdays, durations and time zones, always use the date tools. Never do calendar math yourself or with the calculator.
+- Report dates and numbers exactly as the tool returned them.
 - Never invent file contents; read the file first.
 - If a tool returns an error, fix the arguments or explain the problem.
 - Keep final answers short and direct. Answer in the user's language."""

@@ -76,7 +76,8 @@ class BuiltinToolTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_calculator(self):
-        self.assertEqual(self.registry.call("calculator", {"expression": "(12.5 * 4) / 2"}), "25.0")
+        self.assertEqual(self.registry.call("calculator", {"expression": "(12.5 * 4) / 2"}), "25")
+        self.assertEqual(self.registry.call("calculator", {"expression": "1847*293/3"}), "180390.3333")
         self.assertIn("Error", self.registry.call("calculator", {"expression": "__import__('os')"}))
 
     def test_file_tools_stay_inside_workspace(self):

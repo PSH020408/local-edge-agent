@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import ast
 import operator
-from datetime import datetime
 from pathlib import Path
 
+from .time_tools import register_time_tools
 from .tools import ToolRegistry
 
 _MAX_READ_CHARS = 8000
@@ -50,19 +50,20 @@ def build_default_registry(workspace: Path) -> ToolRegistry:
             raise PermissionError(f"'{path}' is outside the workspace")
         return target
 
-    @registry.register
-    def get_current_time() -> str:
-        """Get the current local date and time."""
-        return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z (%A)")
+    register_time_tools(registry)
 
     @registry.register
     def calculator(expression: str) -> str:
-        """Evaluate an arithmetic expression exactly. Use this instead of doing math yourself.
+        """Evaluate an arithmetic expression exactly. Use this instead of doing math yourself. Numbers only: never use it for dates or times; use the date tools instead.
 
         Args:
             expression: Arithmetic expression, e.g. "(12.5 * 4) / 3".
         """
-        return str(_safe_eval(ast.parse(expression, mode="eval")))
+        result = _safe_eval(ast.parse(expression, mode="eval"))
+        # Trim float noise such as 180390.33333333334 -> 180390.3333333333
+        if isinstance(result, float):
+            result = int(result) if result.is_integer() else float(f"{result:.10g}")
+        return str(result)
 
     @registry.register
     def list_files(path: str = ".") -> str:

@@ -77,6 +77,24 @@ def build_tool(func: Callable[..., Any], requires_confirmation: bool = False) ->
     )
 
 
+def _coerce(value: Any, json_type: str) -> Any:
+    """Models sometimes send numbers or booleans as strings ("100", "true"). Convert them."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if json_type == "integer":
+        return int(float(text))
+    if json_type == "number":
+        return float(text)
+    if json_type == "boolean":
+        if text.lower() in ("true", "yes", "1"):
+            return True
+        if text.lower() in ("false", "no", "0", ""):
+            return False
+        raise ValueError(f"expected true or false, got '{value}'")
+    return value
+
+
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -113,6 +131,7 @@ class ToolRegistry:
         if missing:
             return f"Error: missing required arguments {missing} for tool '{name}'."
         try:
+            arguments = {k: _coerce(v, props[k]["type"]) for k, v in arguments.items()}
             result = tool.func(**arguments)
         except Exception as exc:  # surface failures to the model instead of crashing
             return f"Error: {type(exc).__name__}: {exc}"
