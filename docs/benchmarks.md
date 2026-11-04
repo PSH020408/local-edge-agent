@@ -234,3 +234,308 @@ These problems were written after all fixes and were not used to tune any tool. 
 - New functions `watts_to_dbw`, `dbw_to_watts`; the calculator description includes a link-budget example
 - The Run 9 scores above are kept as the honest holdout result. A new unseen set is needed to measure these fixes
 - 72 offline tests pass
+
+## Run 11 — Vision model setup and image size (2026-11-03)
+
+- Vision model: `qwen3-vl:8b-instruct` (8.2B, Q4_K_M, CLIP projector 576M, Apache 2.0)
+- Tool: `describe_image` in `agent/vision_tools.py`. The main model stays text-only and receives only the vision model's text
+- Image: `10_night_street_photo.jpg` (1932×2576 phone photo). Sign ground truth: "푸르지오강남", "(031)715-1544"
+
+### Thinking vs. instruct variant
+
+`qwen3-vl:8b` is the thinking variant. With `--think=false` it still started a `<think>` block and stopped after 52 tokens. The instruct variant (`qwen3-vl:8b-instruct`) answers directly and is used by the tool.
+
+The first full-size request cost 4,044 input tokens: 23.5 s of the 30.5 s total went into reading the image, and only 1.3 s into writing the answer.
+
+### Full image at different sizes (question: describe the photo and read any signs)
+
+| Longest side | Sent size | Input tokens | Seconds | Sign text | Phone number |
+|---|---|---|---|---|---|
+| 640 | 480×640 | 1,152 | 8.4 | 👻 "부산의안경사" (invented, plus "an optician in Busan") | 👻 051-755-1244 |
+| 960 | 720×960 | 1,152 | 7.7 | ❌ "무한지오경남" | ❌ 055-775-1544 |
+| 1280 | 960×1280 | 1,316 | 10.0 | ⚠️ "푸르지오 건담" | ⚠️ 070-715-1544 |
+| 1920 | 1440×1920 | 2,816 | 16.7 | ⚠️ "푸른지오강남" | ⚠️ 036715-1544 |
+
+- The general scene (night, empty road, crosswalk, yellow center line, red lane with arrows, apartments) was correct at every size. The season was wrong ("bare trees, autumn or winter"; the trees have young spring leaves).
+- 640 and 960 used the same 1,152 tokens: the model has a minimum image size, so going below about 960 saves nothing.
+- At low resolution the model invented a complete, plausible sign instead of saying it could not read it, despite the system prompt.
+- The sign covers well under 1% of the photo. No single size reads it correctly.
+
+## Run 12 — Zoom: reading small text by cropping (2026-11-03)
+
+`describe_image` gained a `region` argument (named halves and quarters, or `left,top,right,bottom` fractions). The crop is taken from the original full-resolution image.
+
+| Step | Region | Sent size | Input tokens | Seconds | Result |
+|---|---|---|---|---|---|
+| Best full view | full, 1920 | 1440×1920 | 2,816 | 16.7 | "푸른지오강남", "036715-1544" |
+| Crop, no enlargement | `0.7,0.42,1,0.56` | 580×361 | 1,180 | 4.6 | ✅ "푸르지오강남", ⚠️ "(03)715-1544" |
+| Crop, enlarged 2.4× | `0.7,0.42,1,0.56` | 1405×874 | 1,302 | 5.5 | ✅ "푸르지오강남", ✅ "(031)715-1544" |
+| Tight crop, enlarged 3× | `0.86,0.43,0.95,0.475` | 519×348 | 1,194 | 4.7 | ✅ "푸르지오강남", ✅ "(031)715-1544" |
+
+Design fixes found along the way:
+- **Longest-side limit made zoom useless on tall photos.** The right half of a 1932×2576 photo is still 2576 px tall, so it was scaled by the same factor. The limit is now a pixel budget (max_side² × 3/4, about 1.2 MP for 1280): smaller crops keep more of their original resolution.
+- **Small crops lost thin characters.** In the 580×361 crop the "1" in "(031)" disappeared; in the source photo it is blurred into the closing bracket. Zoomed crops are now enlarged up to 3× within the budget, like a magnifier. Full images are never enlarged.
+
+Result: the sign is read exactly, about 3× faster than the best full-image attempt (5.5 s vs. 16.7 s), with fewer input tokens (1,302 vs. 2,816).
+
+## Run 13 — Full vision test set through the agent (2026-11-04)
+
+- Main model `qwen3:8b`, vision `qwen3-vl:8b-instruct`. 12 images and 4 hallucination checks, asked in Korean through `main.py`
+- Per-case results: `evals/vision/cases.md`
+
+| | Result |
+|---|---|
+| Main cases | ✅ 2, ⚠️ 6, ❌ 4 |
+| Hallucination checks | 3/4 (invented a value for a resistor that does not exist) |
+
+Strong: Korean infographic, formula transcription (GIF), handwriting transcription, answering "not shown" for missing likes, brands and chart series.
+
+Weak, by cause:
+1. Fine detail from a downscaled full view (schematic pins, a small sign)
+2. A very small source image (284×213 cartoon)
+3. The main model translated questions to English and then embellished the vision answer (invented humor explanations)
+4. A correct "not found" from the locate step was overridden by asking describe_image, which invented a value
+5. A tool meant for one short item was used for a whole comment thread
+6. Model limits that tools do not fix: key signature vs. tuning, reading the rightmost curve, counting fish
+
+## Run 14 — Fixes from Run 13 (2026-11-04)
+
+| Cause | Fix |
+|---|---|
+| Fine detail | `describe_image(focus=...)` locates the named part, crops it with a 25% margin, enlarges it and answers from the crop |
+| Small images | Full images with a longer side below 768 px are enlarged up to 2× (token cost has a floor, see Run 11) |
+| Translation and embellishment | Tool description asks for the user's question unchanged; system prompt forbids adding interpretations the tool did not return |
+| Ignored "not found" | The result says the item is probably absent and not to ask describe_image for a value |
+| Wrong tool | `read_text_in_image` is described as one short item; whole pages and threads go to `describe_image` |
+
+100 offline tests pass. The Run 13 scores are kept as the baseline; the same set is rerun to measure these fixes.
+
+## Run 15 — Rerun of the targeted cases after Run 14 (2026-11-04)
+
+| # | Run 13 | Run 15 | What changed |
+|---|---|---|---|
+| 01 Schematic | ❌ four pins wrong | ⚠️ pins "not shown" | Used focus three times (MCU, pins, regulator). The second focus was the question itself ("the GPIO pins connected to ..."), so the wrong area was cropped. A wrong answer became an honest "not shown" |
+| 03 English conversation | ❌ | ⚠️ | Who said what is now correct, including "Fair enough"; the joke is still explained weakly. Focus on "the tweet thread" covered 95% of the image (wasted call) |
+| 04 Korean comments | ❌ | ❌ | Focus "모든 댓글" cropped only the header "전체 리플 [4]", so the answer said there was no content |
+| 08 Cartoon | ❌ | ❌ | Enlarged 2×, still read as "shouting, flustered". The model does not recognize the knee-pain scene (model limit) |
+| 10 Night street | ⚠️ | ❌ 👻 | Used focus instead of read_text_in_image; read "02-6715-1544" and stated the photo was taken in Gangnam, Seoul, from the word "강남" in a business name. The real area code 031 points to Gyeonggi-do |
+| H3 R50 | ❌ 👻 | ✅ | "Cannot be confirmed; not shown" |
+
+Questions are now passed to the vision model in the user's language. New failure type: misuse of the new `focus` argument.
+
+Fixes (Run 16 candidates):
+- `focus` must name a visible part, never the question; schematics are inspected one component at a time; focus stays empty for whole-image questions
+- A focus box covering more than 60% of the image uses the whole image
+- Scene descriptions with signs: `describe_image` for the scene, `read_text_in_image` for each sign
+- Both prompts: keep what is seen separate from guesses; a business name is not evidence of a location
+- No "enlarged 1.0x" for images that are already close to 768 px
+
+104 offline tests pass.
+
+## Run 16 — Second rerun (01, 03, 04, 10) and fixes (2026-11-04)
+
+| # | Run 15 | Run 16 | Observation |
+|---|---|---|---|
+| 01 Schematic | ⚠️ | ❌ | Eight tool calls (~90 s). Focus "MCU 모듈" was NOT FOUND although the board is labeled ESP-WROOM-32, and the final answer said the MCU was not stated (a false negative caused by the Run 14 not-found wording). Focus "OLED(SDA, SCL)" located the FTDI header U4. The whole multi-part question was sent with every focus. The same four targets were then read again with read_text_in_image. Pins were listed but not mapped to signals |
+| 03 English conversation | ⚠️ | ❌ | One vision call took 196 s: the answer looped on one sentence. The main model then treated the looped text as the user's own sentence and proofread it |
+| 04 Korean comments | ❌ | ⚠️ | All four comments and the flow correct; no invented explanation. The joke is still explained only loosely |
+| 10 Night street | ❌ | ⚠️ | describe_image for the scene and read_text_in_image for the sign and number, as intended. Location given as "a city in Korea; the exact area cannot be determined" (no false Gangnam claim). Number reported as "(030) or (031)". But earlier misreadings were put into the read targets, and the final answer mixed both readings |
+
+Root causes and fixes:
+
+| Cause | Fix |
+|---|---|
+| Vision answer can loop without limit | `num_predict` = 1200 for the vision model; a sentence repeated 3 times cuts the answer and adds a warning; hitting the limit adds a warning |
+| Tool output mistaken for the user's text | Vision results start with "This is tool output, not the user's words" |
+| Not-found wording too absolute (false negative for the MCU) | Two cases: a printed label (R50, U5, AMS1117) not found → "probably not in the image"; a general or translated description → "NOT LOCATED, does not prove absence; retry with the printed text or without focus" |
+| Locating by category or relation fails or picks a neighbour | Locate prompt matches by meaning as well as printed text and returns the printed label; the result shows what was found ("identified as 'U4 FTDI'") so a wrong part can be noticed |
+| Planning by the 8B main model | System prompt: one call per part with a question about that part only; no repeated reads with another tool; never put expected values in a target; trust read_text_in_image over describe_image; only call a reading certain after CONFIRMED |
+
+112 offline tests pass.
+
+## Run 17 — Third rerun (8B) and fixes enforced in code (2026-11-04)
+
+| # | Run 16 | Run 17 | Observation |
+|---|---|---|---|
+| 01 Schematic | ❌ | ❌ | Better plan: the first call asked only about the MCU and found ESP-WROOM-32. The second call focused on the SD card module but still asked about OLED and the regulator too; the vision model gave module pin numbers (2, 3, 4, 5) instead of GPIO labels; OLED and regulator were never looked up and reported as "not shown" |
+| 03 English conversation | ❌ (196 s loop) | ⚠️ (33.8 s) | No loop. Summary mostly correct, joke still explained weakly |
+| 10 Night street | ⚠️ | ❌ | focus="whole image" failed to locate three times in a row; the repeat guard did not trigger because "NOT LOCATED" results did not start with "Error". The sign was read exactly ("푸르지오강남", "(031)715-1544"), but with no scene description at all the answer again claimed "likely Gangnam, Seoul" |
+
+Questions 03 and 10 were asked in the same conversation without `/reset`.
+
+The 8B main model often ignores rules written in the system prompt or tool descriptions. Fixes now enforce them in code or place them next to the point of use:
+
+| Problem | Fix |
+|---|---|
+| focus "whole image" | Focus values meaning the whole image (English and Korean) are ignored in code |
+| Repeated not-found calls | The repeat guard counts NOT FOUND / NOT LOCATED results as failures |
+| Location claimed from a sign | Every read_text_in_image result ends with "text on a sign is not evidence of where the photo was taken" |
+| Parts of the question left unanswered | System prompt: check every part has a tool result; look up missing parts separately |
+| Pin numbers instead of GPIO names | Vision prompt: in schematics the signal or GPIO name is the label next to the pin, not the pin number |
+
+117 offline tests pass.
+
+## Run 18 — Image question planner (8B, 2026-11-04)
+
+First run with `agent/image_planner.py`: the main model only writes a plan under a JSON schema; code makes one vision call per part and assembles the answer.
+
+| # | Run 17 | Run 18 | Observation |
+|---|---|---|---|
+| 01 Schematic | ❌ | ⚠️ | Plan split the question into all 4 parts (MCU, SD card pins, OLED pins, regulator) and every part was looked up. MCU correct (ESP-WROOM-32). SD and OLED pins failed: the planner used the question as focus ("the GPIO pins connected to OLED (SDA, SCL)"), the locator echoed it as the label and returned a 107x35 pixel crop, and the answers said "not shown", which the check still counted as answered. Regulator was asked with describe and came back cut off as "AMS1117-" |
+| 10 Night street | ❌ | ✅ | Best result so far. 4 parts (scene, place, time, sign). No location claimed from the sign ("a city in Korea; the exact place cannot be told"). Sign and number read exactly and CONFIRMED: "푸르지오강남", "(031)715-1544". Minor: the scene description quoted the sign as "푸르지오 건담" and gave a different season than the time part |
+
+Fixes:
+
+| Problem | Fix |
+|---|---|
+| Tiny crop for a focus | describe_image crops are at least 15% of the image width and height |
+| Zoomed answer says "not shown" | Code checks the first sentence of a zoomed answer; if it says the part is not shown, the part is asked once more with a view of at least 40% around the first box. A part still not shown is counted as not answered in the check line |
+| Exact name asked with describe | A part asking for a part number, model, product name, business name, phone number or price is sent to read_text_in_image (two readings), unless it asks about connections or pins |
+| Question used as focus | Planner prompt: focus is a thing you can point at; for pins or connections of a module, focus on the module |
+| Two versions of the same text | When a description quotes text and a two-reading result exists, the answer points to the checked reading |
+
+137 offline tests pass.
+
+## Run 19 — Planner with 14B vs 8B, same code (2026-11-04)
+
+Same code for both models (Run 18 fixes included). The main model only writes the plan; the vision model (`qwen3-vl:8b-instruct`) and the code-assembled answer are the same.
+
+Case 01 (ground truth: ESP-WROOM-32; SD CS G05, MOSI G23, SCK G18, MISO G19; OLED SDA G21, SCL G22; AMS1117-3V3):
+
+| Part | 14B | 8B |
+|---|---|---|
+| Plan | 4 parts, all asked items covered | 6 parts: SD card split into one part per pin, OLED dropped (6 is the schema maximum) |
+| MCU | ✅ ESP-WROOM-32 | ✅ ESP-WROOM-32 |
+| SD card pins | ✅ 4/4 in one zoomed view | ⚠️ 3/4 (MOSI given as G18), four separate views of the same module |
+| OLED pins | ❌ first view missed; the wider-view retry answered "SDA G23, SCL G24" with confidence (G24 does not exist) | ❌ not planned |
+| Regulator | ⚠️ UNCERTAIN: tight crop cut the label ("AMS11"), wider crop read "AMS1117-3V3" plus all nearby text | ⚠️ same |
+
+Case 10 (ground truth: 푸르지오강남, (031)715-1544):
+
+| Part | 14B | 8B |
+|---|---|---|
+| Plan | 4 parts (scene, place, time, sign) | 3 parts; the scene part asked "where was it taken" instead, so no scene description |
+| Location | ✅ "Korea, exact place unknown" | ✅ same |
+| Sign | ⚠️ UNCERTAIN, but both readings correct; they differ only in "031-" vs "(031)" | ✅ UNCERTAIN correctly: "(03)715-1544" vs "(031)715-1544" |
+
+Findings:
+- 14B plans better: it keeps all parts and groups the pins of one module into one question. Asking the pins of one module together gave better readings than one view per pin.
+- Neither model reliably follows the focus rule ("the module, not the pins").
+- The wider-view retry can turn an honest "not shown" into a confident wrong answer.
+- read_text_in_image compares all text of two crops of different size, so extra nearby text or punctuation alone makes readings "differ".
+
+Fixes after Run 19:
+
+| Problem | Fix |
+|---|---|
+| Wider-view retry gave a confident wrong answer | An answer that appears only after the first view said "not shown" is marked "not verified" and counted as not confirmed |
+| Readings compared all text in two crops | Each reading asks only for the target text; the tight crop margin is 0.3 instead of 0.15 |
+| Punctuation-only difference marked UNCERTAIN | Readings with the same letters and digits are "CONFIRMED CHARACTERS" and both forms are shown; a missing digit is still UNCERTAIN |
+| 8B dropped parts from the plan | Image questions are planned by `qwen3:14b`, also in fast mode (`planner_model` in config.toml, `--planner-model` to override) |
+| Parts missing from the plan went unnoticed | Labels in the question (CS, OLED, AMS1117) and a request to describe must appear in the plan; otherwise a new plan is requested once, and anything still missing is reported in the answer |
+| One view per pin of the same module | Parts with the same focus are asked together; maximum parts raised from 6 to 8 |
+| Sign note on a schematic | The note about signs and locations is added only when the target is a sign or shop |
+| No timings for the planner | The plan line shows planning time; the check line shows total time |
+
+147 offline tests pass.
+
+## Run 20 — Recheck of 01 and 10 after the Run 19 fixes (2026-11-04)
+
+Fast mode (`qwen3:8b`), image questions planned by `qwen3:14b`.
+
+| # | Run 19 (14B) | Run 20 | Observation |
+|---|---|---|---|
+| 01 Schematic | ⚠️ | ⚠️ | MCU ✅. SD card 4/4 ✅. OLED: the first view missed, the wider-view retry answered SDA G23 (wrong) and SCL G22 (right), now shown as "not verified" instead of as a finding. Regulator: readings "AMS1117" and "AMS1117-3V3" (tight crop cut off) shown as uncertain. No confident wrong answer. Plan 19.8 s, total 64.5 s |
+| 10 Night street | ✅ | ✅ | 4 parts. Sign CONFIRMED: "푸르지오강남", "(031)715-1544". No location from the sign. The scene description quoted the sign wrongly ("푸르지오 건담", "075-1544"), and the answer points to the checked reading. Plan 15.9 s, total 56.1 s |
+
+Pattern over Runs 18-20: every focus written as a request ("OLED interface (SDA, SCL)", "the GPIO pins connected to SD card") came back with the request itself as the "printed label", and every answer from that view was wrong or "not shown". Every focus matched to a real printed label ("Micro SD Card", "ESP-WROOM-32", "AMS1117-3V3") was right.
+
+Fixes:
+
+| Problem | Fix |
+|---|---|
+| One reading cut off ("AMS1117" vs "AMS1117-3V3") | PARTLY CONFIRMED: the longer reading is shown, with the note that the rest was read once |
+| Focus with a bracket list | The list in brackets is removed from the focus |
+| View placed without a printed label | When the locator returns the request itself as the label, the answer is marked "not verified" |
+
+152 offline tests pass.
+
+## Run 21 — Full vision set through the image planner (2026-11-05)
+
+Per-case results are in `evals/vision/cases.md`. Main cases ✅ 2, ⚠️ 5, ❌ 5; hallucination checks 4/4.
+
+Better than Run 13: 01 (dense schematic), 03 (conversation), H3 (no invented R50 value).
+Worse than Run 13: 02, 06, 10 (English question), 11, and 07 shown as uncertain.
+
+Lesson: Runs 18-20 were tuned on cases 01 and 10 only. The full set showed that the planner hurts questions about the image as a whole, and that three of the Run 19-20 changes caused new failures. From now on every change is checked on the full set before the next round of fixes.
+
+| Cause | Cases | Fix |
+|---|---|---|
+| Whole-image questions zoomed into a piece | 04, 06, 11 | Counting, comparing, flow, humor, feelings, mood, style, layout and summaries are never zoomed |
+| Several looks at the whole image lose context and repeat content | 03, 04, 05 | All whole-image parts are asked together in one call |
+| Small box labelled with the request itself | 02, 04, 06 (and 01 in Runs 18-20) | Treated as not located; the part is asked about the whole image and marked as not checked by zoom. Large boxes found this way (07, 08, 09) are trusted, without the warnings Run 20 added |
+| Reading repeated the request ("the key signature at the beginning of the staff") | 02 | Counts as no text; the reading prompt says to write [no text] for symbols or drawings |
+| "signature" matched the sign note | 02 | Word boundaries |
+| "explain why it is funny" taken as a missing description | 04 | The "describe" coverage check was removed; the label check stays |
+| "log10(Pb)" cut to "log10" | 06 | Only a bracket after a space is removed |
+| Three real repeats cut as a loop | 09 | Repetition guard at five repeats |
+| "any signs" read a small unreadable sign | 10 | General read targets use the largest located box; the planner is asked to name one specific text |
+| "Not shown." after a failed locate marked unverified | H4 | Shown as a plain "not shown" answer |
+
+159 offline tests pass.
+
+## Run 22 — Full set after the Run 21 fixes, first automated run (2026-11-05)
+
+`python scripts/run_vision_set.py --fast` ran all 16 cases in 7.2 minutes (Run 21 by hand: about 20 minutes of questions). Per-case results are in `evals/vision/cases.md`.
+
+Main cases ✅ 3, ⚠️ 8, ❌ 1; hallucination checks 4/4. Every case is at least as good as in Run 13, and 01, 03, 04, 10 and H3 are better. Whole-image questions now take one call: 03 took 12 s (31 s in Run 21), 05 13 s (24 s), 11 14 s (53 s).
+
+| Problem | Case | Fix |
+|---|---|---|
+| The wider reading added the next line to the title ("WONDERWALL" + "Guitar/Ukulele") | 02 | When the wider reading only adds whole lines, the tight reading is confirmed and the extra lines are shown as nearby text |
+| Artist and instrument both read "Guitar/Ukulele" | 02 | Two parts that read the same text are both marked "check the place" |
+| Key signature: both readings "[no text]" | 02 | A reading with no text falls back to the whole image |
+| "The text of the comments" read as one short text: only the first comment | 04 | Comments, conversations, threads and pages are transcribed from the whole image |
+| "표시되지 않았습니다" not recognised as "not shown" | H1 | Added to the not-shown phrases |
+
+Left for later: formula readings that differ only in LaTeX vs plain text (Stage 5, formulas), and model limits in 06, 08 and 11 (Stage 7, thinking experiment).
+
+165 offline tests pass.
+
+## Run 23 — Repeat run with the Run 22 fixes (2026-11-05)
+
+16 cases in 6.7 minutes. Main cases ✅ 4, ⚠️ 7, ❌ 1; hallucination checks 4/4. Stable against Run 22; case 04 improved to ✅ and took 24 s instead of 57 s. Per-case results are in `evals/vision/cases.md`.
+
+The Run 22 fixes acted as intended: the title and the first formula were confirmed with the extra lines shown as nearby text, the artist and instrument readings that matched each other were both flagged, the key signature fell back to the whole image, the comment thread was transcribed in one whole-image call, and H1 was recognised as "not shown".
+
+Stage 3 (vision) ends here. Remaining errors are the vision model's own whole-image readings (06, 08, 11, the key signature in 02, the hand gesture in 09), carried to Stage 7.
+
+## Accurate profile added (2026-11-05)
+
+Speed is not the goal of this project; accuracy is. Like a link that adds redundancy instead of accepting bit errors, the accurate profile spends more model calls per question:
+
+- a second look on a different view for every factual answer, compared in code, and a third look with a majority vote when the two differ
+- a tile scan of large images before whole-image questions
+- the thinking vision model (`qwen3-vl:8b`) for counting, comparing and chart questions
+- planning with thinking, and a pixel budget of about 1.9 MP
+
+`--fast` keeps the Run 23 setup for quick checks. Both profiles are run on the same set next (Run 24).
+
+179 offline tests pass.
+
+## Run 24 — Model size × checking method (2026-11-05)
+
+`run_vision_set.py --compare`, four profiles on the same 16 cases, the same vision model in all. Per-case scores are in `evals/vision/cases.md`.
+
+| Profile | Planner | Checks | ✅ / ⚠️ / ❌ (12 main cases) | Hallucination checks | Time |
+|---|---|---|---|---|---|
+| small | 8B | one look | 3 / 7 / 2 | 4/4 | 6.4 min |
+| large | 14B | one look | 3 / 8 / 1 | 4/4 | 7.5 min |
+| small-accurate | 8B | second look + majority, tile scan, thinking vision model | 3 / 6 / 3 | 4/4 | 21.4 min |
+| large-accurate | 14B | the same | 2 / 7 / 3 | 4/4 | 30.7 min |
+
+1. 14B planning beats 8B planning (case 11: the 8B plan changed the question's language, then "exactly three fish").
+2. The accurate profile as built is worse and 3-4× slower. The thinking vision model refused inferences, returned one empty answer and claimed "Gangnam, Seoul" from a sign. Agreement between two looks was shown as ✔ even when both were wrong, and the check was never compared with the prose answer.
+3. Individual pieces helped where they were used narrowly: the second look caught invented pins, the tile scan read a sign correctly, and the accurate profiles produced the best answers so far for four cases, but not reliably.
+
+More model calls do not buy accuracy by themselves; the extra calls must check something independent, and agreement must not be presented as correctness. The everyday profile stays `--fast` (8B main model, 14B planner, one look).

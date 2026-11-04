@@ -4,3 +4,4 @@ numpy==2.5.4
 scipy==1.18.1
 sympy==1.14.0
 pint==0.26.2
+pillow>=11.0  # image preparation for the vision tool (format conversion, resizing)

@@ -19,15 +19,21 @@ class OllamaClient:
         think: bool = False,
         options: dict | None = None,
         timeout: float = 300,
+        keep_alive: str | None = None,
     ) -> None:
         self.model = model
         self.host = host.rstrip("/")
         self.think = think
         self.options = options or {}
         self.timeout = timeout
+        self.keep_alive = keep_alive  # e.g. "5m", or "0" to unload the model right after the call
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
-        """Send one chat request. Returns {"message": {...}, "stats": {...}}."""
+    def chat(self, messages: list[dict], tools: list[dict] | None = None, format: dict | str | None = None) -> dict:
+        """Send one chat request. Returns {"message": {...}, "stats": {...}}.
+
+        format: a JSON schema (or "json") that forces the reply into that structure
+        (Ollama structured outputs). Used by the planner so a small model cannot drift.
+        """
         payload = {
             "model": self.model,
             "messages": messages,
@@ -37,6 +43,10 @@ class OllamaClient:
         }
         if tools:
             payload["tools"] = tools
+        if self.keep_alive is not None:
+            payload["keep_alive"] = self.keep_alive
+        if format is not None:
+            payload["format"] = format
         request = urllib.request.Request(
             f"{self.host}/api/chat",
             data=json.dumps(payload).encode("utf-8"),

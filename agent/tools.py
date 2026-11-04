@@ -104,6 +104,7 @@ def _coerce(value: Any, json_type: str) -> Any:
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
+        self.vision = None  # structured vision access, set when a vision model is configured
 
     def register(self, func: Callable | None = None, *, requires_confirmation: bool = False):
         """Register a function as a tool. Usable as @registry.register or @registry.register(...)."""

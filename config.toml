@@ -10,3 +10,68 @@ num_ctx = 8192            # context window in tokens
 max_steps = 8             # stop if the model keeps calling tools without answering
 workspace = "."           # file tools cannot read outside this folder
 log_dir = "logs"          # JSONL traces of every session
+image_planner = true      # questions with an image path: plan parts in code, one vision call per part
+planner_model = "qwen3:14b"  # plans image questions, also with --fast (Run 19: 8B dropped parts of the question)
+
+[vision]
+model = "qwen3-vl:8b-instruct"  # instruct variant answers directly; the default qwen3-vl:8b is the thinking variant
+max_side = 1280                 # pixel budget = max_side^2 * 3/4 (about 1.2 MP); smaller = faster, too small loses text
+keep_alive = "5m"               # how long the vision model stays loaded; "0" frees memory right after each image
+num_ctx = 8192
+num_predict = 1200              # output limit; stops an answer that loops (one ran 196 s without it)
+enabled = true
+
+# Profiles: python main.py --profile NAME (--fast and --accurate are short forms).
+# A profile overrides the settings above. The vision model is the same in every profile.
+#
+# Experiment (scripts/run_vision_set.py --compare): model size x checking method
+#                one look per part      second look + majority vote, tile scan, thinking vision model
+#   8B           small                  small-accurate
+#   14B          large                  large-accurate
+
+[profiles.small]
+model = "qwen3:8b"
+planner_model = "qwen3:8b"
+
+[profiles.large]
+model = "qwen3:14b"
+planner_model = "qwen3:14b"
+
+[profiles.small-accurate]
+model = "qwen3:8b"
+planner_model = "qwen3:8b"
+planner_think = true
+verify = true                # every factual image answer is asked again on a second view; a third look decides on disagreement
+scan_tiles = true            # large images are transcribed in four zoomed tiles first
+reasoning_vision_model = "qwen3-vl:8b"   # thinking variant for counting, comparing and charts (ollama pull qwen3-vl:8b)
+reasoning_num_predict = 6000
+vision_max_side = 1600       # pixel budget about 1.9 MP instead of 1.2 MP
+vision_num_ctx = 12288
+
+[profiles.large-accurate]
+model = "qwen3:14b"
+planner_model = "qwen3:14b"
+planner_think = true
+verify = true
+scan_tiles = true
+reasoning_vision_model = "qwen3-vl:8b"
+reasoning_num_predict = 6000
+vision_max_side = 1600
+vision_num_ctx = 12288
+
+# Everyday use. Run 24: --fast is the best setting so far; --accurate is an experiment that
+# was slower and less accurate, and is being redesigned (docs/roadmap.md).
+[profiles.fast]              # --fast: quick answers; image questions are still planned by 14B (Run 19)
+model = "qwen3:8b"
+planner_model = "qwen3:14b"
+
+[profiles.accurate]          # --accurate: the same as large-accurate
+model = "qwen3:14b"
+planner_model = "qwen3:14b"
+planner_think = true
+verify = true
+scan_tiles = true
+reasoning_vision_model = "qwen3-vl:8b"
+reasoning_num_predict = 6000
+vision_max_side = 1600
+vision_num_ctx = 12288

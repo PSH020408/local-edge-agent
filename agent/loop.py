@@ -15,12 +15,30 @@ You can call tools to get real information. Rules:
 - For dates, weekdays, durations and time zones, always use the date tools. Never do calendar math yourself or with the calculator.
 - Report dates and numbers exactly as the tool returned them. Never convert units, angles or rounding in your head; if you need another form, call a tool again.
 - Never invent file contents; read the file first.
+- You cannot see images. For image files (.png .jpg .jpeg .gif .webp .bmp .tif) call describe_image; to read one exact piece of text or a number in an image call read_text_in_image. Pass the user's question in their own words and language; do not translate it.
+- When a question both asks to describe an image and to read a sign, label or number in it, call describe_image (without focus) for the scene and read_text_in_image for each sign or number.
+- For a question about several parts of an image, make one call per part and ask only about that part each time. Do not read the same thing again with another tool unless the first call failed.
+- Never put a value you expect (a name or number you saw earlier) into a focus or target; describe where it is and what kind of text it is.
+- If describe_image and read_text_in_image give different text, trust read_text_in_image. Only call a reading certain when the tool said CONFIRMED.
+- Before the final answer, check that every part of the user's question has a tool result. If a part is missing, call the tool again for that part only.
+- Base your answer on what the vision tools returned. Do not add interpretations, jokes, names or facts that the tool result does not contain.
+- Keep what is visible separate from guesses. Never state a location from a business name or a word on a sign; if you guess a place, say it is a guess and give the evidence.
+- If a vision tool says something is NOT FOUND, unreadable, not shown or UNCERTAIN, tell the user exactly that instead of guessing, retrying for a value, or picking one reading.
 - If a tool returns an error, fix the arguments or explain the problem.
 - Keep final answers short and direct. Answer in the user's language."""
 
 
 class ChatModel(Protocol):
     def chat(self, messages: list[dict], tools: list[dict] | None = None) -> dict: ...
+
+
+# Run 17: "NOT LOCATED" results did not start with "Error", so the same failing
+# describe_image(focus="whole image") call ran three times without being blocked.
+FAILURE_MARKERS = ("NOT FOUND:", "NOT LOCATED:")
+
+
+def is_failure(result: str) -> bool:
+    return result.startswith("Error") or any(marker in result[:600] for marker in FAILURE_MARKERS)
 
 
 class TraceLogger:
@@ -61,6 +79,13 @@ class Agent:
         self.on_tool_call = on_tool_call
         self.logger = logger or TraceLogger(None)
         self.reset()
+
+    def remember(self, user_input: str, answer: str) -> None:
+        """Add an exchange handled outside the loop (for example by the image planner) to the history."""
+        self.messages.append({"role": "user", "content": user_input})
+        self.messages.append({"role": "assistant", "content": answer})
+        self.logger.log("user", content=user_input)
+        self.logger.log("planner_answer", content=answer)
 
     def reset(self) -> None:
         self.messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
@@ -122,7 +147,7 @@ class Agent:
                     )
                 else:
                     result = self._execute(name, args)
-                if result.startswith("Error"):
+                if is_failure(result):
                     self._failed_calls[key] = self._failed_calls.get(key, 0) + 1
                 self.messages.append({"role": "tool", "tool_name": name, "content": result})
                 self.logger.log("tool", step=step, name=name, arguments=args, result=result)

@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 logs/
 .DS_Store
+
+# Third-party test images (not redistributed); see evals/vision/cases.md
+evals/vision/images/

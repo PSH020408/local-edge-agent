@@ -109,3 +109,33 @@ Python function + docstring
 - Build an evaluation set (20-30 tasks) to compare tool-call accuracy, speed and memory across 8B, 14B and 20B models.
 - Re-measure prompt-eval speed with realistic agent prompts.
 - Swap the backend to MLX and compare against Ollama.
+
+## 8. Experiment 3: Giving a text-only agent eyes (Runs 11-23)
+
+The main models are text-only. A separate vision model (`qwen3-vl:8b-instruct`) is called as a tool and returns text, so the main model never sees pixels.
+
+What mattered, in the order it was found:
+
+1. **Image size is a cost.** A 1932×2576 phone photo cost 4,044 input tokens and most of the response time. Images are fitted to a pixel budget (about 1.2 MP); below about 960 px the token cost stops falling, so small images are enlarged instead.
+2. **Fine detail needs a zoom, and a zoom needs a target.** Small text in a full view is misread ("070-715-1544" for "(031)715-1544"). The vision model can locate a part (Qwen-VL boxes on a 0-1000 scale), and the agent crops and enlarges it. Locating works when the request names printed text ("Micro SD Card", "ESP-WROOM-32"). When the request is a description ("the OLED interface (SDA, SCL)"), the locator often returns the request itself as the label and a small wrong box, and every answer from such a view was wrong (Runs 18-21). Such boxes are now treated as not located.
+3. **Reading twice turns a guess into a measured result.** `read_text_in_image` reads a tight and a wider crop and code compares them: confirmed, only punctuation differs, one reading cut off, extra nearby lines, or uncertain. Disagreement is shown, never hidden.
+4. **Prompt rules were not enough for the 8B model.** It skipped parts of questions, asked every zoomed view the whole question and picked one of two different readings. The image question planner moved these rules into code: the plan is forced into a JSON schema, each part gets its own vision call, completeness is checked, and the answer is assembled by code.
+5. **Zooming everything is as wrong as zooming nothing.** Counting, comparing curves, the flow of a conversation, humour and style need the whole image. Zooming them produced "one fish" and "a single comment" (Run 21). These parts are now always answered from the whole image, in one call.
+6. **Test the full set after every change.** Runs 18-20 were tuned on two cases and broke four others. A one-command test runner (`scripts/run_vision_set.py`) made the full set practical: 16 cases in about 7 minutes.
+
+Result on the 16-case set:
+
+| | Run 13 (first full run) | Run 23 (end of the stage) |
+|---|---|---|
+| Correct ✅ | 2 | 4 |
+| Mostly correct ⚠️ | 6 | 7 |
+| Wrong ❌ | 4 | 1 |
+| Hallucination checks | 3/4 | 4/4 |
+
+What tools could not fix: the vision model's own reading of the whole image, such as which curve is highest in a chart, a cartoon character's expression, the number of fish and a key signature. These are the input for the next experiment, a vision model with thinking enabled (docs/roadmap.md, Stage 7).
+
+### Trading time for accuracy (Run 24)
+
+A second profile spent 3-4× more model calls per question: a second look with a majority vote, a tile scan, a thinking vision model and planning with thinking. It was less accurate. The thinking model refused inferences and once brought back a location guess from a sign; two looks that agreed on a wrong answer were shown as checked; and the check was never compared with the answer it was checking. The lesson: extra calls only help when they test something independent, and agreement must not be presented as correctness. Planning with 14B instead of 8B did help, so the everyday profile plans with 14B.
+
+The 16 cases were used during development, so all scores here are optimistic. A holdout set of new images is the next check.
