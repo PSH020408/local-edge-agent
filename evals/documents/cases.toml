@@ -1,0 +1,185 @@
+# Document test set for scripts/run_eval_set.py --set documents. Descriptions: cases.md.
+# The files are course materials and personal slides kept in evals/documents/files/ (not committed).
+#
+# expect: key facts that a correct answer contains. One entry may list alternatives separated by " | ".
+# avoid:  text that signals a hallucination or a wrong claim.
+# pages:  the pages that hold the answer (for scoring the citations by hand).
+
+# --- OFDM synchronization lecture (36 slides, text with garbled equations, many figures) ---
+
+[[case]]
+id = "D01"
+file = "ofdm_sync_lecture.pdf"
+question = "OFDM 수신기에 필요한 동기화 종류와, 동기가 어긋나는 원인을 정리해 줘."
+expect = ["Symbol", "Frame", "Carrier frequency | 반송파 주파수", "Phase | 위상", "Doppler | 도플러", "oscillator | 발진기 | clock"]
+avoid = []
+pages = [2, 3]
+note = "Symbol, frame, carrier frequency and phase synchronization; transmit time, propagation delay, Doppler, oscillator mismatch, unknown phase and jitter."
+
+[[case]]
+id = "D02"
+file = "ofdm_sync_lecture.pdf"
+question = "What are Case A, B and C of the time synchronization error in an AWGN channel, and what happens to the received signal in Case B?"
+expect = ["guard interval", "outside", "phase", "no ISI | ISI does not | without ISI", "equaliz"]
+avoid = []
+pages = [6, 7, 8, 9]
+note = "A: perfect; B: FFT start inside the guard interval; C: outside. Case B: phase shift proportional to tau and subcarrier index p, no ISI or ICI, compensated by equalization."
+
+[[case]]
+id = "D03"
+file = "ofdm_sync_lecture.pdf"
+question = "Case C에서는 왜 성능이 나빠져? 간단한 등화로 해결할 수 있어?"
+expect = ["ICI | inter-carrier", "ISI", "amplitude | 진폭", "re-synchronization | 재동기 | Re-synchronization"]
+avoid = []
+pages = [13, 14, 15]
+note = "Inter-carrier interference (and ISI): phase shift and amplitude change; simple equalization cannot resolve it; re-synchronization is required."
+
+[[case]]
+id = "D04"
+file = "ofdm_sync_lecture.pdf"
+question = "Case C의 최종 복조 출력 식에서 desired signal 항을 LaTeX로 써 주고 무슨 뜻인지 설명해 줘."
+expect = ["N-\\tau | N - \\tau | N − τ | N-τ | N - τ", "X_{n,p} | X_{n, p} | X_n,p", "inter-carrier | ICI"]
+avoid = []
+pages = [13]
+note = "Desired signal ((N-τ)/N) X_{n,p} e^{j2π p τ / N}: attenuated and phase-shifted; the other sum is inter-carrier interference. Needs the vision model (equation object)."
+
+[[case]]
+id = "D05"
+file = "ofdm_sync_lecture.pdf"
+question = "정규화된 CFO는 어떻게 정의되고, 어떤 두 부분으로 나뉘어?"
+expect = ["subcarrier spacing | 부반송파 간격 | 1/Ts | 1/T_s", "integer | 정수", "fractional | 소수"]
+avoid = []
+pages = [20]
+note = "Real frequency offset divided by the subcarrier spacing (f_off / (1/Ts)); integer CFO + fractional CFO."
+
+[[case]]
+id = "D06"
+file = "ofdm_sync_lecture.pdf"
+question = "In 5G NR, what is in the SSB and what information does it carry?"
+expect = ["PSS", "SSS", "PBCH", "cell ID | 기지국 ID | base station ID"]
+avoid = []
+pages = [30, 31]
+note = "PSS, SSS, PBCH; carries base station (cell) ID, frequency and synchronization information; sent periodically in predefined slots."
+
+[[case]]
+id = "D07"
+file = "ofdm_sync_lecture.pdf"
+question = "PSS 기반 cross-correlation 동기와 CP 기반 auto-correlation 동기의 차이를 설명해 줘."
+expect = ["Cell ID", "sequence | 시퀀스", "Wi-Fi"]
+avoid = []
+pages = [32, 33, 35]
+note = "PSS: known sequence (Zadoff-Chu, m-sequence), also gives the cell ID, used in cellular networks. CP: auto-correlation of the received signal, no cell ID, used in Wi-Fi, vehicles, IoT and similar."
+
+[[case]]
+id = "D08"
+file = "ofdm_sync_lecture.pdf"
+question = "van de Beek 알고리즘은 무엇을 추정하고 어떤 원리를 써?"
+expect = ["fractional", "guard interval | cyclic prefix | CP | 보호 구간", "correlation | 상관"]
+avoid = []
+pages = [28]
+note = "Joint time and (fractional) frequency offset estimation; copies the guard interval signal and uses the correlation between it and the received signal (van de Beek et al., 1997)."
+
+[[case]]
+id = "D09"
+file = "ofdm_sync_lecture.pdf"
+question = "이 강의 전체를 핵심만 요약해 줘."
+expect = ["time | 시간", "frequency | 주파수", "ICI", "SSB | 5G", "cyclic prefix | CP"]
+avoid = []
+pages = []
+note = "Why synchronization; time sync error cases; frequency offset (integer/fractional) and ICI; estimation methods (CP, pilot, van de Beek); 5G NR SSB, PSS and CP based methods."
+
+[[case]]
+id = "D10"
+file = "ofdm_sync_lecture.pdf"
+question = "이 강의 내용으로 시험 문제 3개를 만들어 줘. 답과 출처 페이지도 같이 알려 줘."
+expect = ["[p."]
+avoid = []
+pages = []
+note = "Three questions with answers that match the slides, each with a correct page citation."
+
+# --- Expectation note (1 page LaTeX, equations only readable from the image) ---
+
+[[case]]
+id = "E01"
+file = "expectation_note.pdf"
+question = "식 (5)는 무엇을 의미해?"
+expect = ["E[X] | E(X) | 기댓값 | expect", "average | 평균", "repeat | 반복"]
+avoid = []
+pages = [1]
+note = "The limit of the sample average m_n equals E[X]: the expectation corresponds to repeating the experiment and averaging all observations."
+
+[[case]]
+id = "E02"
+file = "expectation_note.pdf"
+question = "Write equation (2) in LaTeX."
+expect = ["N_x | N_{x}", "S_X | S_{X}", "\\frac | /n | / n"]
+avoid = []
+pages = [1]
+note = "m_n = \\frac{1}{n} \\sum_{x \\in S_X} x N_x = \\sum_{x \\in S_X} x \\frac{N_x}{n}. Needs the vision model."
+
+# --- ARM vs RISC-V presentation (15 slides, tables and assembly code) ---
+
+[[case]]
+id = "P01"
+file = "arm_vs_riscv_slides.pptx"
+question = "발표에서 비교한 두 칩은 무엇이고 각각 어떤 아키텍처야?"
+expect = ["nRF52840", "ESP32-C3", "ARM | Cortex", "RISC-V"]
+avoid = []
+pages = [1, 3, 5]
+note = "nRF52840 (ARM Cortex-M) and ESP32-C3 (RISC-V), in two air purifiers."
+
+[[case]]
+id = "P02"
+file = "arm_vs_riscv_slides.pptx"
+question = "ARM 어셈블리 예제에서 공기질 기준값은 얼마이고, 기준 이상일 때와 미만일 때 mode는 각각 몇이야?"
+expect = ["35", "3", "1"]
+avoid = []
+pages = [8, 9]
+note = "Threshold 35; at or above: mode 3 (strong); below: mode 1 (weak). Example value 42."
+
+[[case]]
+id = "P03"
+file = "arm_vs_riscv_slides.pptx"
+question = "According to the slides, which chip is better for floating-point math and which has more RAM?"
+expect = ["nRF52840", "ESP32-C3"]
+avoid = []
+pages = [12]
+note = "Floating-point: nRF52840; total RAM: ESP32-C3; simple mode decisions: both are enough."
+
+[[case]]
+id = "P04"
+file = "arm_vs_riscv_slides.pptx"
+question = "무선 통신과 대기 전력 측면에서 어떤 칩이 유리하다고 결론 내렸어?"
+expect = ["Wi-Fi", "ESP32-C3", "nRF52840"]
+avoid = []
+pages = [15]
+note = "Wi-Fi connection: ESP32-C3 is convenient; under the manufacturer's sleep conditions nRF52840 has lower standby power."
+
+# --- Hallucination checks: the answer is not in the document ---
+
+[[case]]
+id = "DH1"
+file = "ofdm_sync_lecture.pdf"
+question = "이 강의에서 LTE PSS 시퀀스의 길이는 몇이라고 했어?"
+expect = ["다루지 | 없 | 나와 있지 않 | 언급되지 | not"]
+avoid = ["63"]
+pages = []
+note = "LTE and the sequence length are not in the lecture."
+
+[[case]]
+id = "DH2"
+file = "arm_vs_riscv_slides.pptx"
+question = "What clock speed does the presentation give for the STM32 chip?"
+expect = ["not | does not | no STM32"]
+avoid = ["MHz"]
+pages = []
+note = "There is no STM32 in the slides."
+
+[[case]]
+id = "DH3"
+file = "expectation_note.pdf"
+question = "이 노트에서 분산(variance)의 정의 식은 뭐야?"
+expect = ["다루지 | 없 | 나와 있지 않 | 언급되지 | not"]
+avoid = ["E[X^2]", "E[X²]", "Var(", "Var["]
+pages = []
+note = "The note covers only the expectation, not the variance."

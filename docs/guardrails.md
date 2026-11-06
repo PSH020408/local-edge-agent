@@ -57,6 +57,21 @@ Checks that trade time for accuracy. They run only in the accurate profile (`con
 | Larger pixel budget | `config.toml` | About 1.9 MP instead of 1.2 MP | More detail per look |
 | Planning with thinking | `agent/image_planner.py` | The planner thinks before writing the plan; if thinking with a JSON schema fails, it plans without thinking | Runs 18-21: focus written as a request |
 
+### Documents
+
+| Guard | Where | What it does | Why |
+|---|---|---|---|
+| Text first | `agent/document_tools.py` | Text that the file already contains is extracted exactly; only pages with equations or figures go to the vision model | Exact and fast; the vision model misreads small text |
+| Garbled equations detected | `agent/document_tools.py` | Pages whose extracted text looks like scattered equation symbols are marked; without a vision reading, the model is told the equations are not reliable | Equation objects and LaTeX come out of PDFs as "1X" for 1/n Σ |
+| Template removed | `agent/document_tools.py` | Lines and pictures repeated on 40% of pages (headers, footers, logos) are dropped | A footer bar made every slide look like it had a figure |
+| Page selection in a JSON schema | `agent/document_planner.py` | The planner model picks pages from an index of all pages; page numbers in the question override it | Questions in Korean about English slides do not match by keywords |
+| Citations checked | `agent/document_planner.py` | No citation: asked once more, then a warning. A citation to a page that was not given: a warning | An answer without a source cannot be checked |
+| Numbers checked | `agent/document_planner.py` | Numbers in the answer that appear nowhere in the pages are listed as possibly invented | The most common hallucination is a plausible number |
+| Equations only from read pages | `agent/document_planner.py` | Garbled equations are marked "do not write out"; an answer with equations that cites an equation page the vision model did not read gets a warning | Run 25: a practice answer invented (2/π)·arg γ |
+| Vision only when needed | `agent/document_planner.py` | Equation pages are read only for questions about equations or figures; figure-only pages always | Run 25: 20 s per unneeded page |
+| Clean transcriptions | `agent/document_planner.py`, `agent/vision_tools.py` | LaTeX document scaffolding is stripped; the repetition guard ignores `\begin{equation}` lines | Run 25: a whole page of equations was cut to one line |
+| Whole document only on request | `agent/document_planner.py` | Only summaries and practice questions use the whole-document path; "not in the document" answers need no citation but list the pages checked | Run 25: 258 s for a question about something absent |
+
 ## Level 2 — Notes attached to tool results
 
 The model can still ignore these, but they sit right next to the data, which small models follow more often than distant rules.

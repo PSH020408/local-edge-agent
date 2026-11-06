@@ -616,6 +616,12 @@ class Run18FixesTests(unittest.TestCase):
             out = registry.call("read_text_in_image", {"path": "street.jpg", "target": "the phone number"})
             self.assertIn("at 0.726,0.446,0.744,0.462", out)  # a specific target keeps the best match
 
+    def test_latex_structure_lines_are_not_a_loop(self):
+        # Run 25: \\begin{equation} once per equation cut a page of equations to one line.
+        from agent.vision_tools import trim_repetition
+        page = "\n".join(f"\\begin{{equation}}\nm_{i} = \\frac{{1}}{{n}} \\sum_x x N_x + {i}\n\\end{{equation}}" for i in range(6))
+        self.assertEqual(trim_repetition(page), (page, False))
+
     def test_nearby_lines(self):
         from agent.vision_tools import _nearby_lines
         self.assertEqual(_nearby_lines("WONDERWALL", "WONDERWALL\nGuitar/Ukulele"), ["Guitar/Ukulele"])

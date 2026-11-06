@@ -21,7 +21,7 @@ Goal: a local agent that helps with graduate-school preparation, exam preparatio
 | 0 Foundation | Ollama on macOS, `qwen3:8b` / `qwen3:14b`, agent loop with tool calling, JSONL traces, speed benchmarks | 1-2 | 8ec9cdc |
 | 1 Time | Current time, time zones, date arithmetic, date differences, natural-language dates | 3-5 | 6966262 |
 | 2 Math | Engineering calculator (numpy, scipy, sympy), unit-aware calculation (pint), loop guards | 6-10 | 44f5c99 |
-| 3 Vision | Separate vision model as a tool, zoom, two-reading verification, image question planner, one-command test set | 11-23 | — |
+| 3 Vision | Separate vision model as a tool, zoom, two-reading verification, image question planner, one-command test set | 11-24 | b4c74bc |
 
 ## Latest stage
 
@@ -52,7 +52,15 @@ Accuracy over speed: two profiles.
 
 ## Next
 
-### Stage 4 — Documents (PDF, handouts, papers)
+### Stage 4 — Documents (PDF, handouts, papers) — in progress
+
+Built: `agent/document_tools.py` (PDF and PowerPoint pages, tables, notes, garbled-equation detection, template removal, page rendering), `agent/document_planner.py` (page selection, vision for equation and figure pages, cited answers, citation and number checks, whole-document summaries and practice questions), `read_document` tool, test set `evals/documents/` (3 documents, 16 questions, 3 hallucination checks), `scripts/run_eval_set.py --set documents`.
+
+- [x] First run of the document set (Run 25: ✅ 13, ⚠️ 3, ❌ 0, hallucination checks 3/3; fixes recorded in evals/documents/cases.md)
+- [x] Rerun after the Run 25 fixes (Run 26: ✅ 14, ⚠️ 4, ❌ 0, 3/3, 11 minutes)
+- [ ] Holdout: new documents (a paper, a handout), run once
+
+Plan:
 - Text extraction from the PDF text layer (exact, no vision needed)
 - Page rendering to images for scanned pages, figures and formulas; only those go to the vision model
 - Summaries per page and section with page references; long documents split to fit the context window

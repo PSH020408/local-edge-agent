@@ -293,15 +293,19 @@ def trim_repetition(text: str, min_length: int = 12, max_repeats: int = 5) -> tu
     model then treated the output as the user's own text. A line or sentence that appears
     max_repeats times is kept once, and everything from its second appearance is dropped.
     Run 21: with 3, a handwriting sample written three times ("handwriting 손글씨") was cut.
+    Run 25: LaTeX structure lines (\\begin{equation}, \\end{equation}) repeat once per equation
+    by design; counting them cut a whole page of equations down to its first line.
     """
     import re
+
+    structure = re.compile(r"^\\(begin|end)\{[a-z*]+\}$|^(\\\[|\\\]|\$\$)$")
 
     pieces = [p for p in re.split(r"(?<=[.!?。])\s+|\n+", text) if p.strip()]
     seen: dict[str, int] = {}
     kept: list[str] = []
     for piece in pieces:
         key = re.sub(r"\W+", "", piece.lower())
-        if len(key) >= min_length:
+        if len(key) >= min_length and not structure.match(piece.strip()):
             seen[key] = seen.get(key, 0) + 1
             if seen[key] >= max_repeats:
                 # Drop back to the first appearance of this repeated piece.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .document_tools import DOCUMENT_EXTENSIONS, load_document
 from .math_tools import register_math_tools
 from .time_tools import register_time_tools
 from .tools import ToolRegistry
@@ -57,6 +58,8 @@ def build_default_registry(
         target = _resolve_inside_workspace(path)
         if target.suffix.lower() in IMAGE_EXTENSIONS:
             raise ValueError(f"'{path}' is an image. Use describe_image to look at it.")
+        if target.suffix.lower() in DOCUMENT_EXTENSIONS:
+            raise ValueError(f"'{path}' is a document. Use read_document to read its pages.")
         raw = target.read_bytes()
         if b"\x00" in raw[:4096]:
             raise ValueError(f"'{path}' is a binary file and cannot be read as text.")
@@ -65,4 +68,43 @@ def build_default_registry(
             return text[:_MAX_READ_CHARS] + f"\n... [truncated, {len(text)} chars total]"
         return text
 
+    @registry.register
+    def read_document(path: str, pages: str = "") -> str:
+        """Read the text of a PDF or PowerPoint file page by page, with [p.N] page markers.
+
+        Args:
+            path: Document path relative to the workspace root (.pdf or .pptx).
+            pages: Optional pages to read, such as "3" or "2-5" or "1,4,7". Empty reads from the start.
+        """
+        target = _resolve_inside_workspace(path)
+        document = load_document(target)
+        selected = _parse_pages(pages, len(document.pages)) if pages else [p.number for p in document.pages]
+        blocks, size = [], 0
+        for number in selected:
+            page = document.page(number)
+            flags = (" (equations are not reliable in this text)" if page.math else "") + (
+                " (has a figure; use the document planner or describe_image for it)" if page.images else ""
+            )
+            block = f"[p.{number}] {page.title}{flags}\n{page.text}"
+            if size + len(block) > _MAX_READ_CHARS:
+                blocks.append(f"... [stopped at p.{number}; ask for later pages with pages=\"{number}-{selected[-1]}\"]")
+                break
+            blocks.append(block)
+            size += len(block)
+        return f"{target.name}: {document.summary()}\n\n" + "\n\n".join(blocks)
+
     return registry
+
+
+def _parse_pages(spec: str, count: int) -> list[int]:
+    numbers: list[int] = []
+    for part in spec.replace(" ", "").split(","):
+        if "-" in part:
+            low, high = part.split("-", 1)
+            numbers.extend(range(int(low), int(high) + 1))
+        elif part:
+            numbers.append(int(part))
+    valid = [n for n in dict.fromkeys(numbers) if 1 <= n <= count]
+    if not valid:
+        raise ValueError(f"no valid pages in '{spec}'; the document has {count} pages")
+    return valid

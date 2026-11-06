@@ -539,3 +539,17 @@ Speed is not the goal of this project; accuracy is. Like a link that adds redund
 3. Individual pieces helped where they were used narrowly: the second look caught invented pins, the tile scan read a sign correctly, and the accurate profiles produced the best answers so far for four cases, but not reliably.
 
 More model calls do not buy accuracy by themselves; the extra calls must check something independent, and agreement must not be presented as correctness. The everyday profile stays `--fast` (8B main model, 14B planner, one look).
+
+## Run 25 — Document set, first run (2026-11-06)
+
+`run_eval_set.py --set documents --fast`: 19 cases (3 documents) in 19.2 minutes. Main questions ✅ 13, ⚠️ 3, ❌ 0; hallucination checks 3/3. Per-case results and fixes are in `evals/documents/cases.md`.
+
+Text that the file already contains is the strongest source: every question answerable from slide text was correct and cited the right page, across Korean questions on English slides. The weak points were all in the vision path and the checks around it: transcriptions wrapped in a LaTeX document, the repetition guard cutting a page of equations, unneeded page readings, false "no citation" warnings on correct "not in the document" answers, and one invented equation in a practice question.
+
+200 offline tests pass.
+
+## Run 26 — Document set after the Run 25 fixes (2026-11-06)
+
+19 cases in 11.2 minutes (Run 25: 19.2). Main questions ✅ 14, ⚠️ 4, ❌ 0; hallucination checks 3/3, now without false warnings. The question about an absent STM32 took 3.6 s instead of 258 s, and the practice questions no longer contain an invented equation. Two answers left out part of what the cited pages said (D03, D06); the answer prompt now asks for every part and every listed point, which is a prompt rule and not a guarantee. Per-case results are in `evals/documents/cases.md`.
+
+201 offline tests pass.

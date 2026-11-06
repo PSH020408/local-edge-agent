@@ -18,6 +18,7 @@ from pathlib import Path
 
 from agent import Agent, LLMError, OllamaClient, TraceLogger, build_default_registry
 from agent.display import format_event, format_tool_call
+from agent.document_planner import DocumentQuestionPlanner
 from agent.image_planner import ImageQuestionPlanner, PlannerOptions
 from agent.vision_tools import VisionConfig
 
@@ -111,27 +112,50 @@ def build_session(
         logger=logger,
     )
 
-    planner = None
     planner_model = planner_model or profile.get("planner_model") or agent_cfg.get("planner_model") or model
+    planner_llm = llm
+    planner_think = profile.get("planner_think", llm_cfg.get("think", False))
+    if planner_model != model or planner_think != llm_cfg.get("think", False):
+        planner_llm = OllamaClient(
+            model=planner_model,
+            host=llm_cfg["host"],
+            think=planner_think,
+            options={"temperature": llm_cfg.get("temperature", 0.2), "num_ctx": llm_cfg.get("num_ctx", 8192)},
+        )
+    image_planner = document_planner = None
     if use_planner and agent_cfg.get("image_planner", True) and registry.vision is not None:
-        planner_llm = llm
-        planner_think = profile.get("planner_think", llm_cfg.get("think", False))
-        if planner_model != model or planner_think != llm_cfg.get("think", False):
-            planner_llm = OllamaClient(
-                model=planner_model,
-                host=llm_cfg["host"],
-                think=planner_think,
-                options={"temperature": llm_cfg.get("temperature", 0.2), "num_ctx": llm_cfg.get("num_ctx", 8192)},
-            )
         options = PlannerOptions(
             verify=profile.get("verify", False),
             scan_tiles=profile.get("scan_tiles", False),
             reasoning_vision=bool(vision_config and vision_config.reasoning_model),
         )
-        planner = ImageQuestionPlanner(
+        image_planner = ImageQuestionPlanner(
             planner_llm, registry, workspace, on_tool_call=on_tool_call, on_event=on_event, options=options
         )
+    if use_planner and agent_cfg.get("document_planner", True):
+        # Document answers come from the planner model too: it reads the pages and must cite them.
+        document_planner = DocumentQuestionPlanner(
+            planner_llm, registry, workspace, on_tool_call=on_tool_call, on_event=on_event
+        )
+    planner = QuestionRouter(document_planner, image_planner) if (image_planner or document_planner) else None
     return agent, planner, registry, workspace, vision_config, planner_model
+
+
+class QuestionRouter:
+    """Questions with a document path go to the document planner, with an image path to the image planner.
+
+    Anything else returns None and goes to the agent loop.
+    """
+
+    def __init__(self, documents: DocumentQuestionPlanner | None, images: ImageQuestionPlanner | None) -> None:
+        self.documents, self.images = documents, images
+        self.options = images.options if images else PlannerOptions()
+
+    def run(self, question: str) -> str | None:
+        answer = self.documents.run(question) if self.documents else None
+        if answer is None and self.images:
+            answer = self.images.run(question)
+        return answer
 
 
 def profile_name(args) -> str | None:
@@ -153,9 +177,11 @@ def describe_setup(model: str, vision_config, planner, planner_model: str, profi
         parts.insert(0, f"Profile: {profile['name']}")
     if vision_config:
         parts.append(f"Vision: {vision_config.model}" + (f" + {vision_config.reasoning_model} (thinking)" if vision_config.reasoning_model else ""))
-    if planner:
+    if planner and planner.images:
         extras = [name for name, on in (("verify", planner.options.verify), ("tile scan", planner.options.scan_tiles)) if on]
         parts.append(f"Image planner: {planner_model}" + (f" ({', '.join(extras)})" if extras else ""))
+    if planner and planner.documents:
+        parts.append(f"Documents: {planner_model}")
     return " | ".join(parts)
 
 

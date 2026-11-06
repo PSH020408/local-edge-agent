@@ -5,3 +5,5 @@ scipy==1.18.1
 sympy==1.14.0
 pint==0.26.2
 pillow>=11.0  # image preparation for the vision tool (format conversion, resizing)
+pypdfium2>=5.0  # PDF text and page rendering for the document tools
+python-pptx>=1.0  # PowerPoint text, tables and notes

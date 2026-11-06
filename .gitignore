@@ -6,3 +6,6 @@ logs/
 
 # Third-party test images (not redistributed); see evals/vision/cases.md
 evals/vision/images/
+
+# Course materials and personal documents (not redistributed); see evals/documents/cases.md
+evals/documents/files/
