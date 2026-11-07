@@ -550,6 +550,23 @@ Text that the file already contains is the strongest source: every question answ
 
 ## Run 26 — Document set after the Run 25 fixes (2026-11-06)
 
-19 cases in 11.2 minutes (Run 25: 19.2). Main questions ✅ 14, ⚠️ 4, ❌ 0; hallucination checks 3/3, now without false warnings. The question about an absent STM32 took 3.6 s instead of 258 s, and the practice questions no longer contain an invented equation. Two answers left out part of what the cited pages said (D03, D06); the answer prompt now asks for every part and every listed point, which is a prompt rule and not a guarantee. Per-case results are in `evals/documents/cases.md`.
+19 cases in 11.2 minutes (Run 25: 19.2). Main questions ✅ 12, ⚠️ 4, ❌ 0 (first written as 14 and 4, a counting error; ✅ 13, ⚠️ 3 after the D05 regrade in Run 28); hallucination checks 3/3, now without false warnings. The question about an absent STM32 took 3.6 s instead of 258 s, and the practice questions no longer contain an invented equation. Two answers left out part of what the cited pages said (D03, D06); the answer prompt now asks for every part and every listed point, which is a prompt rule and not a guarantee. Per-case results are in `evals/documents/cases.md`.
 
 201 offline tests pass.
+
+## Run 27 — Document holdout (2026-11-07)
+
+Three unseen lectures (biology, economics, deep learning), code frozen at `12d35a0`, run once: 24 cases in 15.1 minutes. Main questions ✅ 16, ⚠️ 2, ❌ 3 (76% correct); hallucination checks 3/3. The development set after two rounds of fixes was at 81% correct (Run 26, corrected in Run 28), so the accuracy carried over to new documents. The three failures are new types: image-only slides cannot be found by page selection, superscripts are lost in the text layer (10² read as 102), and figure transcriptions drop the labels that tie numbers to words. No answer invented a fact absent from the documents. Per-case results are in `evals/documents/cases.md`.
+
+## Run 28 — Fixes from the document holdout, checked (2026-11-07)
+
+Fixes: picture-only pages get a cached vision caption used in page selection; superscript digits are found from character positions in the PDF text layer and written as 10^2; figure readings keep each value with its label; numbers followed by Korean counters ("102개") are now checked.
+
+| Set | Before | Run 28 | Time |
+|---|---|---|---|
+| Development (19 cases) | ✅ 13, ⚠️ 3, ❌ 0 (Run 26, corrected) | ✅ 14, ⚠️ 2, ❌ 0 | 18.3 min (11.2) |
+| Holdout documents, now seen (24 cases) | ✅ 16, ⚠️ 2, ❌ 3 (Run 27) | ✅ 18, ⚠️ 3, ❌ 0 | 25.2 min (15.1) |
+
+Hallucination checks 3/3 in both. All three holdout failures improved (GA7 and GC3 correct, GA6 found but one of four methods mislabelled). The prompt rule against merging separate points did not help. The cost is time: captioned pages are now selected and read in full. Correction: D05 was graded ⚠️ in Runs 25-26, but the slide defines f_s as the subcarrier spacing, so the answers were correct. Three bugs in the checks were found and fixed (a citation copied with the page note, a Korean "not in the document" phrasing, empty equation pairs). Because these documents have been seen, the next measure is a new holdout. Per-case results are in `evals/documents/cases.md`.
+
+208 offline tests pass.

@@ -37,6 +37,28 @@ def make_pptx(path: Path) -> None:
     prs.save(path)
 
 
+def make_pdf_with_superscript(path: Path) -> None:
+    """One page: "E. coli 10" with a raised "2" right after it, and "H2O" with a lowered "2"."""
+    import ctypes
+
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as raw
+
+    pdf = pdfium.PdfDocument.new()
+    page = pdf.new_page(400, 300)
+    for text, size, x, y in [("E. coli 10", 20, 50, 200), ("2", 13, 145, 207), (" copies", 20, 153, 200),
+                             ("H", 20, 50, 100), ("2", 13, 65, 94), ("O", 20, 73, 100)]:
+        obj = raw.FPDFPageObj_NewTextObj(pdf.raw, b"Helvetica", ctypes.c_float(size))
+        buffer = ctypes.create_string_buffer((text + "\0").encode("utf-16-le"))
+        raw.FPDFText_SetText(obj, ctypes.cast(buffer, ctypes.POINTER(raw.FPDF_WCHAR)))
+        raw.FPDFPageObj_Transform(obj, 1, 0, 0, 1, x, y)
+        raw.FPDFPage_InsertObject(page.raw, obj)
+    raw.FPDFPage_GenerateContent(page.raw)
+    pdf.save(str(path))
+    page.close()
+    pdf.close()
+
+
 class LoadingTests(unittest.TestCase):
     def test_pptx_text_tables_notes_and_footer(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -58,6 +80,15 @@ class LoadingTests(unittest.TestCase):
             document = load_document(path)
             self.assertEqual(document.kind, "pdf")
             self.assertEqual(document.page(1).text, "")
+
+    def test_superscript_digits_are_marked(self):
+        # Holdout Run 27 (GA7): "10²개" came out of the text layer as "102개".
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "powers.pdf"
+            make_pdf_with_superscript(path)
+            text = load_document(path).page(1).text
+            self.assertIn("E. coli 10^2", text)
+            self.assertIn("H2O", text)  # a subscript is left alone
 
     def test_garbled_equations_are_detected(self):
         self.assertTrue(looks_like_math(GARBLED))
@@ -237,6 +268,43 @@ class PlannerTests(unittest.TestCase):
     def test_transcription_scaffolding_is_removed(self):
         raw = "\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n\\section*{Case C}\n\\begin{itemize}\n\\item Demodulation output\n\\[\n\\frac{N-\\tau}{N} X_{n,p}\n\\]\n\\end{itemize}\n\\end{document}"
         self.assertEqual(dp.clean_transcription(raw), "Case C\n- Demodulation output\n\\[\n\\frac{N-\\tau}{N} X_{n,p}\n\\]")
+
+    def test_picture_only_pages_are_captioned_once_and_indexed(self):
+        # Holdout Run 27 (GA6): a slide that is only a picture had an empty index line.
+        doc = Document(self.root / "lecture.pdf", "pdf", [
+            Page(1, "Genetics", title="Genetics"), Page(2, "", images=1),
+            Page(3, "PCR\nClinical diagnosis", title="PCR"), Page(4, "Paternity tests", title="Paternity"),
+        ])
+        vision = FakeVision("Biometrics: fingerprint, iris, face and vein recognition.")
+        with mock.patch.object(dp, "load_document", lambda path: doc):
+            llm = FakeLLM(json.dumps({"scope": "pages", "pages": [2]}), "Fingerprint, iris, face and vein [p.2].")
+            answer = self.planner(llm, vision).run("lecture.pdf Which biometric methods are shown?")
+            self.assertIn("Write only what is on the page", vision.calls[0][1])
+            self.assertIn("p.2:  — picture: Biometrics: fingerprint", llm.calls[0]["messages"][1]["content"])
+            self.assertIn("Sources: p.2 (Biometrics", answer)
+            self.assertTrue((self.root / "logs" / "cache" / "pages" / "lecture_captions.json").is_file())
+            calls = len(vision.calls)
+            llm = FakeLLM(json.dumps({"scope": "pages", "pages": [3]}), "PCR is used for diagnosis [p.3].")
+            self.planner(llm, vision).run("lecture.pdf What is PCR used for?")
+            self.assertEqual(len(vision.calls), calls)  # the caption came from the cache
+            self.assertIn("picture: Biometrics", llm.calls[0]["messages"][1]["content"])
+
+    def test_citation_copied_with_the_vision_note_counts(self):
+        self.assertEqual(dp.cited_pages("sin [p.7, read by the vision model] and cos [p.3, p.5]"), [7, 3, 5])
+
+    def test_more_not_covered_phrasings(self):
+        self.assertTrue(dp._NOT_COVERED.search("자료에서 2023년 실업률에 대한 정보는 제공되지 않았다."))
+
+    def test_empty_equation_pairs_are_dropped(self):
+        self.assertEqual(dp.clean_transcription("$$\n$$\nThe image shows a diagram."), "The image shows a diagram.")
+        self.assertEqual(dp.clean_transcription("$$\nA\n$$\n$$\nB\n$$"), "$$\nA\n$$\n$$\nB\n$$")
+
+    def test_figure_numbers_keep_their_labels(self):
+        self.assertIn('"label: value"', dp.VISUAL_PROMPT)
+
+    def test_a_power_written_out_is_not_flagged(self):
+        self.assertEqual(dp.unsupported_numbers("100개 [p.6]", "10^2개 × 10^9/mL", "몇 개?"), [])
+        self.assertEqual(dp.unsupported_numbers("102개 [p.6]", "10^2개", "몇 개?"), ["102"])
 
     def test_questions_without_a_document_are_not_handled(self):
         self.assertIsNone(self.planner(FakeLLM()).run("지금 몇 시야?"))

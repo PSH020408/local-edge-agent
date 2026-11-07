@@ -70,6 +70,8 @@ Checks that trade time for accuracy. They run only in the accurate profile (`con
 | Equations only from read pages | `agent/document_planner.py` | Garbled equations are marked "do not write out"; an answer with equations that cites an equation page the vision model did not read gets a warning | Run 25: a practice answer invented (2/π)·arg γ |
 | Vision only when needed | `agent/document_planner.py` | Equation pages are read only for questions about equations or figures; figure-only pages always | Run 25: 20 s per unneeded page |
 | Clean transcriptions | `agent/document_planner.py`, `agent/vision_tools.py` | LaTeX document scaffolding is stripped; the repetition guard ignores `\begin{equation}` lines | Run 25: a whole page of equations was cut to one line |
+| Superscripts kept | `agent/document_tools.py` | Digits raised above the character before them are written as "10^2"; the number check accepts the power written out | Holdout Run 27: 10² was read as "102" |
+| Picture-only pages captioned | `agent/document_planner.py` | Pages with a picture and almost no text get a short vision caption (cached on disk) in the index and the page context | Holdout Run 27: an image-only slide was never selected |
 | Whole document only on request | `agent/document_planner.py` | Only summaries and practice questions use the whole-document path; "not in the document" answers need no citation but list the pages checked | Run 25: 258 s for a question about something absent |
 
 ## Level 2 — Notes attached to tool results

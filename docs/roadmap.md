@@ -58,7 +58,10 @@ Built: `agent/document_tools.py` (PDF and PowerPoint pages, tables, notes, garbl
 
 - [x] First run of the document set (Run 25: ✅ 13, ⚠️ 3, ❌ 0, hallucination checks 3/3; fixes recorded in evals/documents/cases.md)
 - [x] Rerun after the Run 25 fixes (Run 26: ✅ 14, ⚠️ 4, ❌ 0, 3/3, 11 minutes)
-- [ ] Holdout: new documents (a paper, a handout), run once
+- [x] Holdout: three new lectures, run once (Run 27: ✅ 16, ⚠️ 2, ❌ 3, hallucination checks 3/3)
+- [x] Fix the failure types the holdout found: picture-only pages captioned for the index, superscripts marked from character positions, figure values kept with their labels (see evals/documents/cases.md)
+- [x] Check run of the fixes on the development set and the seen holdout (Run 28: development ✅ 14, ⚠️ 2; seen holdout ✅ 18, ⚠️ 3, ❌ 0)
+- [ ] A new holdout after those fixes (this one has now been seen), including a two-column paper
 
 Plan:
 - Text extraction from the PDF text layer (exact, no vision needed)

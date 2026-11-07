@@ -4,6 +4,8 @@ The same idea as the image planner: the model judges, code controls the steps an
 the result.
 
 1. Index    Code extracts every page (agent/document_tools.py) and builds a one-line index.
+            Pages that are only a picture get a short caption from the vision model, cached on
+            disk, so they can be found and used like pages with text.
 2. Select   The planner model picks the pages that answer the question (JSON schema), or
             "whole" for summaries and practice questions. Page numbers in the question win.
 3. Look     Selected pages whose equations or figures are not in the text are rendered and
@@ -38,7 +40,7 @@ _WHOLE = re.compile(
 # An answer that says the document does not cover the question needs no citation.
 _NOT_COVERED = re.compile(
     r"다루지 않|포함되어 있지 않|포함하지 않|언급(이|은|도)? 없|언급되지 않|언급하지 않|나와 있지 않|나오지 않|"
-    r"정보를 제공하지 않|정보가 없|찾을 수 없|확인할 수 없|"
+    r"정보를 제공하지 않|정보가 없|찾을 수 없|확인할 수 없|제공되지 않|명시되어 있지 않|나타나 있지 않|"
     r"(does|do|did) not (cover|mention|include|contain|give|provide|state|say|discuss)|"
     r"(doesn't|don't|didn't) (cover|mention|include|contain|give|provide|discuss)|"
     r"(is|are) not (covered|mentioned|included|given|provided)|no (information|mention)",
@@ -54,12 +56,18 @@ _VISUAL = re.compile(
     r"수식|식 ?\(|equation|formula|latex|그림|figure|diagram|graph|그래프|차트|chart|도식|constellation|plot|표\b|table",
     re.IGNORECASE,
 )
-_CITATION = re.compile(r"\[p\.?\s*(\d{1,4})(?:\s*[,–-]\s*(?:p\.?\s*)?(\d{1,4}))*\]", re.IGNORECASE)
-_NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w])")
+# Run 28: "[p.7, read by the vision model]" (copied from the page notes) was not taken as a citation.
+_CITATION = re.compile(
+    r"\[p\.?\s*(\d{1,4})(?:\s*[,–-]\s*(?:p\.?\s*)?(\d{1,4}))*(?:,\s*(?:read by|picture described by) the vision model)?\]",
+    re.IGNORECASE,
+)
+_NUMBER = re.compile(r"(?<![0-9A-Za-z_.])\d+(?:[.,]\d+)?(?![0-9A-Za-z_])")  # Korean counters (102개) may follow
 _CONTEXT_CHARS = 10000   # page text given to the model for one answer
 _CHUNK_CHARS = 6000      # page text per chunk for whole-document tasks
 MAX_PAGES = 6
 MAX_VISUAL_PAGES = 4
+MAX_CAPTIONS = 40        # picture-only pages captioned per document (a scanned book is not captioned)
+_CAPTION_TEXT = 80       # a page with a picture and less text than this is captioned
 
 SELECT_SCHEMA = {
     "type": "object",
@@ -71,7 +79,7 @@ SELECT_SCHEMA = {
 }
 
 SELECT_PROMPT = """You choose which pages of a document are needed to answer a question.
-Below is an index with one line per page: its title and first words. [equations] and [figure] mark pages whose equations or figures are not in the extracted text.
+Below is an index with one line per page: its title and first words. [equations] and [figure] mark pages whose equations or figures are not in the extracted text; "picture:" is a short description of a page that is only a picture.
 Return JSON. "scope" is "whole" when the question needs the whole document: a summary of everything, practice or exam questions on the whole document, or a list of all topics. Otherwise "scope" is "pages" and "pages" lists the page numbers that contain the answer, most relevant first, at most 6.
 The question and the document may be in different languages: match by meaning, not by words."""
 
@@ -81,6 +89,8 @@ Rules:
 - Answer every part of the question, and include each relevant point the pages give: every listed item, condition and conclusion.
 - After every sentence or bullet that uses the document, cite the page as [p.N].
 - Text marked "read by the vision model" is a transcription of equations or figures and may contain reading errors; say so when an answer depends on it.
+- Keep separate points separate: do not combine statements from different bullets or lines into one claim, and keep each number with the item it belongs to.
+- In the page text, ^ marks a superscript: 10^2 is 10 to the power 2.
 - Keep the document's technical terms as they are, and answer in {language}.
 - Do not add facts, numbers or examples that are not in the pages."""
 
@@ -99,7 +109,11 @@ EXAM_TASK = (
 VISUAL_PROMPT = """This image is page {n} of a document.
 1. Transcribe every equation on it in LaTeX, each on its own line between $$ and $$, in reading order. Copy the symbols exactly; do not simplify or complete anything. Do not write a LaTeX document: no \\documentclass, \\usepackage or \\begin{{document}}.
 2. Describe each figure, diagram, table or chart in one or two sentences: what it shows and the labels written on it.
+3. When a figure shows numbers, vectors or values, copy each one together with the label it belongs to, as "label: value" (for example "Q3 revenue: 4.2"). Never list values without their labels.
 Write only what is on the page. If there are no equations and no figures, write [none]."""
+
+CAPTION_PROMPT = """This image is page {n} of a document; the page has no text apart from what is in the picture.
+In at most three sentences, say what the page shows and copy the important words, names, labels and numbers written on it. Write only what is on the page."""
 
 
 def clean_transcription(text: str) -> str:
@@ -108,11 +122,17 @@ def clean_transcription(text: str) -> str:
     Run 25: the vision model read the Case C equations on p.13 correctly but wrapped them in
     \\documentclass, \\usepackage and itemize blocks, which buried them in the page notes.
     """
-    lines = []
+    lines, in_math = [], False
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped or _PREAMBLE.match(stripped):
             continue
+        if stripped == "$$":
+            if in_math and lines and lines[-1] == "$$":  # Run 28: an empty "$$ $$" pair
+                lines.pop()
+                in_math = False
+                continue
+            in_math = not in_math
         stripped = re.sub(r"^\\item\s*", "- ", stripped)
         stripped = re.sub(r"^\\(sub)*section\*?\{(.*)\}$", r"\2", stripped)
         lines.append(stripped)
@@ -146,6 +166,9 @@ def unsupported_numbers(answer: str, sources: str, question: str) -> list[str]:
     body = _CITATION.sub(" ", answer)
     body = re.sub(r"(?m)^\s*(?:[-*]\s*)?(?:\d{1,2}[.)]|Q\d+[.:)]?|문제\s*\d+[.:)]?)\s", " ", body)  # list numbering
     known = {n.replace(",", "") for n in _NUMBER.findall(sources + " " + question)}
+    for base, power in re.findall(r"(\d{1,3})\^(\d{1,2})", sources):  # 10^2 written as 100
+        if int(power) <= 12:
+            known.add(str(int(base) ** int(power)))
     missing = []
     for number in _NUMBER.findall(body):
         clean = number.replace(",", "")
@@ -170,11 +193,58 @@ class DocumentQuestionPlanner:
         self.cache_dir = cache_dir or self.workspace / "logs" / "cache" / "pages"
         self.on_tool_call = on_tool_call or (lambda name, args, result: None)
         self.on_event = on_event or (lambda message: None)
+        self.captions: dict[int, str] = {}
 
     def applies(self, question: str) -> str | None:
         return find_document_path(question, self.workspace)
 
     # --- steps -----------------------------------------------------------------------------
+
+    def _caption(self, document: Document) -> dict[int, str]:
+        """Short vision captions for pages that are only a picture, cached per document.
+
+        Holdout Run 27 (GA6): a slide of biometric methods was a single picture, so its index
+        line was empty and the question about it was answered from other pages.
+        """
+        blank = [p.number for p in document.pages if p.images > 0 and len(p.text) < _CAPTION_TEXT]
+        if self.vision is None or not blank:
+            return {}
+        if len(blank) > MAX_CAPTIONS:
+            self.on_event(f"{len(blank)} picture-only pages; captioning the first {MAX_CAPTIONS}")
+            blank = blank[:MAX_CAPTIONS]
+        try:
+            stat = document.path.stat()
+            signature = f"{stat.st_size}:{int(stat.st_mtime)}"
+        except OSError:
+            signature = ""
+        cache = self.cache_dir / f"{document.path.stem}_captions.json"
+        stored: dict[str, str] = {}
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            if data.get("signature") == signature and signature:
+                stored = data.get("pages", {})
+        except (OSError, ValueError, AttributeError):
+            pass
+        todo = [n for n in blank if str(n) not in stored]
+        if todo:
+            self.on_event(f"captioning {len(todo)} picture-only page(s) for the index (saved for next time)")
+        for number in todo:
+            image = page_image(document, number, self.cache_dir)
+            if image is None:
+                stored[str(number)] = ""
+                continue
+            relative = str(image.resolve().relative_to(self.workspace))
+            result = self.vision.describe(relative, CAPTION_PROMPT.format(n=number))
+            self.on_tool_call("describe_image", {"path": relative, "question": f"caption of p.{number}"}, result["text"])
+            answer = clean_transcription(result.get("answer", "")) if result.get("status") == "ok" else ""
+            stored[str(number)] = " ".join(answer.split())[:400]
+        if todo and signature:
+            try:
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                cache.write_text(json.dumps({"signature": signature, "pages": stored}, ensure_ascii=False, indent=1), encoding="utf-8")
+            except OSError:
+                pass
+        return {int(n): text for n, text in stored.items() if text and int(n) in blank}
 
     def _index(self, document: Document, question: str) -> str:
         pages = document.pages
@@ -184,6 +254,8 @@ class DocumentQuestionPlanner:
         lines = []
         for page in pages:
             rest = " / ".join(page.text.splitlines()[1:])[:140]
+            if page.number in self.captions:
+                rest = (rest + " / " if rest else "") + "picture: " + self.captions[page.number][:200]
             flags = (" [equations]" if page.math else "") + (" [figure]" if page.images else "")
             lines.append(f"p.{page.number}: {page.title} — {rest}{flags}")
         return "\n".join(lines)
@@ -260,6 +332,8 @@ class DocumentQuestionPlanner:
                 )
             if number in notes:
                 block += f"\n[p.{number}, read by the vision model]\n{notes[number]}"
+            elif number in self.captions:
+                block += f"\n[p.{number}, picture described by the vision model]\n{self.captions[number]}"
             blocks.append(block)
         return "\n\n".join(blocks)
 
@@ -283,6 +357,7 @@ class DocumentQuestionPlanner:
         self.on_event(f"document: {document.summary()}")
 
         user_question = question.replace(path, "").strip()
+        self.captions = self._caption(document)
         scope, numbers = self._select(document, user_question)
         notes: dict[int, str] = {}
         if scope == "whole":
@@ -320,7 +395,7 @@ class DocumentQuestionPlanner:
         task = EXAM_TASK if _EXAM.search(question) else f"Answer the user's request: {question}"
         combined = "\n\n".join(points)
         answer = self._ask(REDUCE_PROMPT.format(task=task, language=language), f"Key points:\n\n{combined}\n\nRequest: {question}")
-        all_text = "\n".join(p.text for p in document.pages)
+        all_text = "\n".join(p.text for p in document.pages) + "\n" + "\n".join(self.captions.values())
         # Numbers are checked against the document itself, not against the intermediate summaries.
         return answer, [p.number for p in document.pages], all_text
 
@@ -348,7 +423,7 @@ class DocumentQuestionPlanner:
             notes.append(t["numbers"].format(numbers=", ".join(numbers)))
         used = [n for n in cited if n in given]
         source_line = t["sources"] + ", ".join(
-            f"p.{n} ({document.page(n).title[:50]})" for n in used[:8]
+            f"p.{n} ({(document.page(n).title or self.captions.get(n, ''))[:50]})" for n in used[:8]
         ) if used else ""
         self.on_event(
             f"check: {len(used)} cited page(s)"

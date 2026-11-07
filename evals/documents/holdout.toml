@@ -1,0 +1,232 @@
+# Holdout for the document planner: three documents never used during development.
+# Run ONCE, after the code is frozen, and do not change the code because of these results:
+#     python scripts/run_eval_set.py --set documents --cases evals/documents/holdout.toml --fast
+# The files are course materials kept in evals/documents/files/ (not committed).
+#
+# expect: key facts that a correct answer contains. One entry may list alternatives separated by " | ".
+# avoid:  text that signals a wrong or invented claim.
+# pages:  the pages that hold the answer.
+
+# --- Genetic engineering and DNA fingerprinting (27 slides from Keynote, Korean, 10 image-only pages) ---
+
+[[case]]
+id = "GA1"
+file = "genetics_dna_fingerprinting.pdf"
+question = "DNA 지문은 어떤 기술이고, 어떤 시료로 검사할 수 있어?"
+expect = ["서열 | 식별", "혈액", "모근 | 피부 | 뼈"]
+avoid = []
+pages = [8]
+note = "Identifies individuals by differences in DNA sequence; blood, semen, vaginal fluid, hair roots, skin, decayed bone remains."
+
+[[case]]
+id = "GA2"
+file = "genetics_dna_fingerprinting.pdf"
+question = "VNTR과 STR은 반복 단위가 각각 몇 염기쌍 정도야?"
+expect = ["VNTR", "STR", "2-6 | 2–6 | 2-7 | 2~6 | 2~7", "hundreds | 수백 | 8-80 | 8–80 | 8~80"]
+avoid = []
+pages = [11]
+note = "Image-only slide: VNTR (minisatellite) repeat unit of hundreds of base pairs (8-80 bp in the Italian caption); STR (microsatellite) 2-6 bp (2-7 bp in the caption)."
+
+[[case]]
+id = "GA3"
+file = "genetics_dna_fingerprinting.pdf"
+question = "PCR은 임상진단 분야에서 어떻게 활용돼?"
+expect = ["병원균 | 감염", "유전병 | 돌연변이", "암"]
+avoid = []
+pages = [13]
+note = "Detecting pathogen infection, genetic disease or gene mutations, and diagnosing or predicting cancer; works from very small amounts of DNA."
+
+[[case]]
+id = "GA4"
+file = "genetics_dna_fingerprinting.pdf"
+question = "나보로 사건에서 DNA 지문 검사는 어떤 역할을 했어?"
+expect = ["Buckland", "5000 | 5,000", "Pitchfork", "첫 번째 | 최초 | first"]
+avoid = []
+pages = [22]
+note = "Cleared the suspect Richard Buckland who had confessed; 5000 men in the village were tested; Colin Pitchfork was caught, the first criminal caught by DNA fingerprinting."
+
+[[case]]
+id = "GA5"
+file = "genetics_dna_fingerprinting.pdf"
+question = "CODIS는 몇 개의 STR 부위를 쓰고, 다른 사람의 DNA profile이 같을 확률은 얼마라고 했어?"
+expect = ["20", "2조"]
+avoid = []
+pages = [23]
+note = "20 STR loci; the chance that another person's profile is the same: 1 in 2 trillion (2조 당 1)."
+
+[[case]]
+id = "GA6"
+file = "genetics_dna_fingerprinting.pdf"
+question = "슬라이드에 나온 여러 생체인식 기술에는 무엇이 있어?"
+expect = ["지문", "홍채", "얼굴", "혈관"]
+avoid = []
+pages = [7]
+note = "Image-only slide: fingerprint, iris, face and hand-vein recognition."
+
+[[case]]
+id = "GA7"
+file = "genetics_dna_fingerprinting.pdf"
+question = "대장균 세포 하나에는 소 성장호르몬 유전자가 몇 개 들어 있다고 했어?"
+expect = ["100 | 10^2 | 10² | 10의 2"]
+avoid = ["102개", "102 개"]
+pages = [6]
+note = "10^2 copies per E. coli cell (vs 1 in a cow cell). The text layer loses the superscript and reads '102개', so the right answer needs the page image."
+
+[[case]]
+id = "GA8"
+file = "genetics_dna_fingerprinting.pdf"
+question = "이 강의 핵심을 다섯 줄로 요약해 줘."
+expect = ["유전공학 | 성장호르몬", "DNA 지문", "PCR", "VNTR | STR"]
+avoid = []
+pages = []
+note = "Genes and mutation; genetic engineering (growth hormone in E. coli); DNA fingerprinting with VNTR/STR; PCR applications (clinical, archaeology, forensics); paternity and disease prediction."
+
+# --- German economy and industry (25 slides, Korean, many figures and percentages) ---
+
+[[case]]
+id = "GB1"
+file = "german_economy_industry.pdf"
+question = "독일의 사회적 시장경제 질서는 어떤 원칙이야?"
+expect = ["최소한", "필요한 만큼", "개입"]
+avoid = []
+pages = [4]
+note = "The state intervenes as little as possible but as much as necessary; between planned economy and free market, after World War II."
+
+[[case]]
+id = "GB2"
+file = "german_economy_industry.pdf"
+question = "독일 노사 간 고용계약에는 어떤 종류가 있고, 파업은 언제 허용돼?"
+expect = ["임금계약", "1년", "총괄적", "종결 | 직접투표"]
+avoid = []
+pages = [6]
+note = "Wage contract (yearly) and general contract (working hours, holidays, notice, overtime); strikes only when the contract ends, after a direct vote of union members."
+
+[[case]]
+id = "GB3"
+file = "german_economy_industry.pdf"
+question = "2023년 기준으로 차량제작분야는 전체 수출의 몇 %를 차지하고, 그중 자동차 산업 비중은?"
+expect = ["9.4", "90"]
+avoid = []
+pages = [9]
+note = "9.4% of all exports in 2023; the car industry is more than 90% of it."
+
+[[case]]
+id = "GB4"
+file = "german_economy_industry.pdf"
+question = "독일 자동차 산업의 세계 시장 점유율과 순위, 그리고 수출 비중은?"
+expect = ["12", "3위", "60"]
+avoid = []
+pages = [11]
+note = "12% of the world car market, third in the world; more than 60% of cars made in Germany are exported."
+
+[[case]]
+id = "GB5"
+file = "german_economy_industry.pdf"
+question = "포춘 500대 기업에 독일 기업은 몇 개고, 미국·일본과 비교하면 어때?"
+expect = ["29", "139", "62"]
+avoid = []
+pages = [16]
+note = "Germany 29, USA 139, China/Hong Kong/Taiwan 133, Japan 62 (2023); but 3.6 million SMEs, 99.6% of companies and about 70% of exports."
+
+[[case]]
+id = "GB6"
+file = "german_economy_industry.pdf"
+question = "히든 챔피언이 무엇이고, 자료에 나온 예시 기업은?"
+expect = ["중소기업", "프로미넨트 | 크로네스 | 켈퍼"]
+avoid = []
+pages = [17]
+note = "Little-known SMEs that dominate a world market; ProMinent (precision pumps), Krones (bottle labelling machines, 70% of the world market), Kölper (rolling machines)."
+
+[[case]]
+id = "GB7"
+file = "german_economy_industry.pdf"
+question = "산업입지로서 독일의 장점과 단점은?"
+expect = ["임금", "노동시간", "기술", "생산성"]
+avoid = []
+pages = [19]
+note = "Disadvantages: shortest working hours and highest wages, many non-wage social costs, high corporate and trade taxes. Advantages: central location, high technology and productivity, infrastructure, stable currency, research support, SMEs, safety."
+
+[[case]]
+id = "GB8"
+file = "german_economy_industry.pdf"
+question = "이 자료로 시험 문제 3개를 만들어 줘. 답과 출처도 같이."
+expect = ["[p."]
+avoid = []
+pages = []
+note = "Three questions whose answers match the slides, each with a correct page citation."
+
+# --- Deep learning: Transformer I (11 slides, English, a figure on every slide) ---
+
+[[case]]
+id = "GC1"
+file = "dl_transformer_lecture.pdf"
+question = "What disadvantages of RNNs does the lecture list, and what advantage does the Transformer have?"
+expect = ["slow | GPU", "vanishing | exploding", "parallel"]
+avoid = []
+pages = [3]
+note = "RNNs: slow to train, no parallel GPU use; vanishing/exploding gradients on long sequences. Transformer: all words at once, faster, parallelizable."
+
+[[case]]
+id = "GC2"
+file = "dl_transformer_lecture.pdf"
+question = "Write the positional encoding formulas shown in the slides."
+expect = ["sin", "cos", "10000", "d_model | d_{model} | d_{\\text{model}} | dmodel"]
+avoid = []
+pages = [7]
+note = "PE(pos,2i) = sin(pos / 10000^(2i/d_model)), PE(pos,2i+1) = cos(pos / 10000^(2i/d_model)). The formulas are an image; the text layer has only garbled symbols."
+
+[[case]]
+id = "GC3"
+file = "dl_transformer_lecture.pdf"
+question = "In the attention example, which word does 'dog' attend to most, and with what weight?"
+expect = ["0.91"]
+avoid = []
+pages = [8]
+note = "'dog' attends most to itself, 0.91 (vector [0.03 0.03 0.03 0.91]). The numbers are only in the figure."
+
+[[case]]
+id = "GC4"
+file = "dl_transformer_lecture.pdf"
+question = "인코더 블록은 어떤 구성 요소로 이뤄지고 몇 번 반복돼?"
+expect = ["Feed Forward | 피드포워드 | 피드 포워드", "Residual | 잔차", "Layer normalization | Layer Normalization | 레이어 정규화 | 층 정규화", "6"]
+avoid = []
+pages = [9]
+note = "Feed-forward network (MLP), residual connection and layer normalization, output a context vector; repeated 6 times (N=6). Multi-head attention is in the figure."
+
+[[case]]
+id = "GC5"
+file = "dl_transformer_lecture.pdf"
+question = "디코더 마지막의 Linear와 Softmax는 무슨 역할이고, 생성은 언제 멈춰?"
+expect = ["Linear", "Softmax", "확률 | probab", "EOS"]
+avoid = []
+pages = [10]
+note = "Linear: a feed-forward layer the size of the output vocabulary; Softmax: probability distribution over output words; the most probable word is output; repeated until <EOS>."
+
+# --- Hallucination checks: the answer is not in the document ---
+
+[[case]]
+id = "HH1"
+file = "genetics_dna_fingerprinting.pdf"
+question = "이 강의에서 CRISPR 유전자 가위의 작동 원리는 어떻게 설명했어?"
+expect = ["다루지 | 없 | 나와 있지 않 | 언급되지 | 포함되어 있지 않 | not"]
+avoid = ["Cas9", "가이드 RNA", "guide RNA"]
+pages = []
+note = "CRISPR is not in the lecture."
+
+[[case]]
+id = "HH2"
+file = "german_economy_industry.pdf"
+question = "자료에서 독일의 2023년 실업률은 몇 %라고 했어?"
+expect = ["다루지 | 없 | 나와 있지 않 | 언급되지 | 포함되어 있지 않 | not"]
+avoid = ["실업률은 3", "실업률은 5", "실업률은 6"]
+pages = []
+note = "The unemployment rate is not in the slides."
+
+[[case]]
+id = "HH3"
+file = "dl_transformer_lecture.pdf"
+question = "What learning rate and optimizer does the lecture recommend for training the Transformer?"
+expect = ["not | does not | no "]
+avoid = ["Adam", "warmup", "warm-up"]
+pages = []
+note = "Training settings are not in this lecture."

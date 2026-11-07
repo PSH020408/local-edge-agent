@@ -7,6 +7,9 @@ vision model. Two things do not survive text extraction and are flagged per page
   (1/n Σ becomes "1X"), so pages with equations are rendered and read by the vision model
 - figures: pictures and diagrams have no text at all
 
+Superscripts lose their position in the text layer ("10²" comes out as "102"), so raised digits
+are found from the character boxes and written with a caret ("10^2").
+
 Libraries: pypdfium2 (PDF text and rendering), python-pptx (slides, tables, notes).
 """
 
@@ -83,6 +86,45 @@ def _finish(lines: list[str], number: int, images: int, detect_math: bool = True
                 math=detect_math and looks_like_math(text), label=label)
 
 
+def _raised_digits(textpage, count: int) -> set[int]:
+    """Indices of digits set as superscripts: the bottom raised by over a quarter of the height of
+    the character before it, the top not above it, and the glyph smaller (10², 10¹¹, x²)."""
+    raised, base = set(), None
+    for i in range(count):
+        ch = textpage.get_text_range(i, 1)
+        if not ch or ch.isspace():
+            continue
+        left, bottom, right, top = textpage.get_charbox(i)
+        if ch.isdigit() and base is not None:
+            b_left, b_bottom, b_right, b_top = base
+            height = b_top - b_bottom
+            if (height > 0 and bottom - b_bottom > 0.25 * height and top <= b_top + 0.25 * height
+                    and top - bottom < 0.85 * height and b_left <= left < b_right + height):
+                raised.add(i)
+                continue
+        base = (left, bottom, right, top) if ch.isalnum() or ch in ")]" else None
+    return raised
+
+
+def _pdf_page_text(textpage) -> str:
+    """Page text with superscript digits marked by "^". Pages without any keep pdfium's own text."""
+    count = textpage.count_chars()
+    raised = _raised_digits(textpage, count) if count > 0 else set()
+    if not raised:
+        return textpage.get_text_bounded()
+    # Indices count UTF-16 units (math italic letters take two), so the text is rebuilt in units.
+    data = textpage.get_text_range(0, count).encode("utf-16-le")
+    units = [data[k:k + 2] for k in range(0, len(data), 2)]
+    out: list[bytes] = []
+    for i, unit in enumerate(units):
+        if i in raised and i - 1 not in raised:
+            while out and out[-1] == " ".encode("utf-16-le"):
+                out.pop()  # pdfium puts a space before the raised digit
+            out.append("^".encode("utf-16-le"))
+        out.append(unit)
+    return b"".join(out).decode("utf-16-le", errors="replace")
+
+
 def load_pdf(path: Path) -> Document:
     import pypdfium2 as pdfium
     import pypdfium2.raw as raw
@@ -91,7 +133,7 @@ def load_pdf(path: Path) -> Document:
     raw_pages, images = [], []
     try:
         for page in pdf:
-            text = page.get_textpage().get_text_bounded().replace("\r", "")
+            text = _pdf_page_text(page.get_textpage()).replace("\r", "")
             raw_pages.append([line.strip() for line in text.splitlines() if line.strip()])
             images.append([
                 tuple(round(v) for v in obj.get_bounds())

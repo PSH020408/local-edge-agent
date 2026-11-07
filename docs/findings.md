@@ -139,3 +139,20 @@ What tools could not fix: the vision model's own reading of the whole image, suc
 A second profile spent 3-4× more model calls per question: a second look with a majority vote, a tile scan, a thinking vision model and planning with thinking. It was less accurate. The thinking model refused inferences and once brought back a location guess from a sign; two looks that agreed on a wrong answer were shown as checked; and the check was never compared with the answer it was checking. The lesson: extra calls only help when they test something independent, and agreement must not be presented as correctness. Planning with 14B instead of 8B did help, so the everyday profile plans with 14B.
 
 The 16 cases were used during development, so all scores here are optimistic. A holdout set of new images is the next check.
+
+## 9. Experiment 4: Reading study documents (Runs 25-28)
+
+Most lecture slides and notes already contain their text as data, so the document planner extracts it exactly and uses the vision model only for pages whose equations or figures are not in the text. Answers must cite a page after every claim, and code checks the citations and any numbers that do not appear in the document.
+
+| | Development set (Run 26) | Holdout, unseen documents (Run 27) | After the fixes, development (Run 28) | After the fixes, seen holdout (Run 28) |
+|---|---|---|---|---|
+| Correct ✅ | 13 of 16 | 16 of 21 | 14 of 16 | 18 of 21 |
+| Mostly correct ⚠️ | 3 | 2 | 2 | 3 |
+| Wrong ❌ | 0 | 3 | 0 | 0 |
+| "Not in the document" checks | 3/3 | 3/3 | 3/3 | 3/3 |
+
+The Run 26 column is corrected: it was first written as 14 of 18, a counting error, and one answer (D05) was graded down for a symbol that the slide itself defines.
+
+The holdout kept the accuracy but showed what the development set could not: an image-only slide has no text to be found by, a superscript disappears from the text layer (10² becomes 102), and a figure transcription can lose the labels that give its numbers meaning. Each of these is a place where the text layer and the picture disagree, which is where the next work goes.
+
+The fixes followed those three places (Run 28). A page that is only a picture now gets a short caption from the vision model, cached on disk, so page selection can find it. Superscripts are recovered from the positions of the characters: a digit whose bottom sits well above the character before it is an exponent. Figure readings must keep each number with its label. The two code fixes worked; of the two prompt changes, the label rule fixed its case and the rule against merging separate points did not. Rules in code held; rules in prompts were followed only some of the time, the same pattern as in the vision experiments.
