@@ -13,7 +13,17 @@ from PIL import Image
 
 from agent import build_default_registry
 from agent import document_planner as dp
-from agent.document_tools import Document, Page, load_document, looks_like_math, page_references, rank_pages
+from agent.document_tools import (
+    Document,
+    Page,
+    _numbered_equation,
+    load_document,
+    looks_like_math,
+    page_references,
+    rank_pages,
+    rank_passages,
+    split_passages,
+)
 from agent.vision_tools import VisionConfig
 
 GARBLED = "\n".join(["N −1", "1", "Yˆn , p =", "x", "(", "m", "+", "", ")", "e", "−", "j", "2", "π", "mp", "/", "N", "= Σ X"] * 2)
@@ -328,6 +338,89 @@ class RouterTests(unittest.TestCase):
         self.assertEqual(router.run("a.pdf 요약"), "pdf:doc")
         self.assertEqual(router.run("a.jpg 설명"), "jpg:img")
         self.assertIsNone(router.run("몇 시야?"))
+
+
+FILLER = " ".join(["The filter is described in detail in this part of the paper."] * 30)
+
+PAPER = Document(Path("paper.pdf"), "pdf", [
+    Page(1, "An Overview of Decimation\nABSTRACT\n" + FILLER + "\n1. Introduction\n" + FILLER, title="An Overview of Decimation"),
+    Page(2, "continued from the page before. " + FILLER + "\nTable 3: Validation on KWS.\nL-PEAF (baseline) 79.1%\nMFCC 84.8%\n"
+            "2. Results\n" + FILLER + "\nThe SNR is 145.35 dB after decimation.", title="continued from the page before."),
+    Page(3, "Integrator 1\n25 bit\nIntegrator 2\n22 bit\nFIGURE 4: Truncated CIC filter\n3. Conclusions\n" + FILLER,
+         title="Integrator 1", drawings=1),
+])
+
+
+class PaperTests(unittest.TestCase):
+    """Holdout Run 29: papers are searched by passage, and "not covered" needs a second search."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / "paper.pdf").write_bytes(b"%PDF-1.4 placeholder")
+        self.events = []
+        patcher = mock.patch.object(dp, "load_document", lambda path: PAPER)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.tmp.cleanup)
+
+    def planner(self, llm):
+        registry = type("R", (), {"vision": None})()
+        return dp.DocumentQuestionPlanner(llm, registry, self.root, on_event=self.events.append)
+
+    def test_long_pdf_pages_are_read_as_a_paper(self):
+        self.assertTrue(PAPER.dense)
+        self.assertFalse(DOC.dense)
+        self.assertFalse(Document(Path("s.pptx"), "pptx", PAPER.pages).dense)
+
+    def test_passages_start_at_headings_and_captions(self):
+        passages = split_passages(PAPER)
+        starts = [p.text.splitlines()[0] for p in passages]
+        self.assertIn("Table 3: Validation on KWS.", starts)
+        self.assertIn("2. Results", starts)
+        figure = next(p for p in passages if p.text.startswith("FIGURE 4"))
+        self.assertIn("22 bit", figure.text)  # the labels drawn inside the figure stay with its caption
+        self.assertTrue(all(len(p.text) < 2000 for p in passages))
+        table = next(p for p in passages if p.text.startswith("Table 3"))
+        self.assertEqual(rank_passages(passages, "Table 3 MFCC baseline")[0][0], table.id)
+
+    def test_paper_questions_get_whole_passages_from_the_bottom_of_a_page(self):
+        passages = split_passages(PAPER)
+        snr = next(p for p in passages if "145.35" in p.text)
+        llm = FakeLLM(json.dumps({"scope": "passages", "passages": [snr.id], "keywords": ["SNR"]}), "145.35 dB [p.2].")
+        answer = self.planner(llm).run("paper.pdf What is the SNR after decimation?")
+        self.assertEqual(llm.calls[0]["format"], dp.PASSAGE_SCHEMA)
+        self.assertIn("§2. Results", llm.calls[0]["messages"][1]["content"])
+        self.assertIn("The SNR is 145.35 dB after decimation.", llm.calls[1]["messages"][1]["content"])
+        self.assertIn("Sources: p.2 (2. Results)", answer)
+
+    def test_not_covered_is_checked_by_a_second_search(self):
+        passages = split_passages(PAPER)
+        intro = next(p for p in passages if p.text.startswith("1. Introduction"))
+        llm = FakeLLM(json.dumps({"scope": "passages", "passages": [intro.id], "keywords": ["Table 3", "MFCC"]}),
+                      "The document does not cover Table 3.", "MFCC reaches 84.8% [p.2].")
+        with mock.patch.object(dp, "MAX_EXTRA_PASSAGES", 0):  # the first look missed the table
+            answer = self.planner(llm).run("paper.pdf 표 3에서 MFCC 정확도는?")
+        self.assertTrue(any("searching the rest of the document" in e for e in self.events))
+        self.assertIn("MFCC 84.8%", llm.calls[2]["messages"][1]["content"])
+        self.assertTrue(answer.startswith("MFCC reaches 84.8% [p.2]."))
+
+    def test_not_covered_stands_when_nothing_matches(self):
+        passages = split_passages(PAPER)
+        llm = FakeLLM(json.dumps({"scope": "passages", "passages": [passages[0].id], "keywords": ["CRISPR"]}),
+                      "The document does not cover CRISPR.")
+        answer = self.planner(llm).run("paper.pdf How does CRISPR work?")
+        self.assertEqual(len(llm.calls), 2)
+        self.assertIn("does not cover", answer)
+
+    def test_a_unit_glued_to_a_number_in_the_source_counts(self):
+        self.assertEqual(dp.unsupported_numbers("KWS uses 30 fps [p.2].", "F R = 30f ps for KWS", "frame rate?"), [])
+
+    def test_numbered_equations_in_symbol_fonts(self):
+        self.assertTrue(_numbered_equation(["expressed as: \uf028 \uf029", "N Gmax", "\uf03d RM (3)"]))
+        self.assertTrue(_numbered_equation(["Ptot = Pfeat +", "Eeff", "(1)"]))
+        self.assertTrue(_numbered_equation(["z", "z", "H z H z (1)"]))
+        self.assertFalse(_numbered_equation(["as shown in the results of the second experiment (2)"]))
 
 
 if __name__ == "__main__":

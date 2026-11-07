@@ -61,7 +61,12 @@ Built: `agent/document_tools.py` (PDF and PowerPoint pages, tables, notes, garbl
 - [x] Holdout: three new lectures, run once (Run 27: ✅ 16, ⚠️ 2, ❌ 3, hallucination checks 3/3)
 - [x] Fix the failure types the holdout found: picture-only pages captioned for the index, superscripts marked from character positions, figure values kept with their labels (see evals/documents/cases.md)
 - [x] Check run of the fixes on the development set and the seen holdout (Run 28: development ✅ 14, ⚠️ 2; seen holdout ✅ 18, ⚠️ 3, ❌ 0)
-- [ ] A new holdout after those fixes (this one has now been seen), including a two-column paper
+- [x] A new holdout after those fixes: two research papers (Run 29: ✅ 8, ⚠️ 2, ❌ 11, 38%; hallucination checks 3/3). Page selection and the context budget fail on dense paper pages
+- [x] Retrieval for papers: search passages (headings, table and figure captions, paragraphs) instead of whole pages; give the model passages, not cut pages
+- [x] Before accepting "not in the document", search the whole text for the question's terms and retry
+- [x] Flag vector figures and numbered equations in PDFs (papers only)
+- [x] Regression check (Run 30): development ✅ 16, first holdout ✅ 19, papers ✅ 19 of 21; the lecture sets did not drop
+- [ ] A third holdout (new papers), run once
 
 Plan:
 - Text extraction from the PDF text layer (exact, no vision needed)

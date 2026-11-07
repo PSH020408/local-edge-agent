@@ -18,9 +18,11 @@ See [docs/findings.md](docs/findings.md) for experiments and results, and [docs/
 user input
    |
    +-- contains a document path (.pdf, .pptx)? --yes--> Document planner (agent/document_planner.py)
-   |                                      pages are extracted as text; the planner model picks pages;
+   |                                      pages are extracted as text; the planner model picks pages
+   |                                      (slides) or passages (papers: sections, tables, figure captions);
    |                                      pages with equations or figures are read by the vision model;
-   |                                      the answer cites [p.N] and code checks citations and numbers
+   |                                      the answer cites [p.N] and code checks citations and numbers;
+   |                                      "not in the document" is accepted only after a second search
    |
    +-- contains an image path? --yes--> Image question planner (agent/image_planner.py)
    |                                      1. plan: qwen3:14b splits the question into parts (JSON schema)

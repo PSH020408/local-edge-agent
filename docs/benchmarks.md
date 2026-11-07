@@ -570,3 +570,24 @@ Fixes: picture-only pages get a cached vision caption used in page selection; su
 Hallucination checks 3/3 in both. All three holdout failures improved (GA7 and GC3 correct, GA6 found but one of four methods mislabelled). The prompt rule against merging separate points did not help. The cost is time: captioned pages are now selected and read in full. Correction: D05 was graded ⚠️ in Runs 25-26, but the slide defines f_s as the subcarrier spacing, so the answers were correct. Three bugs in the checks were found and fixed (a citation copied with the page note, a Korean "not in the document" phrasing, empty equation pairs). Because these documents have been seen, the next measure is a new holdout. Per-case results are in `evals/documents/cases.md`.
 
 208 offline tests pass.
+
+## Run 29 — Second document holdout: research papers (2026-11-07)
+
+Two unseen papers (a two-column conference paper and a one-column journal paper), code frozen at `df47eb8`, run once: 24 cases in 11.1 minutes. Main questions ✅ 8, ⚠️ 2, ❌ 11 (38% correct); hallucination checks 3/3. The lecture holdout (Run 27) was 76%.
+
+The design that worked for slides fails on papers. Page selection sees only the first line and 140 characters of each page, which on a dense paper page is the middle of a sentence, so tables, headings and captions further down are invisible; 9 of the 11 failures started with the wrong pages. The 10,000-character context is split over the selected pages, so three paper pages are each cut to their first third. Given the wrong pages, the answer model said the document does not cover the question, and the code accepted it: nine of the failures are false "not in the document" answers, which the hallucination checks cannot detect because that is exactly the answer they reward. Per-case results are in `evals/documents/cases.md`.
+
+## Run 30 — Papers searched by passage, regression check (2026-11-08)
+
+Fixes from Run 29: PDFs with long pages are read as papers and searched by passage (sections, table and figure captions, paragraphs) with the planner model and BM25 keyword search; whole passages are given instead of cut pages; a short "not in the document" answer triggers a second keyword search; papers flag vector figures and numbered equations; superscripts may rise half a character height.
+
+| Set | Before | Run 30 | Time |
+|---|---|---|---|
+| Development (lectures) | ✅ 14, ⚠️ 2, ❌ 0 | ✅ 16, ⚠️ 0, ❌ 0 | 13.2 min |
+| First holdout (lectures, seen) | ✅ 18, ⚠️ 3, ❌ 0 | ✅ 19, ⚠️ 2, ❌ 0 | 10.5 min |
+| Second holdout (papers, seen) | ✅ 8, ⚠️ 2, ❌ 11 | ✅ 19, ⚠️ 0, ❌ 2 | 14.5 min |
+
+"Not in the document" checks 3/3 in every set. The gate set before the run (no drop on the lecture sets) passed. The paper score is measured on documents that guided the fixes, so it overstates; a third holdout of new papers is the real test. Remaining failures: a fact only shown in a figure when the question does not mention a figure, and a vague answer from a badly chosen passage. Per-case results are in `evals/documents/cases.md`.
+
+215 offline tests pass.
+

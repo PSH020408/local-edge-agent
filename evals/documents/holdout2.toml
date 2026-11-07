@@ -1,0 +1,236 @@
+# Second holdout for the document planner: two research papers never used during development.
+# Run ONCE, after the code is frozen, and do not change the code because of these results:
+#     python scripts/run_eval_set.py --set documents --cases evals/documents/holdout2.toml --fast
+# The files are kept in evals/documents/files/ (not committed).
+#
+# expect: key facts that a correct answer contains. One entry may list alternatives separated by " | ".
+# avoid:  text that signals a wrong or invented claim.
+# pages:  the pages that hold the answer.
+#
+# Known before the run (written down while preparing the questions, not fixed, so that the run
+# measures them):
+# - Both papers draw their figures and plots as vector graphics, so no page is marked [figure].
+# - Their equations are not marked [equations] (too few short lines), so equation questions are
+#   answered from scattered symbols unless something else sends the page to the vision model.
+# - PEAF p.2 "36.5 · 10^12 OPS/W": the exponent rises above the top of the "0", which the
+#   superscript rule does not accept, so the text layer still reads "1012".
+
+# --- PEAF: analog acoustic features (arXiv 2110.03715, 5 pages, two columns, English) ---
+
+[[case]]
+id = "PA1"
+file = "peaf_analog_features.pdf"
+question = "이 논문에서 말하는 PEAF가 뭐고, 어떤 두 가지 작업으로 평가했어?"
+expect = ["analog | 아날로그", "WWD | wake word | 웨이크", "KWS | keyword | 키워드"]
+avoid = []
+pages = [1]
+note = "Power-efficient analog acoustic features, validated by fabricated CMOS chips; evaluated on wake word detection (WWD) and keyword spotting (KWS)."
+
+[[case]]
+id = "PA2"
+file = "peaf_analog_features.pdf"
+question = "What are the three basic operations of the analog feature computation, and how do L-PEAF and N-PEAF differ?"
+expect = ["bandpass | band-pass | BPF", "IAF | Integrate", "absolute", "exponential"]
+avoid = []
+pages = [2]
+note = "2nd-order bandpass filtering, an activation function, spike generation with integrate-and-fire (IAF). L-PEAF: absolute value activation; N-PEAF: clipped exponential activation."
+
+[[case]]
+id = "PA3"
+file = "peaf_analog_features.pdf"
+question = "Learn-PEAF는 L-PEAF 구조에 무엇을 추가했어?"
+expect = ["low pass | low-pass | lowpass | 저역", "PCEN"]
+avoid = []
+pages = [2]
+note = "A first-order low pass filter per channel before the IAF, and a PCEN step before the digital classifier; simulated in PyTorch so its parameters can be trained."
+
+[[case]]
+id = "PA4"
+file = "peaf_analog_features.pdf"
+question = "표 1에서 MFCC+ADC, N-PEAF, L-PEAF의 전력은 각각 얼마야?"
+expect = ["7.5", "0.072", "0.38"]
+avoid = []
+pages = [2]
+note = "MFCC [5] + ADC [6]: 0.34 + 7.2 = 7.5 µW; N-PEAF 0.072 µW; L-PEAF 0.38 µW."
+
+[[case]]
+id = "PA5"
+file = "peaf_analog_features.pdf"
+question = "What energy efficiency is assumed for the neural network processor, and which frame rates are used for WWD and KWS?"
+expect = ["36.5", "10^12 | 10¹² | 10^{12} | TOPS", "10", "30"]
+avoid = ["1012 OPS", "1012 op"]
+pages = [2]
+note = "E_eff = 36.5 · 10^12 OPS/W; FR = 10 fps for WWD and 30 fps for KWS."
+
+[[case]]
+id = "PA6"
+file = "peaf_analog_features.pdf"
+question = "Write equation (1) for the total power in LaTeX."
+expect = ["P_{tot} | P_{\\text{tot}} | P_{\\mathrm{tot}}", "N_{OPS} | N_{\\text{OPS}} | N_{\\mathrm{OPS}}", "E_{eff} | E_{\\text{eff}} | E_{\\mathrm{eff}}", "FR | F R"]
+avoid = []
+pages = [2]
+note = "P_tot = P_feat + P_class = P_feat + (N_OPS × FR) / E_eff."
+
+[[case]]
+id = "PA7"
+file = "peaf_analog_features.pdf"
+question = "표 3에서 L-PEAF baseline, Learn-PEAF, MFCC의 정확도는 각각 얼마야?"
+expect = ["79.1", "86.4", "84.8"]
+avoid = []
+pages = [3]
+note = "LeNet (B) on KWS: L-PEAF 79.1%, Learn-PEAF 86.4%, MFCC 84.8%."
+
+[[case]]
+id = "PA8"
+file = "peaf_analog_features.pdf"
+question = "WWD 테스트 세트는 어떻게 구성됐어?"
+expect = ["50", "500", "3500"]
+avoid = []
+pages = [3]
+note = "50 real 'Hey Firefox' recordings, 500 generated positives, 3500 background noise and 3500 negative speech samples, randomly shifted in time."
+
+[[case]]
+id = "PA9"
+file = "peaf_analog_features.pdf"
+question = "For WWD, which analog feature is suggested for the most power-efficient application, and at what cost in accuracy?"
+expect = ["N-PEAF", "two times | 2 times | twice | half", "1 % | 1%"]
+avoid = []
+pages = [4]
+note = "N-PEAF: two times less energy than L-PEAF with a 1% accuracy loss."
+
+[[case]]
+id = "PA10"
+file = "peaf_analog_features.pdf"
+question = "논문에서 인정한 한계(limitation)는 뭐야?"
+expect = ["IAF", "simplif | 단순", "simulat | 시뮬레이션"]
+avoid = []
+pages = [4]
+note = "Learn-PEAF uses a simplified IAF encoder; L-PEAF and N-PEAF were simulated numerically, not recorded from the real chips."
+
+[[case]]
+id = "PA11"
+file = "peaf_analog_features.pdf"
+question = "이 논문을 다섯 줄로 요약해 줘."
+expect = ["PEAF", "WWD | 웨이크", "KWS | 키워드", "information | 정보", "power | 전력"]
+avoid = []
+pages = []
+note = "Analog features (L, N, Learn) for WWD and KWS; power estimates from chips; information-theory analysis finds the IAF bottleneck; Learn-PEAF up to 7% better on KWS than L-PEAF and above MFCC with less power."
+
+[[case]]
+id = "PH1"
+file = "peaf_analog_features.pdf"
+question = "What audio sampling rate and how many microphones did the fabricated chips use in these experiments?"
+expect = ["not | does not | no "]
+avoid = ["16 kHz", "16kHz", "8 kHz", "two microphones"]
+pages = []
+note = "Neither the sampling rate nor a microphone count is given."
+
+# --- CIC decimation filter and its VLSI implementation (7 pages, one column, English) ---
+
+[[case]]
+id = "VA1"
+file = "cic_decimation_vlsi.pdf"
+question = "이 논문의 데시메이션 시스템은 어떤 필터들로 구성되고, 각 단의 데시메이션 비율은 얼마야?"
+expect = ["CIC", "half band | half-band | 하프 밴드 | 반대역", "droop | 드룹", "16", "2"]
+avoid = []
+pages = [2]
+note = "Sigma-delta modulator, CIC filter (16), first half band (2), second half band (2), droop correction (2): 6.144 MHz to 48 kHz."
+
+[[case]]
+id = "VA2"
+file = "cic_decimation_vlsi.pdf"
+question = "What sampling frequency and oversampling ratio does the design use, and what is the Nyquist frequency?"
+expect = ["6.144", "128", "48"]
+avoid = []
+pages = [1]
+note = "6.144 MHz, oversampling ratio 128, Nyquist frequency 48 kHz (f_B = 24 kHz)."
+
+[[case]]
+id = "VA3"
+file = "cic_decimation_vlsi.pdf"
+question = "CIC 필터의 N, M, R 값은 각각 얼마로 정했고, 왜 그렇게 정했어?"
+expect = ["5", "1", "16", "overflow | 오버플로"]
+avoid = []
+pages = [3]
+note = "N = 5, M = 1, R = 16, to avoid overflow in each stage."
+
+[[case]]
+id = "VA4"
+file = "cic_decimation_vlsi.pdf"
+question = "Write the formulas for the maximum register growth G_max and the output MSB B_max in LaTeX."
+expect = ["(RM)^N | (RM)^{N} | (R M)^N | (R M)^{N}", "\\log_2 | \\log_{2} | log2 | log_2", "B_{in} | B_in | B_{\\text{in}}"]
+avoid = []
+pages = [3]
+note = "G_max = (RM)^N; B_max = [N log2 R + B_in - 1] (as printed)."
+
+[[case]]
+id = "VA5"
+file = "cic_decimation_vlsi.pdf"
+question = "논문에서 CIC 필터의 속도를 높이기 위해 쓴 세 가지 방법은?"
+expect = ["truncation | 절단 | 트렁케이션", "MCLA | carry look-ahead | Carry Look-ahead | 캐리", "pipeline | 파이프라인"]
+avoid = []
+pages = [3, 4]
+note = "Truncation of LSBs, the modified carry look-ahead adder (MCLA), and the pipeline structure."
+
+[[case]]
+id = "VA6"
+file = "cic_decimation_vlsi.pdf"
+question = "What maximum frequency did the MCLA reach on the FPGA, and how fast is the improved CIC filter compared to the behavioural one?"
+expect = ["220", "163", "107"]
+avoid = []
+pages = [4, 6]
+note = "MCLA: minimum clock period 4.389 ns, 220 MHz. CIC filter: 163 MHz vs 107 MHz for the behavioural filter."
+
+[[case]]
+id = "VA7"
+file = "cic_decimation_vlsi.pdf"
+question = "SNR은 시그마 델타 모듈레이터 출력과 데시메이션 이후에 각각 몇 dB야?"
+expect = ["141.56", "145.35"]
+avoid = []
+pages = [5]
+note = "141.56 dB at the modulator output, 145.35 dB after the decimation stages."
+
+[[case]]
+id = "VA8"
+file = "cic_decimation_vlsi.pdf"
+question = "Figure 4의 truncated CIC 필터에서 Integrator 1부터 5까지 비트 폭은 각각 얼마야?"
+expect = ["25", "22", "20", "18", "16"]
+avoid = []
+pages = [4]
+note = "Integrators 25, 22, 20, 18 and 16 bits; the five comb stages 16 bits."
+
+[[case]]
+id = "VA9"
+file = "cic_decimation_vlsi.pdf"
+question = "half band 필터 계수에는 어떤 특징이 있고, 그 덕분에 얻는 장점은?"
+expect = ["0.5", "zero | 0이 | 0으로", "50"]
+avoid = []
+pages = [2]
+note = "All even coefficients are zero except one, which is 0.5; efficient for 2:1 decimation, about 50% less computation than a direct form filter."
+
+[[case]]
+id = "VA10"
+file = "cic_decimation_vlsi.pdf"
+question = "이 논문으로 시험 문제 3개를 만들어 줘. 답과 출처도 같이."
+expect = ["[p."]
+avoid = []
+pages = []
+note = "Three questions whose answers match the paper, each with a correct page citation."
+
+[[case]]
+id = "VH1"
+file = "cic_decimation_vlsi.pdf"
+question = "논문에서 사용한 FPGA 칩의 정확한 모델명과 소비 전력은?"
+expect = ["다루지 | 없 | 나와 있지 않 | 언급되지 | 명시되어 있지 않 | 제공되지 않 | not"]
+avoid = ["Spartan", "Virtex", "Artix", "mW"]
+pages = []
+note = "Only 'Xilinx FPGA' is named; no model and no power figure."
+
+[[case]]
+id = "VH2"
+file = "cic_decimation_vlsi.pdf"
+question = "What chip area in mm² does the paper report for the CIC filter?"
+expect = ["not | does not | no "]
+avoid = ["mm²", "mm2", "mm^2"]
+pages = []
+note = "No area figure is reported."

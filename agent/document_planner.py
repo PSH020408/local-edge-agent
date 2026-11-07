@@ -14,7 +14,12 @@ the result.
             Whole-document tasks are summarised in chunks first, then combined.
 5. Check    Code verifies every citation points to a page that was given, asks once more
             if there are none, and lists numbers in the answer that appear nowhere in the
-            pages (a sign of an invented value).
+            pages (a sign of an invented value). An answer saying the document does not cover
+            the question is accepted only after a keyword search of the rest of the document.
+
+Papers (Document.dense) are searched by passage instead of by page: holdout Run 29 showed that
+a page index built from first lines is blind on 5,000-character paper pages, and that whole
+pages cut to fit the context lose what is at the bottom of each page.
 """
 
 from __future__ import annotations
@@ -25,7 +30,17 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from .document_tools import DOCUMENT_EXTENSIONS, Document, load_document, page_image, page_references, rank_pages
+from .document_tools import (
+    DOCUMENT_EXTENSIONS,
+    Document,
+    Passage,
+    load_document,
+    page_image,
+    page_references,
+    rank_pages,
+    rank_passages,
+    split_passages,
+)
 
 _DOC_PATH = re.compile(r"(\S+\.(?:" + "|".join(e.lstrip(".") for e in DOCUMENT_EXTENSIONS) + r"))\b", re.IGNORECASE)
 _HANGUL = re.compile(r"[가-힣]")
@@ -66,6 +81,10 @@ _CONTEXT_CHARS = 10000   # page text given to the model for one answer
 _CHUNK_CHARS = 6000      # page text per chunk for whole-document tasks
 MAX_PAGES = 6
 MAX_VISUAL_PAGES = 4
+MAX_PASSAGES = 8         # passages chosen by the planner model for a paper
+MAX_EXTRA_PASSAGES = 3   # passages added by keyword search
+MAX_PAPER_VISUAL_PAGES = 3
+_SHORT_NOT_COVERED = 400  # a "not covered" answer shorter than this triggers a second search
 MAX_CAPTIONS = 40        # picture-only pages captioned per document (a scanned book is not captioned)
 _CAPTION_TEXT = 80       # a page with a picture and less text than this is captioned
 
@@ -81,6 +100,22 @@ SELECT_SCHEMA = {
 SELECT_PROMPT = """You choose which pages of a document are needed to answer a question.
 Below is an index with one line per page: its title and first words. [equations] and [figure] mark pages whose equations or figures are not in the extracted text; "picture:" is a short description of a page that is only a picture.
 Return JSON. "scope" is "whole" when the question needs the whole document: a summary of everything, practice or exam questions on the whole document, or a list of all topics. Otherwise "scope" is "pages" and "pages" lists the page numbers that contain the answer, most relevant first, at most 6.
+The question and the document may be in different languages: match by meaning, not by words."""
+
+PASSAGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "scope": {"type": "string", "enum": ["passages", "whole"]},
+        "passages": {"type": "array", "items": {"type": "integer"}, "maxItems": MAX_PASSAGES},
+        "keywords": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+    },
+    "required": ["scope", "passages", "keywords"],
+}
+
+PASSAGE_PROMPT = """You choose which passages of a paper are needed to answer a question.
+Below is an index with one line per passage: its [id], page, section (§) and first words. Tables and figures start with their caption ("Table 1:", "Figure 4:").
+Return JSON. "scope" is "whole" only when the question needs the whole document: a summary of everything, or practice or exam questions on the whole document. Otherwise "scope" is "passages" and "passages" lists the ids that contain the answer, most relevant first, at most 8.
+"keywords" lists up to 8 words or short phrases, in the document's language, that the text answering the question would contain: technical terms, names, symbols, "Table 3".
 The question and the document may be in different languages: match by meaning, not by words."""
 
 ANSWER_PROMPT = """You answer questions about a document using only the pages given below.
@@ -165,7 +200,9 @@ def unsupported_numbers(answer: str, sources: str, question: str) -> list[str]:
     """Numbers in the answer that appear nowhere in the sources or the question."""
     body = _CITATION.sub(" ", answer)
     body = re.sub(r"(?m)^\s*(?:[-*]\s*)?(?:\d{1,2}[.)]|Q\d+[.:)]?|문제\s*\d+[.:)]?)\s", " ", body)  # list numbering
+    # Run 30: "F R = 30f ps" in a paper; a unit glued to a number in the source still counts.
     known = {n.replace(",", "") for n in _NUMBER.findall(sources + " " + question)}
+    known |= {n.replace(",", "") for n in re.findall(r"(?<![0-9.])\d+(?:[.,]\d+)?", sources)}
     for base, power in re.findall(r"(\d{1,3})\^(\d{1,2})", sources):  # 10^2 written as 100
         if int(power) <= 12:
             known.add(str(int(base) ** int(power)))
@@ -194,6 +231,7 @@ class DocumentQuestionPlanner:
         self.on_tool_call = on_tool_call or (lambda name, args, result: None)
         self.on_event = on_event or (lambda message: None)
         self.captions: dict[int, str] = {}
+        self.labels: dict[int, str] = {}  # papers: the section of each cited page, for the source line
 
     def applies(self, question: str) -> str | None:
         return find_document_path(question, self.workspace)
@@ -256,7 +294,7 @@ class DocumentQuestionPlanner:
             rest = " / ".join(page.text.splitlines()[1:])[:140]
             if page.number in self.captions:
                 rest = (rest + " / " if rest else "") + "picture: " + self.captions[page.number][:200]
-            flags = (" [equations]" if page.math else "") + (" [figure]" if page.images else "")
+            flags = (" [equations]" if page.math else "") + (" [figure]" if page.images or page.drawings else "")
             lines.append(f"p.{page.number}: {page.title} — {rest}{flags}")
         return "\n".join(lines)
 
@@ -287,6 +325,72 @@ class DocumentQuestionPlanner:
             self.on_event("page selection could not be read; using keyword matches")
         return "pages", list(dict.fromkeys(pages))[:MAX_PAGES]
 
+    def _select_passages(self, document: Document, passages: list[Passage], question: str) -> tuple[str, list[int], list[int], list[str]]:
+        """Papers: the planner model picks passages from a passage index and names keywords;
+        keyword search adds a few more. Returns scope, chosen ids, extra ids, keywords."""
+        explicit = page_references(question, document)
+        if explicit:
+            self.on_event(f"pages named in the question: {', '.join(f'p.{n}' for n in explicit)}")
+            return "passages", [p.id for p in passages if p.page in explicit], [], []
+        shown = passages
+        if len(passages) > 80:  # a long paper: index the best keyword matches only
+            keep = {i for i, _ in rank_passages(passages, question)[:80]}
+            shown = [p for p in passages if p.id in keep]
+        messages = [
+            {"role": "system", "content": PASSAGE_PROMPT},
+            {"role": "user", "content": "Index:\n" + "\n".join(p.label for p in shown) + f"\n\nQuestion: {question}"},
+        ]
+        try:
+            raw = self.llm.chat(messages, format=PASSAGE_SCHEMA)["message"].get("content") or ""
+            data = json.loads(raw)
+            scope = data.get("scope", "passages")
+            valid = {p.id for p in passages}
+            chosen = [int(i) for i in data.get("passages", []) if int(i) in valid]
+            keywords = [str(k) for k in data.get("keywords", []) if str(k).strip()][:8]
+        except (ValueError, TypeError, KeyError, AttributeError):
+            scope, chosen, keywords = "passages", [], []
+        if scope == "whole" and _WHOLE.search(question):
+            return "whole", [], [], keywords
+        if scope == "whole":
+            self.on_event("the model asked for the whole document, but the question is not a summary or practice task; using matching passages")
+        chosen = list(dict.fromkeys(chosen))[:MAX_PASSAGES]
+        ranked = [i for i, score in rank_passages(passages, question + " " + " ".join(keywords)) if score > 0]
+        if not chosen:
+            self.on_event("passage selection could not be read; using keyword matches")
+            return "passages", ranked[:5] or [passages[0].id], [], keywords
+        extra = [i for i in ranked if i not in chosen][:MAX_EXTRA_PASSAGES]
+        return "passages", chosen, extra, keywords
+
+    def _passage_context(self, passages: dict[int, Passage], ids: list[int], notes: dict[int, str],
+                         document: Document, budget: int) -> tuple[str, list[int]]:
+        """Whole passages in reading order, most relevant first until the budget is used."""
+        kept, size = [], 0
+        for i in ids:
+            length = len(passages[i].text) + 40
+            if kept and size + length > budget:
+                continue
+            kept.append(i)
+            size += length
+        kept.sort()
+        blocks, pages = [], []
+        for position, i in enumerate(kept):
+            passage = passages[i]
+            section = f" §{passage.section}" if passage.section else ""
+            blocks.append(f"[p.{passage.page}]{section}\n{passage.text}")
+            last_on_page = position == len(kept) - 1 or passages[kept[position + 1]].page != passage.page
+            if passage.page not in pages:
+                pages.append(passage.page)
+            if last_on_page:
+                page = document.page(passage.page)
+                if passage.page in notes:
+                    blocks.append(f"[p.{passage.page}, read by the vision model]\n{notes[passage.page]}")
+                elif page.math:
+                    blocks.append(
+                        f"(p.{passage.page}: equations on this page were extracted as scattered symbols and are not "
+                        "reliable. Do not write these equations out; say they were not read.)"
+                    )
+        return "\n\n".join(blocks), pages
+
     def _look(self, document: Document, numbers: list[int], question: str) -> dict[int, str]:
         """Vision transcriptions of the selected pages whose equations or figures are needed.
 
@@ -302,9 +406,9 @@ class DocumentQuestionPlanner:
         for n in numbers:
             page = document.page(n)
             figure_only = page.images > 0 and len(page.text) < 400
-            if figure_only or (visual and (page.math or page.images)):
+            if figure_only or (visual and (page.math or page.images or page.drawings)):
                 wanted.append(n)
-        wanted = wanted[:MAX_VISUAL_PAGES]
+        wanted = wanted[:MAX_PAPER_VISUAL_PAGES if document.dense else MAX_VISUAL_PAGES]
         notes = {}
         for number in wanted:
             image = page_image(document, number, self.cache_dir)
@@ -358,6 +462,9 @@ class DocumentQuestionPlanner:
 
         user_question = question.replace(path, "").strip()
         self.captions = self._caption(document)
+        self.labels = {}
+        if document.dense:
+            return self._run_paper(document, user_question, language, korean, start)
         scope, numbers = self._select(document, user_question)
         notes: dict[int, str] = {}
         if scope == "whole":
@@ -366,16 +473,77 @@ class DocumentQuestionPlanner:
             self.on_event("pages: " + ", ".join(f"p.{n}" for n in numbers))
             notes = self._look(document, numbers, user_question)
             context = self._context(document, numbers, notes, _CONTEXT_CHARS)
-            prompt = f"Pages:\n\n{context}\n\nQuestion: {user_question}"
-            answer = self._ask(ANSWER_PROMPT.format(language=language), prompt)
-            if not cited_pages(answer) and not _NOT_COVERED.search(answer):
-                self.on_event("answer had no page citations; asking again")
-                answer = self._ask(
-                    ANSWER_PROMPT.format(language=language),
-                    prompt + "\n\nYour previous answer had no [p.N] citations. Answer again and cite a page after every claim.",
-                )
+            answer = self._answer(context, user_question, language)
             given, sources = numbers, context
+            if self._needs_search(answer) and not page_references(user_question, document):
+                more = [n for n, score in rank_pages(document, user_question) if score > 0 and n not in numbers][:3]
+                if more:
+                    self.on_event(self._search_event(more))
+                    more_notes = self._look(document, more, user_question)
+                    notes.update(more_notes)
+                    given = more + numbers
+                    sources = self._context(document, given, notes, _CONTEXT_CHARS)
+                    answer = self._answer(sources, user_question, language)
         return self._finish(document, answer, given, sources, user_question, korean, start, notes)
+
+    def _answer(self, context: str, question: str, language: str) -> str:
+        prompt = f"Pages:\n\n{context}\n\nQuestion: {question}"
+        answer = self._ask(ANSWER_PROMPT.format(language=language), prompt)
+        if not cited_pages(answer) and not _NOT_COVERED.search(answer):
+            self.on_event("answer had no page citations; asking again")
+            answer = self._ask(
+                ANSWER_PROMPT.format(language=language),
+                prompt + "\n\nYour previous answer had no [p.N] citations. Answer again and cite a page after every claim.",
+            )
+        return answer
+
+    @staticmethod
+    def _needs_search(answer: str) -> bool:
+        """A short answer saying the document does not cover the question.
+
+        Holdout Run 29: given the wrong pages, the model answered "the document does not cover
+        this" nine times, and the code accepted it. Such an answer now has to survive a keyword
+        search of the rest of the document first.
+        """
+        return bool(_NOT_COVERED.search(answer)) and (not cited_pages(answer) or len(answer) < _SHORT_NOT_COVERED)
+
+    @staticmethod
+    def _search_event(pages: list[int]) -> str:
+        return ("the answer says the document does not cover this; searching the rest of the document: "
+                + ", ".join(f"p.{n}" for n in pages))
+
+    def _run_paper(self, document: Document, question: str, language: str, korean: bool, start: float) -> str:
+        passages = split_passages(document)
+        by_id = {p.id: p for p in passages}
+        scope, chosen, extra, keywords = self._select_passages(document, passages, question)
+        if scope == "whole":
+            answer, given, sources = self._whole(document, question, language)
+            self.labels = {}
+            for passage in passages:  # the first section on each page names it in the source line
+                if passage.section:
+                    self.labels.setdefault(passage.page, passage.section)
+            return self._finish(document, answer, given, sources, question, korean, start, {})
+        pages = list(dict.fromkeys(by_id[i].page for i in chosen))
+        self.on_event(
+            f"passages: {len(chosen)} chosen, {len(extra)} by keywords, on "
+            + ", ".join(f"p.{n}" for n in dict.fromkeys(by_id[i].page for i in chosen + extra))
+            + (f" | keywords: {', '.join(keywords[:6])}" if keywords else "")
+        )
+        notes = self._look(document, pages, question)
+        context, given = self._passage_context(by_id, chosen + extra, notes, document, _CONTEXT_CHARS)
+        self.labels = {by_id[i].page: by_id[i].section for i in reversed(chosen + extra) if by_id[i].section}
+        answer = self._answer(context, question, language)
+        used = set(chosen + extra)
+        if self._needs_search(answer) and not page_references(question, document):
+            ranked = rank_passages(passages, question + " " + " ".join(keywords))
+            more = [i for i, score in ranked if score > 0 and i not in used][:6]
+            if more:
+                self.on_event(self._search_event(list(dict.fromkeys(by_id[i].page for i in more))))
+                new_pages = [n for n in dict.fromkeys(by_id[i].page for i in more) if n not in notes]
+                notes.update(self._look(document, new_pages, question))
+                context, given = self._passage_context(by_id, more + chosen + extra, notes, document, _CONTEXT_CHARS)
+                answer = self._answer(context, question, language)
+        return self._finish(document, answer, given, context, question, korean, start, notes)
 
     def _whole(self, document: Document, question: str, language: str) -> tuple[str, list[int], str]:
         chunks, current, size = [], [], 0
@@ -423,7 +591,7 @@ class DocumentQuestionPlanner:
             notes.append(t["numbers"].format(numbers=", ".join(numbers)))
         used = [n for n in cited if n in given]
         source_line = t["sources"] + ", ".join(
-            f"p.{n} ({(document.page(n).title or self.captions.get(n, ''))[:50]})" for n in used[:8]
+            f"p.{n} ({(self.labels.get(n) or document.page(n).title or self.captions.get(n, ''))[:50]})" for n in used[:8]
         ) if used else ""
         self.on_event(
             f"check: {len(used)} cited page(s)"

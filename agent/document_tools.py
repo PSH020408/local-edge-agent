@@ -32,6 +32,7 @@ class Page:
     images: int = 0
     math: bool = False
     label: str = ""  # page number printed on the page, when it differs from the position
+    drawings: int = 0  # figures drawn as vector graphics (papers only, see _mark_paper_pages)
 
     @property
     def needs_vision(self) -> bool:
@@ -48,10 +49,62 @@ class Document:
     def page(self, number: int) -> Page | None:
         return self.pages[number - 1] if 1 <= number <= len(self.pages) else None
 
+    @property
+    def dense(self) -> bool:
+        """A paper or report: PDF pages full of running text, not slides.
+
+        Holdout Run 29: page selection by title works for slides (one topic per page, under
+        400 characters) and fails for papers (5,000 characters, the first line in mid-sentence).
+        """
+        if self.kind != "pdf" or not self.pages:
+            return False
+        lengths = sorted(len(p.text) for p in self.pages)
+        return lengths[len(lengths) // 2] >= DENSE_PAGE_CHARS
+
     def summary(self) -> str:
         math = sum(1 for p in self.pages if p.math)
-        figures = sum(1 for p in self.pages if p.images)
-        return f"{len(self.pages)} page(s), {math} with equations, {figures} with figures"
+        figures = sum(1 for p in self.pages if p.images or p.drawings)
+        kind = ", read as a paper" if self.dense else ""
+        return f"{len(self.pages)} page(s), {math} with equations, {figures} with figures{kind}"
+
+
+DENSE_PAGE_CHARS = 1500   # median characters per page from which a PDF is read as a paper
+_VECTOR_PATHS = 50        # drawn lines and shapes on a page from which it holds a vector figure
+_FIGURE_CAPTION = re.compile(r"^(?:Figure|FIGURE|Fig\.)\s*\d+\s*[:.]")
+_EQUATION_NUMBER = re.compile(r"(?:^|\s)\((\d{1,2})\)$")
+
+
+def _numbered_equation(lines: list[str]) -> bool:
+    """A line ending in "(1)", "(2)" next to an "=", math symbols or scattered one-letter lines:
+    a displayed equation. Word's Symbol font comes out as private-use characters (U+F03D is =)."""
+    for i, line in enumerate(lines):
+        if _EQUATION_NUMBER.search(line):
+            before = lines[max(0, i - 3): i]
+            near = " ".join(before + [line])
+            symbols = sum(1 for ch in near if ch in _MATH_CHARS or "\uf000" <= ch <= "\uf0ff")
+            scattered = sum(1 for previous in before if len(previous.strip()) <= 3)
+            if "=" in near or symbols >= 2 or scattered >= 2:
+                return True
+    return False
+
+
+def _mark_paper_pages(document: "Document", paths: list[int]) -> None:
+    """In papers, flag pages with vector figures and numbered equations.
+
+    Holdout Run 29: both papers drew their plots as vector graphics (no image objects) and had
+    too few short lines for looks_like_math, so no page was marked and no question about a
+    figure or an equation reached the vision model. Slides keep the old rules: these are
+    applied only to dense documents.
+    """
+    if not document.dense:
+        return
+    for page, count in zip(document.pages, paths):
+        lines = page.text.splitlines()
+        captions = sum(1 for line in lines if _FIGURE_CAPTION.match(line))
+        if captions or count >= _VECTOR_PATHS:
+            page.drawings = max(1, captions)
+        if _numbered_equation(lines):
+            page.math = True
 
 
 def looks_like_math(text: str) -> bool:
@@ -88,7 +141,7 @@ def _finish(lines: list[str], number: int, images: int, detect_math: bool = True
 
 def _raised_digits(textpage, count: int) -> set[int]:
     """Indices of digits set as superscripts: the bottom raised by over a quarter of the height of
-    the character before it, the top not above it, and the glyph smaller (10², 10¹¹, x²)."""
+    the character before it, the top at most half a height above it, and the glyph smaller."""
     raised, base = set(), None
     for i in range(count):
         ch = textpage.get_text_range(i, 1)
@@ -98,7 +151,8 @@ def _raised_digits(textpage, count: int) -> set[int]:
         if ch.isdigit() and base is not None:
             b_left, b_bottom, b_right, b_top = base
             height = b_top - b_bottom
-            if (height > 0 and bottom - b_bottom > 0.25 * height and top <= b_top + 0.25 * height
+            # Run 29: "10^12" in a LaTeX paper rises 0.3 heights above the "0", so up to 0.5.
+            if (height > 0 and bottom - b_bottom > 0.25 * height and top <= b_top + 0.5 * height
                     and top - bottom < 0.85 * height and b_left <= left < b_right + height):
                 raised.add(i)
                 continue
@@ -130,9 +184,10 @@ def load_pdf(path: Path) -> Document:
     import pypdfium2.raw as raw
 
     pdf = pdfium.PdfDocument(str(path))
-    raw_pages, images = [], []
+    raw_pages, images, paths = [], [], []
     try:
         for page in pdf:
+            paths.append(sum(1 for _ in page.get_objects(filter=(raw.FPDF_PAGEOBJ_PATH,), max_depth=3)))
             text = _pdf_page_text(page.get_textpage()).replace("\r", "")
             raw_pages.append([line.strip() for line in text.splitlines() if line.strip()])
             images.append([
@@ -147,7 +202,9 @@ def load_pdf(path: Path) -> Document:
     template = {box for box, n in counts.items() if len(images) >= 4 and n >= max(3, 0.4 * len(images))}
     figures = [sum(1 for box in boxes if box not in template) for boxes in images]
     cleaned = _remove_repeated_lines(raw_pages)
-    return Document(path, "pdf", [_finish(lines, i + 1, figures[i]) for i, lines in enumerate(cleaned)])
+    document = Document(path, "pdf", [_finish(lines, i + 1, figures[i]) for i, lines in enumerate(cleaned)])
+    _mark_paper_pages(document, paths)
+    return document
 
 
 def _pptx_lines(shapes, lines: list[str]) -> int:
@@ -299,3 +356,100 @@ def page_references(question: str, document: Document) -> list[int]:
         if document.page(number) and number not in numbers:
             numbers.append(number)
     return numbers
+
+
+# --- passages: search inside papers --------------------------------------------------------
+
+@dataclass
+class Passage:
+    id: int
+    page: int
+    section: str
+    text: str
+
+    @property
+    def label(self) -> str:
+        first = " ".join(self.text.split())[:110]
+        return f"[{self.id}] p.{self.page}" + (f" §{self.section[:40]}" if self.section else "") + f" | {first}"
+
+
+_HEADING = re.compile(
+    r"^(?:\d{1,2}(?:\.\d{1,2})*\.?\s+[A-Z(][^=]{1,80}"          # 2.1. Digital features, 1.1 Truncation
+    r"|[A-Z][A-Z0-9 ,&\-]{3,60}"                                # CASCADED INTEGRATOR COMB FILTER
+    r"|(?:Abstract|ABSTRACT|References|REFERENCES|Acknowledg\w*|Conclusions?|Discussion|Introduction))$"
+)
+_CAPTION = re.compile(r"^(?:Table|TABLE|Figure|FIGURE|Fig\.)\s*\d+\s*[:.]")
+PASSAGE_CHARS = 1100
+
+
+def split_passages(document: Document) -> list[Passage]:
+    """Cut a paper into passages of about a paragraph: a new one starts at every heading and
+    every table or figure caption, and a long run of text is cut at a sentence end."""
+    passages: list[Passage] = []
+    section = ""
+
+    def close(page: int, lines: list[str]) -> None:
+        text = "\n".join(lines).strip()
+        if text:
+            passages.append(Passage(len(passages) + 1, page, section, text))
+
+    for page in document.pages:
+        current: list[str] = []
+        size = 0
+        for line in page.text.splitlines():
+            heading = (_HEADING.match(line) and len(line) < 90 and not line.endswith(".")
+                       and (not line.isupper() or re.search(r"[A-Z]{4,}", line)))  # not "RM N" from an equation
+            caption = _CAPTION.match(line)
+            if (heading or caption) and current:
+                close(page.number, current)
+                current, size = [], 0
+            if heading:
+                section = line.strip()
+            current.append(line)
+            size += len(line) + 1
+            if size >= PASSAGE_CHARS and (line.endswith(".") or size >= 1.5 * PASSAGE_CHARS):
+                close(page.number, current)
+                current, size = [], 0
+        close(page.number, current)
+    return _join_figure_text(passages)
+
+
+def _join_figure_text(passages: list[Passage]) -> list[Passage]:
+    """Labels drawn inside a figure come out as short lines just before its caption; keep them
+    with the caption so a question about "Figure 4" finds the numbers in it."""
+    joined: list[Passage] = []
+    for passage in passages:
+        previous = joined[-1] if joined else None
+        if (previous and _FIGURE_CAPTION.match(passage.text) and previous.page == passage.page
+                and not _CAPTION.match(previous.text)):
+            lines = [line for line in previous.text.splitlines() if line.strip()]
+            if lines and sum(len(line) for line in lines) / len(lines) < 30:
+                joined[-1] = Passage(previous.id, passage.page, passage.section,
+                                     passage.text + "\n[text inside the figure]\n" + previous.text)
+                continue
+        joined.append(passage)
+    return [Passage(i + 1, p.page, p.section, p.text) for i, p in enumerate(joined)]
+
+
+def rank_passages(passages: list[Passage], query: str) -> list[tuple[int, float]]:
+    """Passages by BM25 score for the query terms, best first (passage ids)."""
+    import math
+
+    docs = [_tokens(p.section + " " + p.text) for p in passages]
+    if not docs:
+        return []
+    average = sum(len(d) for d in docs) / len(docs)
+    terms = set(_tokens(query))
+    frequency = {t: sum(1 for d in docs if t in d) for t in terms}
+    scores = []
+    for passage, words in zip(passages, docs):
+        counts = Counter(words)
+        score = 0.0
+        for term in terms:
+            if not counts[term]:
+                continue
+            idf = math.log(1 + (len(docs) - frequency[term] + 0.5) / (frequency[term] + 0.5))
+            tf = counts[term]
+            score += idf * tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * len(words) / average))
+        scores.append((passage.id, round(score, 3)))
+    return sorted(scores, key=lambda s: -s[1])

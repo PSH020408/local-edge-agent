@@ -175,3 +175,90 @@ Bugs in the checks found in this run and fixed:
 
 Remaining weaknesses, left for the next holdout to measure rather than tuned on these cases: separate points merged by the answer model (GA4, GB8), omissions (D04, D07), and translated rather than copied labels in figure readings (GA6).
 
+## Run 29 — second holdout: two research papers (2026-11-07)
+
+`run_eval_set.py --set documents --cases evals/documents/holdout2.toml --fast`, code frozen at `df47eb8`, run once. 24 cases in 11.1 minutes. A slide deck sent for this holdout was identical to the development file `arm_vs_riscv_slides.pptx` and was not used.
+
+| # | Result | Notes |
+|---|---|---|
+| PA1 What PEAF is, two tasks | ✅ | |
+| PA2 Three operations, L- vs N-PEAF | ✅ | |
+| PA3 What Learn-PEAF adds | ⚠️ | Low pass filter; PCEN left out |
+| PA4 Table 1 power figures | ❌ | Selected p.4 instead of p.2, then answered "not in the document" |
+| PA5 Energy efficiency, frame rates | ❌ | Selected p.4-5, "not in the document" |
+| PA6 Equation (1) in LaTeX | ❌ | p.2 was selected but cut: three pages shared the 10,000-character budget, each cut to its first 3,300 characters, and equation (1) is at the end of p.2. "Not in the document" |
+| PA7 Table 3 accuracies | ❌ | Selected p.4 instead of p.3; claimed the paper gives no figures for Table 3 |
+| PA8 WWD test set | ❌ | Selected p.4 instead of p.3; "not described", and expanded WWD as "Word-World Detection", an invention |
+| PA9 Most power-efficient WWD feature | ✅ | |
+| PA10 Limitations | ✅ | |
+| PA11 Five-line summary | ✅ | Whole-document path, 253 s |
+| VA1 Filters and decimation ratios | ❌ | Filters and the 16, 2, 2 ratios correct, but claims the droop correction filter does not decimate; Figure 1 shows it decimating by 2 (96 to 48 kHz) |
+| VA2 Sampling frequency, OSR, Nyquist | ✅ | |
+| VA3 N, M, R | ❌ | Selected p.6 instead of p.3, "not in the document" |
+| VA4 G_max and B_max formulas | ❌ | Selected p.4-5 instead of p.3; "not in the document" (predicted: the equations are not flagged) |
+| VA5 Three speed-up methods | ✅ | From the conclusions [p.6] |
+| VA6 MCLA and CIC speeds | ✅ | 220, 163 and 107 MHz with the right pages |
+| VA7 SNR before and after | ❌ | Selected p.2 and p.6 instead of p.5; "no figures given" |
+| VA8 Figure 4 bit widths | ❌ | Selected p.5 and answered from Figure 6 ("all 25 bit"), which is a different figure |
+| VA9 Half band coefficients | ❌ | Selected p.3 instead of p.2, "not mentioned" |
+| VA10 Practice questions | ⚠️ | Two correct; the second states a wrong transfer function, from a page whose equation was never read and is not flagged, so no warning was given |
+| PH1, VH1, VH2 | 3/3 | VH2's flag is the question's own "mm²" repeated in the answer, a poor avoid entry |
+
+**Main questions: ✅ 8, ⚠️ 2, ❌ 11 (38% correct). Hallucination checks 3/3.** The lecture holdout (Run 27) was 76%.
+
+### Why
+
+1. **Page selection is blind on paper pages.** The index line for a page is its first text line and the next 140 characters. On a slide that is the topic; on a paper page of 5,000 characters it is the middle of a sentence carried over from the page before. Tables, section headings and figure captions further down the page never reach the selection model. In 7 of 24 cases the model asked for the whole document, which the code refused, and the keyword fallback was used. Wrong pages caused 9 of the 11 failures.
+2. **The context budget cuts dense pages.** 10,000 characters are split evenly over the selected pages, so with three paper pages each is cut to its first third (PA6).
+3. **"Not in the document" is a safe exit.** Given the wrong pages, the answer model said the document does not cover it, and the code accepted that and listed the wrong pages as checked. Nine of the eleven failures are false "not in the document" answers. The hallucination checks reward this answer, so they cannot catch it; only the questions whose answer is in the document do.
+4. **Predicted before the run:** vector figures and equations are not flagged (VA4, VA10). The superscript case (PA5) was never reached because the page was not selected.
+
+None of these showed up on slides, where one page is one topic with a title and is short enough to fit the budget.
+
+### Fixes after Run 29
+
+| Failure | Fix | Kind |
+|---|---|---|
+| Page selection blind on paper pages (9 cases) | A PDF whose median page has 1,500 characters or more is read as a paper (the lecture PDFs have medians under 400; slide decks are never papers). Papers are split into passages of about a paragraph, starting at every heading, table caption and figure caption; labels drawn inside a figure stay with its caption. The planner model picks passages from an index of [id], page, section and first words, and names keywords in the document's language; BM25 keyword search adds up to three more passages | Code |
+| Pages cut to fit the context (PA6) | Papers get whole passages, most relevant first, until the 10,000 characters are used; nothing is cut in the middle | Code |
+| False "not in the document" (9 cases) | A short "not covered" answer triggers a keyword search of the pages (slides) or passages (papers) not yet given, and one more answer with them. If no other page matches, the answer stands. Applies to all documents | Code |
+| Vector figures and equations not flagged (VA4, VA10) | In papers only: a figure caption or 50 or more drawn paths marks a figure; a line ending in "(n)" next to "=", math symbols or scattered one-letter lines marks equations (Word's Symbol font comes out as private-use characters) | Code |
+| 10^12 missed (PA5, predicted) | A superscript may rise up to half a character height above the character before it (was a quarter). On the eight test documents this adds only PEAF p.2 | Code |
+
+The slide path is unchanged except for the second search, and the paper rules switch on only for dense PDFs. Run 30 checks all three sets: the development set and the first holdout must stay at ✅ 14 and ✅ 18 with no ❌; the papers have now been seen, so their score is a check, not a holdout result.
+
+## Run 30 — regression check after the Run 29 fixes (2026-11-08)
+
+All three sets with the same code, one command. Gate decided before the run: the two lecture sets must stay at ✅ 14 and ✅ 18 or above with no ❌, and 3/3 on the "not in the document" checks.
+
+| Set | Before | Run 30 | Time |
+|---|---|---|---|
+| Development (16 + 3) | ✅ 14, ⚠️ 2, ❌ 0 (Run 28) | ✅ 16, ⚠️ 0, ❌ 0; 3/3 | 13.2 min (18.3) |
+| First holdout, lectures (21 + 3) | ✅ 18, ⚠️ 3, ❌ 0 (Run 28) | ✅ 19, ⚠️ 2, ❌ 0; 3/3 | 10.5 min (25.2, with the captions made then) |
+| Second holdout, papers (21 + 3) | ✅ 8, ⚠️ 2, ❌ 11 (Run 29) | ✅ 19, ⚠️ 0, ❌ 2; 3/3 | 14.5 min (11.1) |
+
+The gate passed. The papers have been seen, so their score is a check of the fixes, not a holdout result.
+
+Changes on the lecture sets: D04 now explains the (N−τ)/N scaling, D07 now includes Wi-Fi, GB8's practice questions are correct. GA4 (the Florida bullet attributed to the Narborough case) and GA6 (iris called retina) are unchanged ⚠️. The second search ran on DH1, HH1 and HH2, found other pages with the question's words, and the answer stayed "not in the document" each time.
+
+Papers, per case:
+
+| # | Run 29 | Run 30 | Notes |
+|---|---|---|---|
+| PA1, PA2, PA9, PA10, PA11 | ✅ | ✅ | |
+| PA3 What Learn-PEAF adds | ⚠️ | ❌ | Answered vaguely ("learnable elements, inspired by LEAF") from the introduction; the passage with the low pass filter and PCEN was not chosen |
+| PA4 Table 1 | ❌ | ✅ | The Table 1 passage was chosen |
+| PA5 Efficiency and frame rates | ❌ | ✅ | 36.5 · 10^12 OPS/W. False number warning on "30": the paper writes "30f ps" |
+| PA6 Equation (1) | ❌ | ✅ | Read by the vision model; the page is now flagged |
+| PA7 Table 3 | ❌ | ✅ | |
+| PA8 WWD test set | ❌ | ✅ | |
+| VA1 Filters and ratios | ❌ | ❌ | Still says the droop correction filter does not decimate, and gives the modulator a 16:1 ratio. Figure 1 shows CIC 16, first half band 2, droop correction 2, second half band 2. The ratios are only in the figure, and the question has no figure word, so the page was not read by the vision model |
+| VA2, VA5, VA6 | ✅ | ✅ | |
+| VA3, VA4, VA7, VA8, VA9 | ❌ | ✅ | VA4 read by the vision model; VA8 from the figure labels kept with the FIGURE 4 caption |
+| VA10 Practice questions | ⚠️ | ✅ | No wrong equation this time |
+| PH1, VH1, VH2 | 3/3 | 3/3 | VH1's key-fact miss and VH2's flag are faults of the case file (Korean phrasing not listed; "mm²" repeats the question) |
+
+Fixed after the run, in the checks only (no answer changes): a number glued to a unit in the source ("30f ps") counts as present, and summaries of papers name each cited page by its first section instead of its first line.
+
+Remaining for the next holdout: facts that are only in a figure when the question does not mention a figure (VA1), passage choice for short questions with few distinctive words (PA3), and the two lecture ⚠️ (GA4, GA6).
+
