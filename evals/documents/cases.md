@@ -347,3 +347,39 @@ Second holdout: PA10 now lists other points from the Discussion and leaves out t
 
 D06 answered both parts in two of three repeats, with the same abbreviations spelled out, so the new abbreviation rule does not suppress them: Run 32's miss was run-to-run variation. D04's formula is right every time and its explanation varies, as it has since Run 25. The gate miss in Run 32 (✅ 14 against 15) is within this variation, so the code is kept as it is and frozen for the fourth holdout. Lesson for later gates: a single run cannot separate a one-case drop from variation; a drop is only counted when repeats confirm it.
 
+## Run 33 — fourth holdout: two one-column papers with equations, tables and figures (2026-11-08)
+
+`run_eval_set.py --set documents --cases evals/documents/holdout4.toml --fast`, code frozen at `c20fa03`, run once. 21 cases in 16.6 minutes.
+
+| # | Result | Notes |
+|---|---|---|
+| MR1 What PGPI4MR is, two tasks | ✅ | 4D MRI of 16 phases and sub-second 3D MRI from 0.29-0.49 s |
+| MR2 Equation (1) and its operators | ❌ | The equation is right (read by the vision model), but S and M are swapped: S is called the sampling and M the coil sensitivities; the page says S applies the coil maps and M selects the sampled points |
+| MR3 Iterations, regularizer, data consistency | ❌ | "Repeats the 2 steps 3 times" (the page: 5), regularizer described as a jumble of convolutions (the page: residual U-Net, 3 levels, 32 channels); data consistency (3 CG iterations, learned µk) right |
+| MR4 φ, α, ᾱ in equation (3) | ❌ | "Not in the document". The passage selection could not be read, and the keyword search ignores Greek letters and equation numbers, so nothing matched and no second search ran |
+| MR5 Optimizer, learning rate, steps, folds | ✅ | Adam, 3 × 10−4, 2,000 steps, 5 folds of 8 + 2 |
+| MR6 Primary end point | ✅ | |
+| MR7 Sub-second timing | ✅ | 135 ms, 0.455 s |
+| MR8 Table 1 cell | ✅ | Found by the second search; the run-together table rows were read correctly |
+| MR9 Four limitations | ✅ | |
+| BS1, BS2, BS4-BS7, BS10 | ✅ | |
+| BS3 Mexican hat wavelet | ⚠️ | Name, reason and "second derivative of a Gaussian" right; the formula has π⁴ where the paper has π^(1/4): the text layer lost the exponent. The unread-equation warning was shown |
+| BS8 Best model vs cardiologists | ✅ | Correct, but 15 false number warnings: the paper writes decimal commas ("89,28%"). Fixed after the run (check only) |
+| BS9 Figure 4 labels | ⚠️ | NORMAL and supraventricular are right, but cited p.4 instead of p.5, and the vision model returned [none] for the page with the bar chart; the answer matches the order in which p.4 lists the categories, not the chart |
+| MH1, BH1 | 2/2 | |
+
+**Main questions: ✅ 14, ⚠️ 2, ❌ 3 (74% correct). Hallucination checks 2/2.** MRI paper 6 of 9, ECG paper 8 of 10.
+
+### Predictions written before the run
+
+| Prediction | What happened |
+|---|---|
+| The 80-passage index cap hides passages from Korean questions | Not the cause of any failure; MR3 found the right page and misread it |
+| Table 1 rows run together, so MR8 fails | Wrong: MR8 was correct |
+| "3 × 10−4" not marked as a superscript | Did not matter: the answer copied it |
+| Only the vision model can answer BS9 | The vision model did not see the chart; the answer was right by the order of a list on p.4 |
+
+### What is left
+
+The failures are no longer about finding pages: they are about reading equations and symbols. Two answers misread equation-heavy passages they were given (MR2, MR3), one question about Greek symbols could not be searched (MR4), one formula came from a text layer that lost an exponent (BS3), and the vision model missed a chart (BS9). These move to Stage 5 (formulas), where formulas are read from the page image and searched by symbol and equation number.
+

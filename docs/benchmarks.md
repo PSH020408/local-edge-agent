@@ -603,3 +603,22 @@ Two unseen papers, a 36-page two-column survey (ISAC) and a 43-page one-column t
 
 The passage search carried over to unseen papers but not fully. Two of the four failures are a bug: passages offered to the answer but dropped by the 10,000-character budget counted as already checked, so the second search never returned to them. Other causes: index lines show only the start of long passages, the answer model adds acronym expansions the paper does not use, and one real fact was cited to the wrong page. A practice-question task on the 43-page paper took 15.5 minutes. Per-case results are in `evals/documents/cases.md`.
 
+## Run 32 — Regression check after the Run 31 fixes (2026-11-08)
+
+All four document sets with one command, 51 minutes. Development ✅ 14, ⚠️ 2 (one below the gate set before the run); first holdout ✅ 19, ⚠️ 2; short papers ✅ 19, ⚠️ 1, ❌ 1; long papers, now seen, ✅ 18, ⚠️ 3, ❌ 3 (from 15); "not in the document" checks passed in every set. Practice questions on the 43-page paper took 308 s instead of 929 s. Three repeats of the two development cases that dropped (D04, D06) showed both varying between runs with the same code, so the drop was not counted and the code was frozen.
+
+## Run 33 — Fourth document holdout: papers with equations, tables and figures (2026-11-08)
+
+Two unseen one-column papers (4D MRI reconstruction, 41 pages; canine ECG classification, 18 pages), code frozen at `c20fa03`, run once: 21 cases in 16.6 minutes. Main questions ✅ 14, ⚠️ 2, ❌ 3 (74% correct); "not in the document" checks 2/2.
+
+| Holdout | Documents | Correct |
+|---|---|---|
+| Run 27 | Lecture decks | 76% |
+| Run 29 | Short papers, before passage search | 38% |
+| Run 31 | Long papers | 62.5% |
+| Run 33 | Papers with equations, tables and figures | 74% |
+
+Finding pages is no longer the main problem: the failures are misread equation-heavy passages (two operators swapped, 5 iterations read as 3), a question about Greek symbols that keyword search cannot match, a formula whose exponent the text layer lost, and a chart the vision model did not see. Stage 4 is closed; these move to Stage 5 (formulas). Per-case results are in `evals/documents/cases.md`.
+
+221 offline tests pass.
+

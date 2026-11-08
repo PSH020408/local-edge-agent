@@ -8,8 +8,9 @@ Goal: a local agent that helps with graduate-school preparation, exam preparatio
 
 ## How every stage is verified
 
-1. Questions are asked by hand, one at a time, with `/reset` between them. No automated question sets.
+1. Questions come from case files and run with one command (`scripts/run_eval_set.py`); every answer is read and graded by hand.
 2. Every observed failure gets a fix and an offline regression test (`python -m unittest discover -s tests`).
+   A drop of one case is counted only when repeated runs confirm it (answers vary between runs).
 3. Holdout questions are never used for tuning; fixes are measured on new, unseen questions.
 4. Results go to `docs/benchmarks.md` as a numbered run; enforced constraints go to `docs/guardrails.md`.
 5. A stage is finished when its "done when" line is met, then it is committed and pushed.
@@ -22,39 +23,13 @@ Goal: a local agent that helps with graduate-school preparation, exam preparatio
 | 1 Time | Current time, time zones, date arithmetic, date differences, natural-language dates | 3-5 | 6966262 |
 | 2 Math | Engineering calculator (numpy, scipy, sympy), unit-aware calculation (pint), loop guards | 6-10 | 44f5c99 |
 | 3 Vision | Separate vision model as a tool, zoom, two-reading verification, image question planner, one-command test set | 11-24 | b4c74bc |
+| 4 Documents | PDF and PowerPoint reading, page and passage search, vision for equations and figures, cited answers with code checks, four holdouts | 25-33 | c20fa03 |
 
 ## Latest stage
 
-### Stage 3 — Eyes (vision), complete
+### Stage 4 — Documents (PDF, handouts, papers), complete
 
-Built: `describe_image`, `read_text_in_image` (two readings compared by code), zoom by locating parts, pixel budget, repetition and length limits, image question planner (plan under a JSON schema, one vision call per part, code-assembled answer), guard messages in the terminal.
-
-Remaining:
-- [x] Answers from the wider-view retry marked as unverified
-- [x] `read_text_in_image` reads only the target text; readings that differ only in punctuation are reported as such; minimum size for the tight crop
-- [x] Parts with the same focus merged into one call; maximum parts 6 → 8
-- [x] Coverage check: terms in the question (CS, SDA, "describe") that appear in no planned part are reported
-- [x] Image questions planned by `qwen3:14b`, also in fast mode
-- [x] Planning time and total time shown; the sign-location note only for photos
-- [x] Recheck cases 01 and 10, then the full set (12 cases + H1-H4): Runs 20-23
-- [x] One-command test run: `scripts/run_vision_set.py` (Run 22)
-
-Done when: cases 01 and 10 are correct or honestly marked uncertain with no confident wrong answers, and the full set is recorded.
-
-Result (Run 23): ✅ 4, ⚠️ 7, ❌ 1, hallucination checks 4/4 (Run 13: ✅ 2, ⚠️ 6, ❌ 4, 3/4).
-
-Accuracy over speed: two profiles.
-- [x] `--fast`: `qwen3:8b` main model, `qwen3:14b` planner, one look per part (about 7 minutes for the set)
-- [x] `--accurate`: `qwen3:14b` with planning thinking, a second look and majority vote for factual answers, tile scan for large images, thinking vision model for counting and comparing, larger pixel budget
-- [x] Experiment: model size x checking method, four profiles (`small`, `large`, `small-accurate`, `large-accurate`), one command (`run_vision_set.py --compare`) (Run 24: 14B planning is better; the accurate profile as built is worse and 3-4× slower, see evals/vision/cases.md)
-- [ ] Redesign the accurate profile from the Run 24 findings
-- [ ] Holdout: new images, run once, not used for tuning
-
-## Next
-
-### Stage 4 — Documents (PDF, handouts, papers) — in progress
-
-Built: `agent/document_tools.py` (PDF and PowerPoint pages, tables, notes, garbled-equation detection, template removal, page rendering), `agent/document_planner.py` (page selection, vision for equation and figure pages, cited answers, citation and number checks, whole-document summaries and practice questions), `read_document` tool, test set `evals/documents/` (3 documents, 16 questions, 3 hallucination checks), `scripts/run_eval_set.py --set documents`.
+Built: `agent/document_tools.py` (PDF and PowerPoint text, tables, notes, superscripts, template removal, garbled-equation, vector-figure and numbered-equation detection, passages), `agent/document_planner.py` (page selection for slides, passage search for papers, captions for picture-only pages, vision for equation and figure pages, cited answers, a second search before "not in the document", checks of citations, numbers, acronym expansions and citation pages, whole-document summaries and practice questions merged to fit the context), `read_document` tool, four case files in `evals/documents/`.
 
 - [x] First run of the document set (Run 25: ✅ 13, ⚠️ 3, ❌ 0, hallucination checks 3/3; fixes recorded in evals/documents/cases.md)
 - [x] Rerun after the Run 25 fixes (Run 26: ✅ 14, ⚠️ 4, ❌ 0, 3/3, 11 minutes)
@@ -69,23 +44,32 @@ Built: `agent/document_tools.py` (PDF and PowerPoint pages, tables, notes, garbl
 - [x] A third holdout (new papers), run once (Run 31: ✅ 15, ⚠️ 5, ❌ 4, 62.5%; hallucination checks 3/3)
 - [x] Fix from Run 31: passages dropped by the budget must not count as checked; index lines that show what a long passage contains; expansions and terms not in the document flagged; faster whole-document tasks for long papers
 - [x] Regression check on all four sets (Run 32): lecture holdout and short papers held; development ✅ 14, one below the gate, traced to run-to-run variation by three repeats of D04 and D06
-- [ ] Fourth holdout: two one-column papers with equations, tables and figures, run once
+- [x] Fourth holdout: two one-column papers with equations, tables and figures, run once (Run 33: ✅ 14, ⚠️ 2, ❌ 3, 74%; hallucination checks 2/2)
 
-Plan:
-- Text extraction from the PDF text layer (exact, no vision needed)
-- Page rendering to images for scanned pages, figures and formulas; only those go to the vision model
-- Summaries per page and section with page references; long documents split to fit the context window
-- Exam preparation: questions and explanations generated from a handout, each with its source page
+Holdouts, each run once on unseen documents:
 
-Verify: 3-5 real study documents (lecture handout, paper, scanned page). Check that page references are correct and nothing is invented.
-Done when: answers cite the right pages and no content is invented in the test documents.
+| Run | Documents | Correct | "Not in the document" checks |
+|---|---|---|---|
+| 27 | Three lecture decks | 76% | 3/3 |
+| 29 | Two short papers, before passage search | 38% | 3/3 |
+| 31 | Two long papers | 62.5% | 3/3 |
+| 33 | Two one-column papers with equations, tables and figures | 74% | 2/2 |
+
+Done when: answers cite the right pages and no content is invented in the test documents. Met for the "not in the document" checks in every run; the remaining wrong answers are misreadings of the pages, listed below, and the code flags most of them (unread equations, numbers, expansions, citation pages).
+
+Carried over:
+- Stage 3: redesign the accurate profile from the Run 24 findings; a vision holdout on new images
+- Stage 4: keyword search ignores Greek letters and equation numbers (a question about φ, α in equation (3) found nothing); explanations of equation-heavy passages are misread (operators swapped, a count of 5 read as 3); the vision model can miss a chart when asked for "equations and figures"; formulas from the text layer are wrong when it loses exponents (π^(1/4) read as π⁴). These go to Stage 5.
+
+## Next
 
 ### Stage 5 — Formulas
 - Vision transcribes a formula to LaTeX, read twice and compared
 - sympy checks that the LaTeX parses; symbols and dimensions are checked where possible
 - The main model explains; any calculation goes to the math tools
+- From Stage 4: search by symbols and equation numbers; a formula in an answer is always read from the page image, never from the text layer; a symbol table per document (what each symbol stands for, with its page)
 
-Verify: formulas from papers with known LaTeX.
+Verify: formulas from papers with known LaTeX, including the equations in the document test sets.
 Done when: transcriptions match the known LaTeX or are marked uncertain.
 
 ### Stage 6 — Tables, financial statements and graphs

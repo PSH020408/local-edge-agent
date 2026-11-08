@@ -297,6 +297,8 @@ def unsupported_numbers(answer: str, sources: str, question: str) -> list[str]:
     # Run 30: "F R = 30f ps" in a paper; a unit glued to a number in the source still counts.
     known = {n.replace(",", "") for n in _NUMBER.findall(sources + " " + question)}
     known |= {n.replace(",", "") for n in re.findall(r"(?<![0-9.])\d+(?:[.,]\d+)?", sources)}
+    # Run 33: "89,28%" is a decimal comma (European style); the answer writes 89.28.
+    known |= {n.replace(",", ".") for n in re.findall(r"(?<![0-9.,])\d+,\d{1,2}(?![0-9])", sources)}
     for base, power in re.findall(r"(\d{1,3})\^(\d{1,2})", sources):  # 10^2 written as 100
         if int(power) <= 12:
             known.add(str(int(base) ** int(power)))

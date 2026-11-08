@@ -140,7 +140,7 @@ A second profile spent 3-4× more model calls per question: a second look with a
 
 The 16 cases were used during development, so all scores here are optimistic. A holdout set of new images is the next check.
 
-## 9. Experiment 4: Reading study documents (Runs 25-31)
+## 9. Experiment 4: Reading study documents (Runs 25-33)
 
 Most lecture slides and notes already contain their text as data, so the document planner extracts it exactly and uses the vision model only for pages whose equations or figures are not in the text. Answers must cite a page after every claim, and code checks the citations and any numbers that do not appear in the document.
 
@@ -162,4 +162,6 @@ The second holdout, two research papers, dropped to 38% correct (Run 29) with no
 After the change to passage search (Run 30), the papers went from 8 to 19 correct answers of 21, and the lecture sets did not drop (development 14 → 16, first holdout 18 → 19). The check that mattered most was decided before the run: a fix for papers was accepted only if the lecture sets held. The papers are now seen documents, so their score is an upper bound until a third holdout is run.
 
 The third holdout, two long papers never seen before, scored 62.5% (Run 31): better than the 38% before passage search, below the 76% on lecture slides, and well below the 90% on the papers that guided the fix. That gap is the reason for running a holdout after every fix. The two-column survey did well (10 of 12); the one-column tutorial with long passages and heavy mathematics did not (5 of 12). The most useful finding was a bug that only long documents expose: passages that did not fit the context were treated as read.
+
+The fourth holdout, papers with equations, tables and figures, scored 74% (Run 33). Across four holdouts the document reader went from 38% to 74% on unseen papers, and no answer to a "not in the document" question was invented in any of them. What is left is reading rather than finding: equations and symbols. Two lessons from the end of this stage: write predictions down before a holdout runs (two of four were wrong, one in the reader's favour), and do not count a one-case drop until repeats confirm it, because the same code gives different answers between runs.
 

@@ -459,6 +459,10 @@ class PaperTests(unittest.TestCase):
         korean = "RIS는 수동 소자이므로 the estimation must be carried out at the receiver 이다 [p.7]."
         self.assertEqual(dp.misplaced_citations(korean, pages), [])
 
+    def test_a_decimal_comma_in_the_source_counts(self):
+        self.assertEqual(dp.unsupported_numbers("F1 89.28% [p.11].", "F1 89,28% Recall 92,5%", "F1?"), [])
+        self.assertEqual(dp.unsupported_numbers("222,847 sequences [p.4].", "222,847 sequences", "how many?"), [])
+
     def test_a_unit_glued_to_a_number_in_the_source_counts(self):
         self.assertEqual(dp.unsupported_numbers("KWS uses 30 fps [p.2].", "F R = 30f ps for KWS", "frame rate?"), [])
 
