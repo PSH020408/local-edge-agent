@@ -1,0 +1,265 @@
+# Third holdout for the document planner: two long survey and tutorial papers never used during
+# development (36 and 43 pages, wireless communications, English).
+# Run ONCE, with the code frozen at 416364e, and do not change the code because of these results:
+#     python scripts/run_eval_set.py --set documents --cases evals/documents/holdout3.toml --fast
+# The files are kept in evals/documents/files/ (not committed).
+#
+# expect: key facts that a correct answer contains. One entry may list alternatives separated by " | ".
+# avoid:  text that signals a wrong or invented claim.
+# pages:  the pages that hold the answer.
+#
+# Known before the run (written down while preparing the questions, not fixed):
+# - The ISAC paper splits into 199 passages. Above 80, the passage index keeps only the 80 best
+#   keyword matches, and a Korean question shares few words with English text, so the right
+#   passage may not be in the index at all.
+# - IEEE-style headings ("II. APPLICATIONS", "A. Case Studies") and the RIS paper's unnumbered
+#   headings are mostly not recognised, so many passages carry no section name.
+# - Whole-document tasks summarise about one page per part: 30 or more model calls per paper.
+# - "10−7" (a negative exponent) is not marked as a superscript.
+
+# --- Integrated Sensing and Communications (survey, 36 pages, two columns) ---
+
+[[case]]
+id = "SA1"
+file = "isac_survey.pdf"
+question = "ISAC 논문에서 정의한 두 가지 이득(gain)은 무엇이고 각각 어떻게 얻어져?"
+expect = ["integration gain | 통합 이득", "coordination gain | 협력 이득 | 조정 이득", "shared | 공유", "mutual | 상호"]
+avoid = []
+pages = [4]
+note = "Integration gain from the shared use of wireless resources for both S&C; coordination gain from the mutual assistance between S&C."
+
+[[case]]
+id = "SA2"
+file = "isac_survey.pdf"
+question = "IEEE 802.11bf는 언제 만들어졌고, 무엇을 목표로 해?"
+expect = ["2020", "Wi-Fi | WLAN | 802.11", "sensing | 센싱 | 감지"]
+avoid = []
+pages = [9]
+note = "Task group created in 2020 (the topic interest group and study group in 2019) to modify Wi-Fi standards to enhance sensing with 802.11-compliant waveforms."
+
+[[case]]
+id = "SA3"
+file = "isac_survey.pdf"
+question = "What did Huawei identify in November 2020, and what is the main focus of that technology?"
+expect = ["5.5G | B5G", "three", "massive MIMO", "UAV | vehicle"]
+avoid = []
+pages = [9]
+note = "Harmonized sensing and communication as one of three new scenarios in 5.5G; exploits the sensing capability of existing massive MIMO base stations and supports UAVs and vehicles."
+
+[[case]]
+id = "SA4"
+file = "isac_survey.pdf"
+question = "5G NR Release 17 KPI에서 요구하는 가장 높은 측위 정확도는 얼마라고 했어?"
+expect = ["0.2", "1 m | 1m | 1 미터", "industrial | 산업"]
+avoid = []
+pages = [5, 6]
+note = "0.2 m horizontally and 1 m vertically in industrial IoT applications. The sentence runs across the page break."
+
+[[case]]
+id = "SA5"
+file = "isac_survey.pdf"
+question = "표 II에서 Drone Monitoring and Management의 최대 거리와 최대 속도는 얼마야?"
+expect = ["500", "40"]
+avoid = []
+pages = [7]
+note = "Max. range 500 m, max. velocity 40 m/s."
+
+[[case]]
+id = "SA6"
+file = "isac_survey.pdf"
+question = "In Table II, what maximum range and maximum velocity are listed for Fall Detection and for Sleep Monitoring?"
+expect = ["10", "3", "Sleep"]
+avoid = []
+pages = [7]
+note = "Fall Detection: 10 m, 3 m/s. Sleep Monitoring: 1 m, 2 m/s."
+
+[[case]]
+id = "SA7"
+file = "isac_survey.pdf"
+question = "In the joint design example of Fig. 11, how many transmit antennas, what target angle, what false-alarm probability and what receive SNR are assumed?"
+expect = ["16", "36", "10^-7 | 10^{-7} | 10−7 | 10⁻⁷ | 1e-7 | 10-7", "-6 | −6"]
+avoid = []
+pages = [20]
+note = "Nt = 16 (K = 4, 6, 8 users), target at 36 degrees, CFAR with false-alarm probability 10^-7 and receive SNR -6 dB."
+
+[[case]]
+id = "SA8"
+file = "isac_survey.pdf"
+question = "식 (55)에서 ρ = 1이면 어떤 신호가 해가 되고, 그 의미는 뭐야?"
+expect = ["zero-forcing | ZF", "communication | 통신"]
+avoid = []
+pages = [20]
+note = "Communication gets full priority and the solution is the zero-forcing precoded signal for the channel H. (The paper writes ρ = 1 for both extremes; the sensing case means ρ = 0, giving X = X0.)"
+
+[[case]]
+id = "SA9"
+file = "isac_survey.pdf"
+question = "Fig. 13에서 μ = 4일 때 두 슬롯은 몇 개의 OFDM 심볼이고, SSB는 몇 개이며 각 SSB는 몇 심볼을 차지하고 무엇으로 구성돼?"
+expect = ["28", "4", "PSS", "SSS", "PBCH"]
+avoid = []
+pages = [23]
+note = "28 OFDM symbols; 4 SSBs, each 4 OFDM symbols; PSS, SSS, PBCH and PBCH-DMRS."
+
+[[case]]
+id = "SA10"
+file = "isac_survey.pdf"
+question = "In the V2I beam tracking example (Fig. 17), how many antennas does the RSU have, what are the vehicle's distance and speed, and when does the ABP scheme lose track?"
+expect = ["64", "25", "18", "1040"]
+avoid = []
+pages = [28]
+note = "64-antenna RSU; vehicle at 25 m driving at 18 m/s; ABP rate drops to zero at 1040 ms while EKF-ISAC stays stable."
+
+[[case]]
+id = "SA11"
+file = "isac_survey.pdf"
+question = "기존 V2I 핸드오버 프로토콜은 어떻게 동작해?"
+expect = ["dual | 이중 | 듀얼", "SINR", "idle | 유휴"]
+avoid = []
+pages = [29]
+note = "Dual-connection: the vehicle is connected to a serving and an idle RSU; if SINR_serve < SINR_idle, the serving RSU hands over and forwards the buffered data."
+
+[[case]]
+id = "SA12"
+file = "isac_survey.pdf"
+question = "이 논문의 전체 구성을 섹션별로 요약해 줘."
+expect = ["application | 응용 | 활용", "tradeoff | 트레이드오프 | 상충", "waveform | 파형", "sensing-assisted | 센싱 지원 | 센싱 기반 | 센싱 보조 | 센싱을 활용"]
+avoid = []
+pages = []
+note = "Applications and industry (II), performance tradeoffs (III), waveform design (IV), receive signal processing (V), communication-assisted sensing / perceptive network (VI), sensing-assisted communications (VII), ISAC with other technologies (VIII)."
+
+[[case]]
+id = "SH1"
+file = "isac_survey.pdf"
+question = "What market size in US dollars does the paper forecast for ISAC by 2030?"
+expect = ["not | does not | no "]
+avoid = ["billion", "USD", "$"]
+pages = []
+note = "No market figures in the paper."
+
+[[case]]
+id = "SH2"
+file = "isac_survey.pdf"
+question = "논문에서 3GPP Release 21의 ISAC 표준화 일정은 언제라고 했어?"
+expect = ["다루지 | 없 | 나와 있지 않 | 언급되지 | 명시되어 있지 않 | 제공되지 않 | 포함되어 있지 않 | not"]
+avoid = ["2028", "2029"]
+pages = []
+note = "Release 21 is not mentioned (Release 16 and 17 are)."
+
+# --- Reconfigurable Intelligent Surfaces (tutorial, 43 pages, one column) ---
+
+[[case]]
+id = "RA1"
+file = "ris_tutorial.pdf"
+question = "RIS 논문에서 말하는 Layer 0가 뭐고, RIS가 그걸 어떻게 바꿔?"
+expect = ["medium | 매체 | 전파 | propagation", "uncontrollable | 제어할 수 없 | nature | 자연", "protocol | 프로토콜"]
+avoid = []
+pages = [2]
+note = "The wireless medium between transmitter and receiver, seen as uncontrollable and decided by nature; RIS extends the protocol design to Layer 0."
+
+[[case]]
+id = "RA2"
+file = "ris_tutorial.pdf"
+question = "With only four phase-shift configurations per RIS element, how large is the SNR loss?"
+expect = ["0.9", "8/π | 8/\\pi"]
+avoid = []
+pages = [17]
+note = "About 8/π² = -0.9 dB, so a small number of configurations per element is sufficient."
+
+[[case]]
+id = "RA3"
+file = "ris_tutorial.pdf"
+question = "Fig. 4 설정에서 대역폭은 얼마고, 직접 채널이 약할 때와 강할 때 RIS 경로가 직접 채널만큼 강해지려면 소자가 각각 몇 개 필요해?"
+expect = ["1 MHz | 1MHz", "32", "1000 | 1,000"]
+avoid = []
+pages = [17]
+note = "B = 1 MHz; weak direct channel (-110 dB): N = 32; strong (-80 dB): N = 1000. The SNR via the RIS grows as N^2."
+
+[[case]]
+id = "RA4"
+file = "ris_tutorial.pdf"
+question = "In the wideband simulation of Fig. 6, what are the carrier frequency, the RIS size, the number of elements and the subcarrier spacing?"
+expect = ["3 GHz", "0.5", "400", "150 kHz"]
+avoid = []
+pages = [23]
+note = "3 GHz, 0.5 × 0.5 m, N = 400 elements of λ/4 × λ/4, subcarrier spacing 150 kHz; access point 400 m away."
+
+[[case]]
+id = "RA5"
+file = "ris_tutorial.pdf"
+question = "Fig. 6(a)에서 heuristic STM 구성은 상한의 몇 %를 달성하고, NLOS인 Fig. 6(b)에서는 어떻게 돼?"
+expect = ["96 | 98", "NLOS", "collapse | 사라 | 붕괴 | 감소 | 줄어"]
+avoid = []
+pages = [23, 24]
+note = "96-98% of the upper bound (46) with LOS to the RIS; with an NLOS path to the RIS the gain collapses (vanishes as B increases)."
+
+[[case]]
+id = "RA6"
+file = "ris_tutorial.pdf"
+question = "Doppler cloaking이 뭐고 어디에 쓸 수 있어?"
+expect = ["Doppler | 도플러", "delay | 지연", "satellite | 위성 | radar | 레이더 | invisib | 투명"]
+avoid = []
+pages = [20]
+note = "Each element tunes its delay to counteract the change of the RIS-to-receiver delay, so the Doppler effect is not observable; radar/sonar noise reduction, invisibility cloaks, legacy systems at high mobility, IoT devices to fast satellites."
+
+[[case]]
+id = "RA7"
+file = "ris_tutorial.pdf"
+question = "Because the RIS is passive, where must channel estimation be carried out, and what is it sufficient to estimate?"
+expect = ["receiver", "cascade | V"]
+avoid = []
+pages = [24]
+note = "At the receiver; it is sufficient to estimate the matrix V, the cascade of the transmitter-RIS and RIS-receiver channels."
+
+[[case]]
+id = "RA8"
+file = "ris_tutorial.pdf"
+question = "Fig. 7에서 4G, 5G, beyond 5G의 측위 방식은 각각 어떤 측정을 써?"
+expect = ["TDOA", "AOA", "AOD", "RIS"]
+avoid = []
+pages = [27]
+note = "4G: TDOA from multiple BSs; 5G: TDOA + AOA + AOD; beyond 5G: TDOA + AOD with a single BS and an RIS."
+
+[[case]]
+id = "RA9"
+file = "ris_tutorial.pdf"
+question = "4G에서 3차원 위치를 구하려면 최소 몇 개 기지국의 TOA가 필요하고, 다중경로 때문에 정확도는 어느 정도로 제한돼?"
+expect = ["4 | four | 네 | 4개", "tens of meters | 수십 m | 수십 미터 | 수십미터 | 수십m"]
+avoid = []
+pages = [26]
+note = "TOAs from at least four BSs in LOS give three TDOAs for the 3D location; multipath limits the accuracy to tens of meters."
+
+[[case]]
+id = "RA10"
+file = "ris_tutorial.pdf"
+question = "What are the two types of control channel for configuring an RIS, and how do they differ?"
+expect = ["out-of-band", "in-band", "bandwidth"]
+avoid = []
+pages = [13]
+note = "Out-of-band does not consume the useful bandwidth (wired or other spectrum); in-band consumes part of it, and can even be sent with the payload, which makes the end-to-end channel no longer AWGN."
+
+[[case]]
+id = "RA11"
+file = "ris_tutorial.pdf"
+question = "Write the SNR upper bound of equation (31) in LaTeX."
+expect = ["\\sqrt{\\rho} | \\sqrt \\rho", "\\alpha_n | \\alpha_{n}", "\\beta_n | \\beta_{n}", "BN_0 | B N_0 | BN_{0} | B N_{0}"]
+avoid = []
+pages = [16]
+note = "SNR <= P/(B N0) | sqrt(rho) + sum_{n=1}^N sqrt(alpha_n beta_n gamma) |^2."
+
+[[case]]
+id = "RA12"
+file = "ris_tutorial.pdf"
+question = "이 논문으로 시험 문제 3개를 만들어 줘. 답과 출처도 같이."
+expect = ["[p."]
+avoid = []
+pages = []
+note = "Three questions whose answers match the paper, each with a correct page citation."
+
+[[case]]
+id = "RH1"
+file = "ris_tutorial.pdf"
+question = "논문에 나온 RIS 하드웨어 프로토타입의 제작 비용은 얼마야?"
+expect = ["다루지 | 없 | 나와 있지 않 | 언급되지 | 명시되어 있지 않 | 제공되지 않 | 포함되어 있지 않 | not"]
+avoid = ["달러", "USD", "$"]
+pages = []
+note = "No prototype cost is given."

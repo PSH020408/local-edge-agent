@@ -140,7 +140,7 @@ A second profile spent 3-4× more model calls per question: a second look with a
 
 The 16 cases were used during development, so all scores here are optimistic. A holdout set of new images is the next check.
 
-## 9. Experiment 4: Reading study documents (Runs 25-30)
+## 9. Experiment 4: Reading study documents (Runs 25-31)
 
 Most lecture slides and notes already contain their text as data, so the document planner extracts it exactly and uses the vision model only for pages whose equations or figures are not in the text. Answers must cite a page after every claim, and code checks the citations and any numbers that do not appear in the document.
 
@@ -160,4 +160,6 @@ The fixes followed those three places (Run 28). A page that is only a picture no
 The second holdout, two research papers, dropped to 38% correct (Run 29) with no invented facts in the "not in the document" checks. The failure was not in reading but in finding: a page index built from page titles works when a page is one slide with one topic, and fails when a page is 5,000 characters of a paper whose first line is the end of a sentence. The answer model then said the document does not cover the question, an answer that looks safe and is wrong. Two lessons: hallucination checks need a counterpart that catches false "not covered" answers, and a document reader should search passages, not pages. Both holdouts were needed to see this; the development set and the first holdout were all slides and lecture notes.
 
 After the change to passage search (Run 30), the papers went from 8 to 19 correct answers of 21, and the lecture sets did not drop (development 14 → 16, first holdout 18 → 19). The check that mattered most was decided before the run: a fix for papers was accepted only if the lecture sets held. The papers are now seen documents, so their score is an upper bound until a third holdout is run.
+
+The third holdout, two long papers never seen before, scored 62.5% (Run 31): better than the 38% before passage search, below the 76% on lecture slides, and well below the 90% on the papers that guided the fix. That gap is the reason for running a holdout after every fix. The two-column survey did well (10 of 12); the one-column tutorial with long passages and heavy mathematics did not (5 of 12). The most useful finding was a bug that only long documents expose: passages that did not fit the context were treated as read.
 

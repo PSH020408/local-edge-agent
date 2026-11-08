@@ -188,7 +188,8 @@ def load_pdf(path: Path) -> Document:
     try:
         for page in pdf:
             paths.append(sum(1 for _ in page.get_objects(filter=(raw.FPDF_PAGEOBJ_PATH,), max_depth=3)))
-            text = _pdf_page_text(page.get_textpage()).replace("\r", "")
+            # pdfium marks a word hyphenated at a line end with \x02 ("au\x02dio"); join it again.
+            text = re.sub(r"\x02\n?", "", _pdf_page_text(page.get_textpage()).replace("\r", ""))
             raw_pages.append([line.strip() for line in text.splitlines() if line.strip()])
             images.append([
                 tuple(round(v) for v in obj.get_bounds())
@@ -369,10 +370,26 @@ class Passage:
 
     @property
     def label(self) -> str:
-        first = " ".join(self.text.split())[:110]
-        return f"[{self.id}] p.{self.page}" + (f" §{self.section[:40]}" if self.section else "") + f" | {first}"
+        """Index line: the start of the passage and what it contains further down.
+
+        Run 31: the answer to a question about the Fig. 6 simulation (3 GHz, 400 elements,
+        150 kHz) was in the middle of a passage whose first words were about something else.
+        """
+        flat = " ".join(self.text.split())
+        first = flat[:90]
+        found: list[str] = []
+        for pattern in (_REFERENCE, _QUANTITY, _ACRONYM_TERM):
+            for match in pattern.findall(flat[60:]):
+                item = " ".join(match.split())
+                if item not in found and item not in first:
+                    found.append(item)
+        contains = f" … contains: {', '.join(found[:7])}" if found else ""
+        return f"[{self.id}] p.{self.page}" + (f" §{self.section[:40]}" if self.section else "") + f" | {first}{contains}"
 
 
+_REFERENCE = re.compile(r"\b(?:Fig\.|Figure|FIGURE|Table|TABLE)\s*\d+[a-z]?(?:\([a-z]\))?|\b(?:Eq\.|equation)\s*\(?\d+\)?")
+_QUANTITY = re.compile(r"\b\d+(?:\.\d+)?\s?(?:GHz|MHz|kHz|Hz|dBm|dB|ms|µs|ns|m/s|km|mm|µW|mW|W|bps|%)(?![A-Za-z])")
+_ACRONYM_TERM = re.compile(r"\b[A-Z][A-Z0-9]{1,5}(?:-[A-Z0-9]+)?\b")
 _HEADING = re.compile(
     r"^(?:\d{1,2}(?:\.\d{1,2})*\.?\s+[A-Z(][^=]{1,80}"          # 2.1. Digital features, 1.1 Truncation
     r"|[A-Z][A-Z0-9 ,&\-]{3,60}"                                # CASCADED INTEGRATOR COMB FILTER

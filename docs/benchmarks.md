@@ -591,3 +591,15 @@ Fixes from Run 29: PDFs with long pages are read as papers and searched by passa
 
 215 offline tests pass.
 
+## Run 31 — Third document holdout: long papers (2026-11-08)
+
+Two unseen papers, a 36-page two-column survey (ISAC) and a 43-page one-column tutorial (RIS), code frozen at `416364e`, run once: 27 cases in 32.3 minutes. Main questions ✅ 15, ⚠️ 5, ❌ 4 (62.5% correct); hallucination checks 3/3. ISAC 10 of 12, RIS 5 of 12.
+
+| Holdout | Documents | Correct |
+|---|---|---|
+| Run 27 | Lecture slides | 76% |
+| Run 29 | Two short papers, before passage search | 38% |
+| Run 31 | Two long papers, after passage search | 62.5% |
+
+The passage search carried over to unseen papers but not fully. Two of the four failures are a bug: passages offered to the answer but dropped by the 10,000-character budget counted as already checked, so the second search never returned to them. Other causes: index lines show only the start of long passages, the answer model adds acronym expansions the paper does not use, and one real fact was cited to the wrong page. A practice-question task on the 43-page paper took 15.5 minutes. Per-case results are in `evals/documents/cases.md`.
+

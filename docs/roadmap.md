@@ -66,7 +66,10 @@ Built: `agent/document_tools.py` (PDF and PowerPoint pages, tables, notes, garbl
 - [x] Before accepting "not in the document", search the whole text for the question's terms and retry
 - [x] Flag vector figures and numbered equations in PDFs (papers only)
 - [x] Regression check (Run 30): development ✅ 16, first holdout ✅ 19, papers ✅ 19 of 21; the lecture sets did not drop
-- [ ] A third holdout (new papers), run once
+- [x] A third holdout (new papers), run once (Run 31: ✅ 15, ⚠️ 5, ❌ 4, 62.5%; hallucination checks 3/3)
+- [x] Fix from Run 31: passages dropped by the budget must not count as checked; index lines that show what a long passage contains; expansions and terms not in the document flagged; faster whole-document tasks for long papers
+- [x] Regression check on all four sets (Run 32): lecture holdout and short papers held; development ✅ 14, one below the gate, traced to run-to-run variation by three repeats of D04 and D06
+- [ ] Fourth holdout: two one-column papers with equations, tables and figures, run once
 
 Plan:
 - Text extraction from the PDF text layer (exact, no vision needed)

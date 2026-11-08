@@ -79,6 +79,8 @@ _CITATION = re.compile(
 _NUMBER = re.compile(r"(?<![0-9A-Za-z_.])\d+(?:[.,]\d+)?(?![0-9A-Za-z_])")  # Korean counters (102개) may follow
 _CONTEXT_CHARS = 10000   # page text given to the model for one answer
 _CHUNK_CHARS = 6000      # page text per chunk for whole-document tasks
+_PAPER_CHUNK_CHARS = 12000  # papers: fewer, larger parts (Run 31: 26 parts took 15 minutes)
+_REDUCE_TOKENS = 4500    # estimated tokens of key points combined in one call
 MAX_PAGES = 6
 MAX_VISUAL_PAGES = 4
 MAX_PASSAGES = 8         # passages chosen by the planner model for a paper
@@ -127,10 +129,16 @@ Rules:
 - Keep separate points separate: do not combine statements from different bullets or lines into one claim, and keep each number with the item it belongs to.
 - In the page text, ^ marks a superscript: 10^2 is 10 to the power 2.
 - Keep the document's technical terms as they are, and answer in {language}.
+- Do not spell out an abbreviation unless the pages spell it out; otherwise keep the abbreviation as it is.
 - Do not add facts, numbers or examples that are not in the pages."""
 
-MAP_PROMPT = """Below are some pages of a document. List the key points of these pages: definitions, steps, results, and important equations or numbers, in {language}.
+MAP_PROMPT = """Below are some pages of a document. List at most 8 key points of these pages: definitions, steps, results, and important equations or numbers, one short line each, in the language of the pages.
 Cite the page as [p.N] after every point. Use only these pages."""
+
+# Run 31: 26 parts of key points from a 43-page paper were far longer than the 8,192-token
+# context, so the model saw only the last parts and every practice question came from p.35-38.
+MERGE_PROMPT = """Below are key points from several parts of a document, with page citations.
+Merge them into at most 12 key points that keep the most important definitions, results and numbers from every part. Keep the [p.N] citation of every point. Use only these points."""
 
 REDUCE_PROMPT = """Below are key points from all parts of a document, with page citations.
 Task: {task}
@@ -194,6 +202,92 @@ def cited_pages(answer: str) -> list[int]:
             if int(number) not in pages:
                 pages.append(int(number))
     return pages
+
+
+_ACRONYM = r"[A-Z][A-Za-z0-9&]{0,2}[A-Z][A-Za-z0-9&]{0,6}"   # RIS, SINR, mmWave is not one, PEB, 5G-NR
+_WORDS = r"[A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*){1,7}"
+_INLINE_EXPANSION = re.compile(rf"\b({_ACRONYM})\s*\(\s*({_WORDS})\s*\)")          # RIS (Reflective Intelligent Surface)
+_EXPANSION_FIRST = re.compile(rf"\b({_WORDS})\s*\(\s*({_ACRONYM})s?\s*\)")         # reconfigurable intelligent surface (RIS)
+
+
+def _norm_phrase(text: str) -> str:
+    words = re.sub(r"[-\s]+", " ", text.lower()).split()
+    return " ".join(w[:-1] if w.endswith("s") and len(w) > 3 else w for w in words)
+
+
+def _trim_expansion(words: str, acronym: str) -> str:
+    """The shortest run of trailing words that starts with the acronym's first letter."""
+    tokens = words.split()
+    for k in range(1, len(tokens) + 1):
+        if tokens[-k][0].lower() == acronym[0].lower() and k >= min(2, len(tokens)):
+            return " ".join(tokens[-k:])
+    return ""
+
+
+def unsupported_expansions(answer: str, document_text: str) -> list[str]:
+    """Acronym expansions in the answer that the document never writes.
+
+    Run 31: the answer called RIS a "Reflective Intelligent Surface" (the paper: reconfigurable)
+    and PEB a "Predicted Error Bound" (the paper: position error bound). Only acronyms that the
+    document itself uses are checked, so an expansion of a term the document does not use is left
+    alone.
+    """
+    found: list[tuple[str, str]] = []
+    for acronym, words in _INLINE_EXPANSION.findall(answer):
+        found.append((acronym, words))
+    for words, acronym in _EXPANSION_FIRST.findall(answer):
+        found.append((acronym, _trim_expansion(words, acronym)))
+    document = _norm_phrase(document_text)
+    flagged = []
+    for acronym, expansion in found:
+        if not expansion or expansion[0].lower() != acronym[0].lower():
+            continue
+        if not re.search(rf"\b{re.escape(acronym)}", document_text):
+            continue  # not the document's term
+        if _norm_phrase(expansion) not in document:
+            item = f"{acronym} ({expansion})"
+            if item not in flagged:
+                flagged.append(item)
+    return flagged
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough token count: about four characters per token for Latin text, one per Hangul."""
+    ascii_chars = sum(1 for ch in text if ch.isascii())
+    return ascii_chars // 4 + (len(text) - ascii_chars)
+
+
+_TRIGRAM_WORD = re.compile(r"[a-z0-9]+(?:\.[0-9]+)?")
+
+
+def misplaced_citations(answer: str, pages: dict[int, str]) -> list[tuple[int, int]]:
+    """Sentences cited to one page whose wording is found on another given page instead.
+
+    Run 31: "channel estimation must be carried out at the receiver [p.7]" is a sentence from
+    p.24. A sentence is compared by its three-word sequences, so only answers that keep the
+    document's wording (English text) can be checked; others are skipped.
+    """
+    page_text = {n: " ".join(_TRIGRAM_WORD.findall(text.lower())) for n, text in pages.items()}
+    flagged: list[tuple[int, int]] = []
+    for sentence in re.split(r"(?<=\])\s*|\n+", answer):
+        cited = cited_pages(sentence)
+        if len(cited) != 1:
+            continue
+        plain = _CITATION.sub("", sentence)
+        if len(re.findall(r"[가-힣]", plain)) >= 5:
+            continue  # a Korean sentence: its English words are terms, not the document's wording
+        words = _TRIGRAM_WORD.findall(plain.lower())
+        trigrams = {" ".join(words[i:i + 3]) for i in range(len(words) - 2)}
+        if len(trigrams) < 4:
+            continue
+        def score(n: int) -> float:
+            text = page_text.get(n, "")
+            return sum(1 for t in trigrams if t in text) / len(trigrams)
+        own = score(cited[0])
+        best = max((n for n in page_text if n != cited[0]), key=score, default=None)
+        if best is not None and own <= 0.15 and score(best) >= 0.5 and (cited[0], best) not in flagged:
+            flagged.append((cited[0], best))
+    return flagged
 
 
 def unsupported_numbers(answer: str, sources: str, question: str) -> list[str]:
@@ -362,7 +456,7 @@ class DocumentQuestionPlanner:
         return "passages", chosen, extra, keywords
 
     def _passage_context(self, passages: dict[int, Passage], ids: list[int], notes: dict[int, str],
-                         document: Document, budget: int) -> tuple[str, list[int]]:
+                         document: Document, budget: int) -> tuple[str, list[int], list[int]]:
         """Whole passages in reading order, most relevant first until the budget is used."""
         kept, size = [], 0
         for i in ids:
@@ -389,7 +483,7 @@ class DocumentQuestionPlanner:
                         f"(p.{passage.page}: equations on this page were extracted as scattered symbols and are not "
                         "reliable. Do not write these equations out; say they were not read.)"
                     )
-        return "\n\n".join(blocks), pages
+        return "\n\n".join(blocks), pages, kept
 
     def _look(self, document: Document, numbers: list[int], question: str) -> dict[int, str]:
         """Vision transcriptions of the selected pages whose equations or figures are needed.
@@ -530,25 +624,33 @@ class DocumentQuestionPlanner:
             + (f" | keywords: {', '.join(keywords[:6])}" if keywords else "")
         )
         notes = self._look(document, pages, question)
-        context, given = self._passage_context(by_id, chosen + extra, notes, document, _CONTEXT_CHARS)
-        self.labels = {by_id[i].page: by_id[i].section for i in reversed(chosen + extra) if by_id[i].section}
+        context, given, kept = self._passage_context(by_id, chosen + extra, notes, document, _CONTEXT_CHARS)
+        dropped = [i for i in chosen + extra if i not in kept]
+        if dropped:
+            self.on_event(f"{len(dropped)} passage(s) did not fit and were left out")
+        self.labels = {by_id[i].page: by_id[i].section for i in reversed(kept) if by_id[i].section}
         answer = self._answer(context, question, language)
-        used = set(chosen + extra)
+        # Run 31: passages left out by the budget were counted as read, so the second search never
+        # returned to them; the answers to RA2 and RA4 were most likely in such passages.
+        used = set(kept)
         if self._needs_search(answer) and not page_references(question, document):
             ranked = rank_passages(passages, question + " " + " ".join(keywords))
-            more = [i for i, score in ranked if score > 0 and i not in used][:6]
+            more = [i for i in dropped if i not in used]
+            more += [i for i, score in ranked if score > 0 and i not in used and i not in more]
+            more = more[:6]
             if more:
                 self.on_event(self._search_event(list(dict.fromkeys(by_id[i].page for i in more))))
                 new_pages = [n for n in dict.fromkeys(by_id[i].page for i in more) if n not in notes]
                 notes.update(self._look(document, new_pages, question))
-                context, given = self._passage_context(by_id, more + chosen + extra, notes, document, _CONTEXT_CHARS)
+                context, given, kept = self._passage_context(by_id, more + kept, notes, document, _CONTEXT_CHARS)
                 answer = self._answer(context, question, language)
         return self._finish(document, answer, given, context, question, korean, start, notes)
 
     def _whole(self, document: Document, question: str, language: str) -> tuple[str, list[int], str]:
+        limit = _PAPER_CHUNK_CHARS if document.dense else _CHUNK_CHARS
         chunks, current, size = [], [], 0
         for page in document.pages:
-            if current and (size + len(page.text) > _CHUNK_CHARS or len(current) >= 10):
+            if current and (size + len(page.text) > limit or len(current) >= 10):
                 chunks.append(current)
                 current, size = [], 0
             current.append(page.number)
@@ -558,8 +660,20 @@ class DocumentQuestionPlanner:
         self.on_event(f"whole document: {len(chunks)} part(s) summarised first, then combined")
         points = []
         for chunk in chunks:
-            context = self._context(document, chunk, {}, _CHUNK_CHARS)
+            context = self._context(document, chunk, {}, limit)
             points.append(self._ask(MAP_PROMPT.format(language=language), context))
+        while len(points) > 1 and estimate_tokens("\n\n".join(points)) > _REDUCE_TOKENS:
+            groups, group = [], []
+            for point in points:
+                if group and estimate_tokens("\n\n".join(group + [point])) > _REDUCE_TOKENS:
+                    groups.append(group)
+                    group = []
+                group.append(point)
+            groups.append(group)
+            if len(groups) == len(points):  # every part alone is too long: merge pairs
+                groups = [points[i:i + 2] for i in range(0, len(points), 2)]
+            self.on_event(f"key points too long for one call; merging {len(points)} part(s) into {len(groups)}")
+            points = [self._ask(MERGE_PROMPT, "Key points:\n\n" + "\n\n".join(g)) if len(g) > 1 else g[0] for g in groups]
         task = EXAM_TASK if _EXAM.search(question) else f"Answer the user's request: {question}"
         combined = "\n\n".join(points)
         answer = self._ask(REDUCE_PROMPT.format(task=task, language=language), f"Key points:\n\n{combined}\n\nRequest: {question}")
@@ -573,6 +687,9 @@ class DocumentQuestionPlanner:
         cited = cited_pages(answer)
         wrong = [n for n in cited if n not in given]
         numbers = unsupported_numbers(answer, sources, question)
+        expansions = unsupported_expansions(answer, "\n".join(p.text for p in document.pages))
+        page_texts = {n: document.page(n).text + "\n" + read.get(n, "") for n in given if document.page(n)}
+        misplaced = misplaced_citations(answer, page_texts)
         not_covered = not cited and bool(_NOT_COVERED.search(answer))
         notes = []
         if not_covered:
@@ -589,6 +706,10 @@ class DocumentQuestionPlanner:
             notes.append(t["wrong_citation"].format(pages=", ".join(f"p.{n}" for n in wrong)))
         if numbers:
             notes.append(t["numbers"].format(numbers=", ".join(numbers)))
+        if misplaced:
+            notes.append(t["misplaced"].format(pairs=", ".join(t["pair"].format(cited=a, found=b) for a, b in misplaced)))
+        if expansions:
+            notes.append(t["expansions"].format(items=", ".join(expansions)))
         used = [n for n in cited if n in given]
         source_line = t["sources"] + ", ".join(
             f"p.{n} ({(self.labels.get(n) or document.page(n).title or self.captions.get(n, ''))[:50]})" for n in used[:8]
@@ -597,6 +718,8 @@ class DocumentQuestionPlanner:
             f"check: {len(used)} cited page(s)"
             + (f", {len(wrong)} citation(s) to pages not given" if wrong else "")
             + (f", {len(numbers)} number(s) not in the document" if numbers else "")
+            + (f", {len(misplaced)} citation(s) to another page" if misplaced else "")
+            + (f", {len(expansions)} expansion(s) not in the document" if expansions else "")
             + (", answer: not covered by the document" if not_covered else ", no citations" if not cited else "")
             + f" | total {time.perf_counter() - start:.1f} s"
         )
@@ -611,6 +734,9 @@ _TEXT = {
         "numbers": "⚠ 문서에서 찾을 수 없는 숫자가 답에 있습니다: {numbers}. 지어낸 값일 수 있습니다.",
         "not_covered": "(문서에 없다는 답입니다. 확인한 페이지: {pages})",
         "unread_equations": "⚠ 답의 수식은 원본 페이지를 눈으로 확인하지 않고 쓴 것입니다 ({pages}). 원본과 대조가 필요합니다.",
+        "misplaced": "⚠ 출처 페이지가 틀렸을 수 있습니다: {pairs}.",
+        "pair": "p.{cited}로 표시한 문장이 p.{found}에 있습니다",
+        "expansions": "⚠ 문서에 없는 약어 풀이가 있습니다: {items}. 모델이 덧붙인 것이라 틀릴 수 있습니다.",
     },
     "en": {
         "sources": "Sources: ",
@@ -619,5 +745,8 @@ _TEXT = {
         "numbers": "⚠ Numbers in the answer that do not appear in the document: {numbers}. They may be invented.",
         "not_covered": "(The answer says the document does not cover this. Pages checked: {pages})",
         "unread_equations": "⚠ The equations in this answer were written without reading the original page ({pages}). Check them against the document.",
+        "misplaced": "⚠ A citation may point to the wrong page: {pairs}.",
+        "pair": "a sentence cited to p.{cited} is on p.{found}",
+        "expansions": "⚠ Abbreviations spelled out in a way the document never uses: {items}. The model added these and they may be wrong.",
     },
 }

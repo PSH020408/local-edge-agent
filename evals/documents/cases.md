@@ -262,3 +262,88 @@ Fixed after the run, in the checks only (no answer changes): a number glued to a
 
 Remaining for the next holdout: facts that are only in a figure when the question does not mention a figure (VA1), passage choice for short questions with few distinctive words (PA3), and the two lecture ⚠️ (GA4, GA6).
 
+## Run 31 — third holdout: two long survey and tutorial papers (2026-11-08)
+
+`run_eval_set.py --set documents --cases evals/documents/holdout3.toml --fast`, code frozen at `416364e`, run once. 27 cases in 32.3 minutes.
+
+| # | Result | Notes |
+|---|---|---|
+| SA1 Two ISAC gains | ⚠️ | Both named, but integration gain explained as "higher performance, less mutual interference" instead of shared resources, and coordination gain from a networked-sensing example on p.26 instead of mutual assistance between S&C |
+| SA2 IEEE 802.11bf | ✅ | Found by the second search after a first "not covered" |
+| SA3-SA11 | ✅ | Table II rows, Fig. 11, Fig. 13 and Fig. 17 settings, equation (55), handover, Release 17 accuracy across the page break, Huawei |
+| SA12 Structure of the paper | ⚠️ | Answered from the structure paragraph (not the whole-document path): Sec. V described as "more on signal processing" instead of receive signal processing, Sec. VIII left out |
+| SH1, SH2 | 2/2 | |
+| RA1 Layer 0 | ⚠️ | "The physical medium" from p.13; leaves out that it is seen as uncontrollable and that the RIS extends protocol design to it (p.2) |
+| RA2 SNR loss with four phase shifts | ❌ | "Not in the document" after the second search; the answer is on p.17 |
+| RA3 Fig. 4 | ✅ | |
+| RA4 Fig. 6 simulation setup | ❌ | "Not in the document"; the answer is on p.23 |
+| RA5 STM 96-98% and NLOS | ❌ | Says the percentage is not given; the NLOS part (4% in the narrowband case) is correct |
+| RA6 Doppler cloaking | ⚠️ | Correct content, but expands RIS as "Reflective Intelligent Surface", a name the paper never uses |
+| RA7 Channel estimation at the receiver | ❌ | "At the receiver" is right but cited to p.7; "sufficient to estimate the end-to-end channel h(t)" is wrong (the paper: the cascade matrix V, p.24) |
+| RA8-RA10 | ✅ | |
+| RA11 Equation (31) | ✅ | Correct; the warning that p.16 was not read is accurate |
+| RA12 Practice questions | ⚠️ | 929 s (26 parts). PEB expanded as "Predicted Error Bound" (it is the position error bound) |
+| RH1 | 1/1 | |
+
+**Main questions: ✅ 15, ⚠️ 5, ❌ 4 (62.5% correct). Hallucination checks 3/3.** By paper: ISAC 10 of 12, RIS 5 of 12.
+
+### Predictions written before the run
+
+| Prediction | What happened |
+|---|---|
+| The 80-passage index cap hides passages from Korean questions (ISAC, 199 passages) | Not seen: the ISAC questions found their passages, once through the second search (SA2) |
+| IEEE-style and unnumbered headings not recognised | Yes: section names in the source lines are often wrong ("p.4 (7. Human Computer)"); cosmetic |
+| Whole-document tasks are slow | Yes: RA12 took 15.5 minutes |
+| "10−7" not marked as a superscript | Did not matter: the answer copied "10−7" |
+
+### Causes found in the trace
+
+1. **Passages cut by the budget count as checked.** Up to 8 chosen and 3 keyword passages are offered, but only those fitting 10,000 characters are given; the rest are dropped silently. The second search then skips every passage that was offered, including the dropped ones. In RA2 and RA4 the passage holding the answer (p.17 and p.23) was most likely offered, dropped, and never searched again: the second search went to other pages.
+2. **Index lines show the first 110 characters of a passage.** The RIS paper has long one-column passages; the answer to RA4 is in the middle of a passage that starts with "To evaluate the quality of the heuristic STM solution".
+3. **Expansions from the model's own knowledge.** "Reflective Intelligent Surface", "Predicted Error Bound": not in the paper, and not caught because the number check only looks at numbers.
+4. **A real fact cited to the wrong page.** RA7 cited p.7 for a sentence on p.24; the citation check only verifies that the page was given.
+5. **Whole-document tasks scale with length.** 26 parts for 43 pages.
+
+### Fixes after Run 31
+
+| Failure | Fix | Kind |
+|---|---|---|
+| Passages left out by the budget counted as read (RA2, RA4) | Only the passages actually given count as read. Passages left out are reported ("n passage(s) did not fit") and are the first ones the second search returns to | Code |
+| Index lines hid the middle of long passages (RA4) | Each index line adds what the passage contains after its first words: figure, table and equation references, quantities with units and acronyms ("… contains: Fig. 6, 3 GHz, 150 kHz") | Code |
+| Practice questions only from p.35-38, 15.5 minutes (RA12) | Found while tracing: the key points of 26 parts were far longer than the 8,192-token context, so the model saw only the last parts. Key points are now merged in steps until they fit (estimated tokens), parts of a paper are twice as large (12,000 characters), and each part gives at most 8 one-line points in the document's language | Code |
+| Invented acronym expansions (RA6, RA12, PA8) | Code flags an expansion of an acronym the document uses when the document never writes that expansion. The answer prompt says not to spell out abbreviations the pages do not spell out | Code + prompt |
+| A sentence cited to the wrong page (RA7) | For English sentences, code compares the sentence's three-word sequences with the cited page and the other given pages, and flags a citation when the wording is on another page | Code |
+| Words hyphenated at line ends ("au\x02dio") | pdfium marks them with \x02; the loader joins them, which also helps keyword search | Code |
+
+Both new checks were tried on the 161 answers of Runs 28-31 before being kept. Expansions flagged: WWD "Word-World Detection", RIS "Reflective Intelligent Surface", PEB "Predicted Error Bound", RRH "remotely radio head" (the paper: remote), and OFDM "Orthogonal Frequency Division Multiplexing" (correct, but the lecture never spells it out). Citations flagged: RA7 only, after Korean sentences were excluded (a Korean answer had added an expansion of SINR that matched another page).
+
+The third holdout has now been seen. Run 32 checks all four sets; the gate: development ✅ 15 or more, first and second holdouts ✅ 18 or more, no ❌ on the lecture sets, 3/3 on every "not in the document" check.
+
+## Run 32 — regression check after the Run 31 fixes (2026-11-08)
+
+All four sets, one command, 51 minutes in total (Run 30 and 31 together: 70 minutes).
+
+| Set | Before | Run 32 | Gate | Time |
+|---|---|---|---|---|
+| Development | ✅ 16, ⚠️ 0 (Run 30) | ✅ 14, ⚠️ 2, ❌ 0; 3/3 | ✅ 15 or more: **missed by one** | 11.1 min |
+| First holdout, lectures | ✅ 19, ⚠️ 2 | ✅ 19, ⚠️ 2, ❌ 0; 3/3 | passed | 8.5 min |
+| Second holdout, papers | ✅ 19, ❌ 2 | ✅ 19, ⚠️ 1, ❌ 1; 3/3 | passed | 9.7 min |
+| Third holdout, long papers (now seen) | ✅ 15, ⚠️ 5, ❌ 4 (Run 31) | ✅ 18, ⚠️ 3, ❌ 3; 3/3 | check only | 21.5 min (32.3) |
+
+Development set, the two ⚠️:
+- D04: the formula is right, but the explanation calls the desired term "the signal under perfect synchronization", leaving out the (N−τ)/N attenuation. The same item was ⚠️ in Runs 25, 26 and 28 and ✅ in Run 30: it varies between runs.
+- D06: lists what the SSB carries but leaves out what it contains (PSS, SSS, PBCH), with the same pages and page readings as Runs 28 and 30, where both parts were answered. On the slide, PSS, SSS and PBCH appear only as abbreviations in a figure. The new prompt rule ("do not spell out an abbreviation unless the pages do") may have made the model skip them, or this is run-to-run variation; repeated runs of D04 and D06 decide which.
+
+Third holdout changes: RA2, RA4 and RA5 are now correct (the passages that had been left out by the budget, and the long passage with Fig. 6); RA6 now writes "Reconfigurable"; the practice questions took 308 s instead of 929 s and draw on p.1, p.15 and p.20 instead of p.35-38 only. New failures: SA8 (equation (55)) answered "not in the document" because neither the planner model nor the keyword search found p.20; RA11 wrote the bound without the √ρ term of the direct path (the vision model read p.15, where the bound without the direct path is). RA7 still cites the wrong page; the page with the right sentence was among the passages left out, so the new citation check had nothing to compare with.
+
+Second holdout: PA10 now lists other points from the Discussion and leaves out the stated limitations (simplified IAF, simulated chips), ⚠️.
+
+### D04 and D06 repeated three times (same code as Run 32)
+
+| Case | Repeat 1 | Repeat 2 | Repeat 3 |
+|---|---|---|---|
+| D04 | ✅ explains (N−τ)/N as the factor that scales the desired signal | ⚠️ "nearly the same as the original signal" | ⚠️ names the factor without saying it attenuates |
+| D06 | ⚠️ contents (PSS, SSS, PBCH) left out | ✅ | ✅ |
+
+D06 answered both parts in two of three repeats, with the same abbreviations spelled out, so the new abbreviation rule does not suppress them: Run 32's miss was run-to-run variation. D04's formula is right every time and its explanation varies, as it has since Run 25. The gate miss in Run 32 (✅ 14 against 15) is within this variation, so the code is kept as it is and frozen for the fourth holdout. Lesson for later gates: a single run cannot separate a one-case drop from variation; a drop is only counted when repeats confirm it.
+

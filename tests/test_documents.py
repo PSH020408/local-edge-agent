@@ -236,6 +236,18 @@ class PlannerTests(unittest.TestCase):
         self.assertIn("whole document: 1 part(s) summarised first, then combined", self.events)
         self.assertIn("출처: p.4", answer)
 
+    # Run 31, RA12: 26 parts of key points overflowed the context; they are now merged in steps.
+    def test_long_key_points_are_merged_before_the_final_answer(self):
+        llm = FakeLLM(json.dumps({"scope": "whole", "pages": []}), "- sync [p.1]", "- ISI [p.2]", "- CFO [p.3]", "- SSB [p.4]",
+                      "- sync, ISI [p.1, p.2]", "- CFO, SSB [p.3, p.4]", "- sync, ISI, CFO, SSB [p.1-4]",
+                      "1. Q: Why sync? A: ISI [p.2]")
+        with mock.patch.object(dp, "_CHUNK_CHARS", 10), mock.patch.object(dp, "_REDUCE_TOKENS", 5):
+            answer = self.planner(llm).run("lecture.pdf 이 강의로 시험 문제를 만들어 줘")
+        self.assertEqual(len(llm.calls), 1 + 4 + 3 + 1)  # select, four parts, merges 4 → 2 → 1, final
+        self.assertIn("Merge them", llm.calls[5]["messages"][0]["content"])
+        self.assertTrue(any("merging" in e for e in self.events))
+        self.assertIn("A: ISI [p.2]", answer)
+
     # Run 25, DH1-DH3: "not in the document" answers were flagged for having no citations.
     def test_not_covered_answer_needs_no_citation(self):
         llm = FakeLLM(json.dumps({"scope": "pages", "pages": [4]}), "이 강의에서는 LTE PSS 길이에 대한 정보를 제공하지 않았습니다.")
@@ -412,6 +424,40 @@ class PaperTests(unittest.TestCase):
         answer = self.planner(llm).run("paper.pdf How does CRISPR work?")
         self.assertEqual(len(llm.calls), 2)
         self.assertIn("does not cover", answer)
+
+    def test_passages_left_out_by_the_budget_are_searched_again(self):
+        passages = split_passages(PAPER)
+        intro = next(p for p in passages if p.text.startswith("1. Introduction"))
+        table = next(p for p in passages if p.text.startswith("Table 3"))
+        llm = FakeLLM(json.dumps({"scope": "passages", "passages": [intro.id, table.id], "keywords": []}),
+                      "The document does not cover Table 3.", "MFCC reaches 84.8% [p.2].")
+        with mock.patch.object(dp, "_CONTEXT_CHARS", len(intro.text) + 100), mock.patch.object(dp, "MAX_EXTRA_PASSAGES", 0):
+            answer = self.planner(llm).run("paper.pdf 표 3에서 MFCC 정확도는?")
+        self.assertTrue(any("did not fit" in e for e in self.events))
+        self.assertNotIn("MFCC 84.8%", llm.calls[1]["messages"][1]["content"])  # left out the first time
+        self.assertIn("MFCC 84.8%", llm.calls[2]["messages"][1]["content"])     # given in the second search
+        self.assertTrue(answer.startswith("MFCC reaches 84.8% [p.2]."))
+
+    def test_index_lines_show_what_a_passage_contains(self):
+        passage = dp.Passage(1, 23, "", "To evaluate the quality of the heuristic solution, we compare the rate. " * 2
+                             + "Fig. 6 shows simulation results. The carrier frequency is 3 GHz and the spacing is 150 kHz.")
+        self.assertIn("contains: Fig. 6, 3 GHz, 150 kHz", passage.label)
+
+    def test_expansions_the_document_never_uses_are_flagged(self):
+        text = "A reconfigurable intelligent surface (RIS) has N elements. The OFDM receiver..."
+        self.assertEqual(dp.unsupported_expansions("RIS(Reflective Intelligent Surface)는 지연을 조정한다 [p.20].", text),
+                         ["RIS (Reflective Intelligent Surface)"])
+        self.assertEqual(dp.unsupported_expansions("A reconfigurable intelligent surfaces (RIS) [p.1]", text), [])
+        self.assertEqual(dp.unsupported_expansions("The LTE (Long Term Evolution) system [p.1]", text), [])  # not the document's term
+
+    def test_a_sentence_cited_to_the_wrong_page_is_flagged(self):
+        pages = {7: "Since the element is much smaller than the wavelength, it can be modeled as a passive electric circuit.",
+                 24: "Since the RIS is passive, the estimation must be carried out at the receiver."}
+        answer = "Because the RIS is passive, the estimation must be carried out at the receiver [p.7]."
+        self.assertEqual(dp.misplaced_citations(answer, pages), [(7, 24)])
+        self.assertEqual(dp.misplaced_citations(answer.replace("p.7", "p.24"), pages), [])
+        korean = "RIS는 수동 소자이므로 the estimation must be carried out at the receiver 이다 [p.7]."
+        self.assertEqual(dp.misplaced_citations(korean, pages), [])
 
     def test_a_unit_glued_to_a_number_in_the_source_counts(self):
         self.assertEqual(dp.unsupported_numbers("KWS uses 30 fps [p.2].", "F R = 30f ps for KWS", "frame rate?"), [])
