@@ -622,3 +622,36 @@ Finding pages is no longer the main problem: the failures are misread equation-h
 
 221 offline tests pass.
 
+## Run 34 — Formula reading, first run (2026-11-08)
+
+Stage 5 starts with 28 numbered equations from six papers, transcribed by hand and graded by code (`scripts/run_formula_set.py`). Whole-page reading (the Stage 4 way): exact 17, close 7, wrong 4, 5.5 s per formula. Two crops located by the equation number and compared: exact 20, close 3, wrong 5, 11.9 s. Three of the "wrong" grades were grading artifacts (`\max` against `max`, `...` against `\dots`); the real crop errors came from a column test that took a one-column page for two columns and from bands too short for equations of two or three lines. Two readings that agree were wrong twice, both times because both came from the same bad crop: agreement checks the reading, not the crop. Fixes and per-case notes are in `evals/formulas/cases.md`.
+
+233 offline tests pass.
+
+## Run 35 — Formula reading after the crop fixes (2026-11-08)
+
+Whole-page reading: exact 19, close 7, wrong 2 (5.0 s per formula). Two crops compared: exact 23, close 2, wrong 3 (11.0 s). A confirmed reading was exact in 23 of 24 cases. The one confirmed error, and one more, were parts that both readings left out (a constraint line, a middle term); two readings cannot catch a shared omission, so a third call now checks the chosen reading against the image. Details in `evals/formulas/cases.md`.
+
+235 offline tests pass.
+
+## Run 36 — Formula reading with the more complete reading kept (2026-11-08)
+
+Two crops compared, the more complete reading kept when the other only leaves parts out, and a third call that checks the result against the image: exact 26, close 2, wrong 0 of 28 (12.9 s per formula). Every confirmed reading was exact (23 of 23; 46 of 47 over Runs 35-36). The check answered COMPLETE for all confirmed readings and raised one false alarm and one partly right flag elsewhere; whether it catches shared omissions is still unmeasured.
+
+## Run 37 — Equation questions with the formula reader (2026-11-08)
+
+The formula reader is connected to document questions: an equation named by its number is located, read twice from crops, checked against the image, and given first with the passages around it. A set of 14 equation questions (`evals/documents/equations.toml`): ✅ 12, ⚠️ 2, ❌ 0. The four earlier failures (operators swapped in equation (1), φ and α not found for equation (3), equation (55) not found, a term missing from equation (31)) were all answered correctly; the three controls without an equation number did not change. 15.1 minutes, 65 s per question.
+
+## Run 38 — Regression check of all five document sets (2026-11-09)
+
+| Set | Before | Run 38 |
+|---|---|---|
+| Development | ✅ 14-16 of 16 | ✅ 15, ⚠️ 1 |
+| Lectures (first holdout) | ✅ 19 of 21 | ✅ 19, ⚠️ 2 |
+| Short papers (second holdout) | ✅ 19 of 21 | ✅ 19, ⚠️ 1, ❌ 1 |
+| Long papers (third holdout) | ✅ 18 of 24 | ✅ 19, ⚠️ 4, ❌ 1 |
+| Papers with equations (fourth holdout) | ✅ 14 of 19 | ✅ 16, ⚠️ 2, ❌ 1 |
+
+"Not in the document" checks 14/14. One drop to ❌ (Layer 0 in the RIS tutorial) was ⚠️ in three repeats and is counted as ⚠️. 74.7 minutes for 115 questions. These sets were all used during development, so the scores are upper bounds; a holdout on new papers is the next check.
+
+245 offline tests pass.

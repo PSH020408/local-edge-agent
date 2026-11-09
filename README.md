@@ -71,6 +71,7 @@ pip install -r requirements.txt
 | Math (`agent/math_tools.py`) | `calculator` (engineering functions, lists, sequences, decibels, complex numbers, number bases, physical constants), `convert_units`, `calculate_with_units` (formulas with units) |
 | Vision (`agent/vision_tools.py`) | `describe_image`: a separate vision model answers a question about an image; with a focus, the part is located, cropped and enlarged first. `read_text_in_image`: one piece of text is located and read twice at two zoom levels, and code compares the readings (confirmed / uncertain). Images are converted (GIF, WebP, transparent PNG, rotated phone photos) and fitted to a pixel budget |
 | Documents (`agent/document_tools.py`, `agent/document_planner.py`) | `read_document`: PDF and PowerPoint text page by page, with tables and speaker notes, headers and footers removed. Questions that name a document go to the document planner, which answers with page citations |
+| Formulas (`agent/formula_tools.py`) | `read_equation`, used by the document planner: a numbered equation is located from the text layer, cropped twice, read twice by the vision model, compared by code after normalising the LaTeX, and checked against the image by a third call (confirmed / close / disagree / check failed) |
 | Files (`agent/builtin_tools.py`) | `list_files`, `read_file` |
 
 ## Usage
@@ -90,6 +91,7 @@ Commands inside the session: `/tools`, `/reset`, `/exit`. Put the image or docum
 evals/vision/images/10_night_street_photo.jpg Describe this photo and read the signs.
 notes/lecture4.pdf 13페이지 수식을 설명해 줘
 notes/lecture4.pdf 이 강의로 시험 문제 3개를 만들어 줘
+papers/paper.pdf Write equation (3) in LaTeX and explain each symbol.
 ```
 
 ## Tests
@@ -97,6 +99,8 @@ notes/lecture4.pdf 이 강의로 시험 문제 3개를 만들어 줘
 ```bash
 python -m unittest discover -s tests -v          # offline tests with a scripted fake model
 python scripts/run_eval_set.py --set documents --fast   # the document test set
+python scripts/run_eval_set.py --set documents --cases evals/documents/equations.toml --fast   # questions about equations
+python scripts/run_formula_set.py                  # formula transcription: page reading against two crops, graded by code
 python scripts/run_vision_set.py --fast          # the vision test set, fast profile (about 7 minutes)
 python scripts/run_vision_set.py --accurate      # the same set, experimental accurate profile (much slower)
 python scripts/run_vision_set.py --compare       # model size x checking method: small, large, small-accurate, large-accurate

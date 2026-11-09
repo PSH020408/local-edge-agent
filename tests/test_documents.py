@@ -450,6 +450,30 @@ class PaperTests(unittest.TestCase):
         self.assertEqual(dp.unsupported_expansions("A reconfigurable intelligent surfaces (RIS) [p.1]", text), [])
         self.assertEqual(dp.unsupported_expansions("The LTE (Long Term Evolution) system [p.1]", text), [])  # not the document's term
 
+    def test_an_expansion_the_document_never_uses_is_corrected(self):
+        # Run 38 repeats: RA6 wrote "Reflective Intelligent Surface" in 2 of 3 runs.
+        text = "A reconfigurable intelligent surface (RIS) has N elements. The OFDM receiver and the PEB..."
+        answer, fixed, left = dp.repair_expansions("RIS(Reflective Intelligent Surface)는 지연을 조정한다 [p.20].", text)
+        self.assertEqual(answer, "RIS (reconfigurable intelligent surface)는 지연을 조정한다 [p.20].")
+        self.assertEqual(fixed, [("RIS", "Reflective Intelligent Surface", "reconfigurable intelligent surface")])
+        self.assertEqual(left, [])
+        answer, fixed, _ = dp.repair_expansions("A Reflective Intelligent Surface (RIS) reflects [p.2].", text)
+        self.assertEqual(answer, "A reconfigurable intelligent surface (RIS) reflects [p.2].")
+        # No definition in the document: the inline expansion is removed.
+        answer, fixed, _ = dp.repair_expansions("The PEB (Predicted Error Bound) is 1 m [p.30].", text)
+        self.assertEqual(answer, "The PEB is 1 m [p.30].")
+        self.assertEqual(fixed, [("PEB", "Predicted Error Bound", "")])
+        # A right expansion is left alone.
+        self.assertEqual(dp.repair_expansions("RIS (reconfigurable intelligent surfaces) [p.1]", text)[1], [])
+
+    def test_a_repeated_paragraph_is_removed(self):
+        # Run 38 repeats: one RA1 answer wrote the same paragraph three times.
+        para = "RIS는 재구성 가능한 지능형 표면으로, 각 요소의 진폭과 위상을 조절하여 수신기에서의 신호 품질을 개선할 수 있습니다 [p.3]."
+        answer, dropped = dp.drop_repeated_paragraphs(f"Layer 0는 전파 매체입니다 [p.2].\n\n{para}\n\n{para}\n\n{para}\n\n- [p.3]\n\n- [p.3]")
+        self.assertEqual(dropped, 2)
+        self.assertEqual(answer.count(para), 1)
+        self.assertEqual(answer.count("- [p.3]"), 2)  # short lines are kept
+
     def test_a_sentence_cited_to_the_wrong_page_is_flagged(self):
         pages = {7: "Since the element is much smaller than the wavelength, it can be modeled as a passive electric circuit.",
                  24: "Since the RIS is passive, the estimation must be carried out at the receiver."}

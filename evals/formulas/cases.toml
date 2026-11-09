@@ -1,0 +1,180 @@
+# Formula reading set (Stage 5, development). Numbered equations from the papers in
+# evals/documents/files, transcribed by hand from the page images.
+#     python scripts/run_formula_set.py            (both methods)
+# expected: the equation as printed, in LaTeX. Graded by code after normalisation (fonts, sizes,
+#   spacing and the equation number removed): exact, close (token similarity >= 0.9) or wrong.
+# lines: the number of printed lines of the equation (2 or more: harder to crop).
+
+[[case]]
+id = "F01"
+file = "peaf_analog_features.pdf"
+number = 1
+expected = 'P_{tot} = P_{feat} + P_{class} = P_{feat} + \frac{N_{OPS} \times FR}{E_{eff}}'
+
+[[case]]
+id = "F02"
+file = "peaf_analog_features.pdf"
+number = 2
+expected = 'S_{Shannon} = -\sum_{i=0}^{N} p_i \log(p_i)'
+
+[[case]]
+id = "F03"
+file = "peaf_analog_features.pdf"
+number = 3
+expected = '\text{Encoded feature} = (\text{Flattenedfeature}^T, \text{linspace}(1,N)^T)'
+
+[[case]]
+id = "F04"
+file = "cic_decimation_vlsi.pdf"
+number = 1
+expected = 'H(z) = H_I^N(z) . H_C^N(z) = \frac{(1-z^{-RM})^N}{(1-z^{-1})^N} = (\sum_{k=0}^{RM-1} z^{-k})^N'
+
+[[case]]
+id = "F05"
+file = "cic_decimation_vlsi.pdf"
+number = 3
+expected = 'G_{max} = (RM)^N'
+
+[[case]]
+id = "F06"
+file = "cic_decimation_vlsi.pdf"
+number = 4
+expected = 'B_{max} = [N \log_2 R + B_{in} - 1]'
+
+[[case]]
+id = "F07"
+file = "mri_4d_reconstruction.pdf"
+number = 1
+expected = 'y = \mathcal{A}x + n, \quad \mathcal{A} = \mathcal{M}\mathcal{F}\mathcal{S}'
+
+[[case]]
+id = "F08"
+file = "mri_4d_reconstruction.pdf"
+number = 2
+expected = 'z_k = x_k + \mathcal{R}(x_k), \quad x_{k+1} = \arg\min_x \|\mathcal{A}x - y\|_2^2 + \mu_k \|x - z_k\|_2^2'
+
+[[case]]
+id = "F09"
+file = "mri_4d_reconstruction.pdf"
+number = 3
+expected = 'u(\mathbf{r}) = (\alpha - \bar{\alpha}) \varphi(\mathbf{r})'
+
+[[case]]
+id = "F10"
+file = "mri_4d_reconstruction.pdf"
+number = 4
+expected = '\hat{x} = \arg\min_x \|\mathcal{A}x - y\|_2^2 + \lambda \|x - p\|_2^2'
+
+[[case]]
+id = "F11"
+file = "ris_tutorial.pdf"
+number = 1
+expected = 'y_{pb}(t) = (h_{pb} * x_{pb})(t) = \int_{-\infty}^{\infty} h_{pb}(u) x_{pb}(t-u) du'
+
+[[case]]
+id = "F12"
+file = "ris_tutorial.pdf"
+number = 3
+expected = 'X_{pb}(f) = \frac{X(f-f_c) + X^*(-f-f_c)}{\sqrt{2}}'
+
+[[case]]
+id = "F13"
+file = "ris_tutorial.pdf"
+number = 7
+expected = 'y_{pb}(t) = \sum_{n=1}^{N} (b_{n,pb} * \vartheta_{n,pb;\theta_n} * a_{n,pb} * x_{pb})(t) = \left(\left[\sum_{n=1}^{N} b_{n,pb} * \vartheta_{n,pb;\theta_n} * a_{n,pb}\right] * x_{pb}\right)(t)'
+note = "An underbrace with a label below the bracket."
+
+[[case]]
+id = "F14"
+file = "ris_tutorial.pdf"
+number = 27
+expected = 'C = B \log_2(1 + \mathrm{SNR}) = B \log_2\left(1 + \frac{P|h_{\theta}|^2}{BN_0}\right) \text{bit/s}'
+
+[[case]]
+id = "F15"
+file = "ris_tutorial.pdf"
+number = 30
+expected = '\tau_{\theta_n} = \left(\max_{i=1,\dots,N} \tau_{i,a} + \tau_{i,b}\right) - \tau_{n,a} - \tau_{n,b}'
+
+[[case]]
+id = "F16"
+file = "ris_tutorial.pdf"
+number = 31
+lines = 2
+expected = '\mathrm{SNR} = \frac{P}{BN_0}\left|\sqrt{\rho}e^{-j2\pi f_c\tau_d} + \sum_{n=1}^{N}\sqrt{\alpha_n\beta_n\gamma}e^{-j2\pi f_c(\tau_{n,a}+\tau_{n,b}+\tau_{\theta_n})}\right|^2 \le \frac{P}{BN_0}\left|\sqrt{\rho}e^{-j2\pi f_c\tau_d} + \sum_{n=1}^{N}\sqrt{\alpha_n\beta_n\gamma}e^{-j2\pi f_c\tau_d}\right|^2 = \frac{P}{BN_0}\left|\sqrt{\rho} + \sum_{n=1}^{N}\sqrt{\alpha_n\beta_n\gamma}\right|^2'
+note = "Three printed lines, the number on the last: Stage 4 RA11 left out the sqrt(rho) term."
+
+[[case]]
+id = "F17"
+file = "ris_tutorial.pdf"
+number = 46
+expected = 'R \le \frac{B}{K+M-1} \sum_{\nu=0}^{K-1} \log_2\left(1 + \frac{P_\nu}{BN_0}\left(|\boldsymbol{f}_\nu^H \boldsymbol{h}_d| + \|\boldsymbol{f}_\nu^H \boldsymbol{V}^T\|_1\right)^2\right)'
+
+[[case]]
+id = "F18"
+file = "ris_tutorial.pdf"
+number = 57
+expected = '\bar{\boldsymbol{z}}^{(i)}[t] = \sum_{l=1}^{L_d} g^l \boldsymbol{d}(\tau_d^l) \odot \bar{\boldsymbol{x}} + c_t g_{RIS} \boldsymbol{b}^T(\boldsymbol{\phi}_b) \bar{\boldsymbol{\omega}}_{\boldsymbol{\theta}_i} (\boldsymbol{d}(\tau_{RIS}) \odot \bar{\boldsymbol{x}}) + \boldsymbol{w}^{(i)}[t], \quad t = 1, \dots, T/Q'
+
+[[case]]
+id = "F19"
+file = "isac_survey.pdf"
+number = 3
+lines = 2
+expected = '\mathcal{P}_e^{(n)} = \frac{1}{2^{nR}} \sum_{i=1}^{2^{nR}} \Pr\{\hat{W} \ne i | W = i\}, \quad D = \mathbb{E}\{d(S, \hat{S})\}'
+
+[[case]]
+id = "F20"
+file = "isac_survey.pdf"
+number = 11
+expected = '\mathcal{P}_D \approx Q_1\left(\sqrt{\frac{2P_R|\gamma_d|^2}{\sigma^2}}, \sqrt{2\gamma}\right)'
+
+[[case]]
+id = "F21"
+file = "isac_survey.pdf"
+number = 13
+expected = '\mathbf{Y}_R = \mathbf{G}\mathbf{X} + \mathbf{N}_R'
+
+[[case]]
+id = "F22"
+file = "isac_survey.pdf"
+number = 22
+expected = 'y_R(t) = h_R\sqrt{P_R} s_R(t-\tau) + n_R(t)'
+
+[[case]]
+id = "F23"
+file = "isac_survey.pdf"
+number = 36
+expected = '\mathbf{X} = \mathbf{W}\mathbf{S}_R'
+
+[[case]]
+id = "F24"
+file = "isac_survey.pdf"
+number = 41
+lines = 2
+expected = '\hat{B}_q = \begin{cases} 0, & |\mathbf{b}^H(\phi_C)\mathbf{y}_{C,q}| < \lambda, \\ 1, & |\mathbf{b}^H(\phi_C)\mathbf{y}_{C,q}| > \lambda, \end{cases}'
+
+[[case]]
+id = "F25"
+file = "isac_survey.pdf"
+number = 55
+lines = 2
+expected = '\min_{\mathbf{X}} \rho\|\mathbf{H}\mathbf{X} - \mathbf{S}_C\|_F^2 + (1-\rho)\|\mathbf{X} - \mathbf{X}_0\|_F^2 \quad \text{s.t.} \quad \|\mathbf{X}\|_F^2 = LP_T'
+
+[[case]]
+id = "F26"
+file = "isac_survey.pdf"
+number = 63
+expected = '\mathbf{r} = \mathbf{H}_C\mathbf{b} + \mathbf{H}_R\boldsymbol{\alpha} + \mathbf{z}'
+
+[[case]]
+id = "F27"
+file = "expectation_note.pdf"
+number = 1
+expected = 'm_n = \frac{1}{n}\sum_{i=1}^{n} x(i)'
+
+[[case]]
+id = "F28"
+file = "expectation_note.pdf"
+number = 3
+expected = 'P[A] = \lim_{n\to\infty} \frac{N_A}{n}'

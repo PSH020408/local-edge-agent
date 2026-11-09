@@ -27,9 +27,11 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Callable
 
+from .formula_tools import FormulaReading, compare_latex, is_part_of, read_equation
 from .document_tools import (
     DOCUMENT_EXTENSIONS,
     Document,
@@ -120,6 +122,31 @@ Return JSON. "scope" is "whole" only when the question needs the whole document:
 "keywords" lists up to 8 words or short phrases, in the document's language, that the text answering the question would contain: technical terms, names, symbols, "Table 3".
 The question and the document may be in different languages: match by meaning, not by words."""
 
+# "equation (3)", "Eq. (55)", "식 (55)", "수식 (3)", "(3)번 식"
+_EQUATION_REF = re.compile(
+    r"(?:equations?|eqs?\.|eqn\.?|수식|공식|식)\s*\(\s*(\d{1,3})\s*\)|\(\s*(\d{1,3})\s*\)\s*번?\s*(?:식|수식)",
+    re.IGNORECASE,
+)
+MAX_EQUATIONS = 2
+
+
+def equation_refs(question: str) -> list[int]:
+    """Equation numbers named in a question, in order, at most MAX_EQUATIONS."""
+    found = [int(a or b) for a, b in _EQUATION_REF.findall(question)]
+    return list(dict.fromkeys(found))[:MAX_EQUATIONS]
+
+
+def formula_block(reading: FormulaReading) -> str:
+    """Context block for an equation read from the page image."""
+    if reading.status == "confirmed":
+        how = "read twice from the page image; the readings agree"
+    elif reading.status in ("close", "check_failed"):
+        how = "read twice from the page image; the readings differ slightly, so details are uncertain: " + "; ".join(reading.differences)[:200]
+    else:
+        how = "read twice from the page image; the readings disagree, so this transcription is uncertain"
+    return f"[p.{reading.page}, equation ({reading.number}), {how}]\n$$ {reading.latex} $$"
+
+
 ANSWER_PROMPT = """You answer questions about a document using only the pages given below.
 Rules:
 - Use only information in these pages. If they do not contain the answer, say that the document does not cover it.
@@ -128,6 +155,7 @@ Rules:
 - Text marked "read by the vision model" is a transcription of equations or figures and may contain reading errors; say so when an answer depends on it.
 - Keep separate points separate: do not combine statements from different bullets or lines into one claim, and keep each number with the item it belongs to.
 - In the page text, ^ marks a superscript: 10^2 is 10 to the power 2.
+- When an equation is given as read from the page image, copy it exactly as given, and say that it is uncertain if the block says so. Take the meaning of its symbols from the text next to it ("where ... is ...").
 - Keep the document's technical terms as they are, and answer in {language}.
 - Do not spell out an abbreviation unless the pages spell it out; otherwise keep the abbreviation as it is.
 - Do not add facts, numbers or examples that are not in the pages."""
@@ -251,6 +279,65 @@ def unsupported_expansions(answer: str, document_text: str) -> list[str]:
     return flagged
 
 
+def document_expansions(document_text: str) -> dict[str, str]:
+    """The document's own definitions, "reconfigurable intelligent surface (RIS)", by acronym."""
+    counts: dict[str, Counter] = {}
+    for words, acronym in _EXPANSION_FIRST.findall(document_text):
+        phrase = _trim_expansion(" ".join(words.split()), acronym)
+        if phrase:
+            counts.setdefault(acronym, Counter())[phrase] += 1
+    return {acronym: c.most_common(1)[0][0] for acronym, c in counts.items()}
+
+
+def repair_expansions(answer: str, document_text: str) -> tuple[str, list[tuple[str, str, str]], list[str]]:
+    """Replace acronym expansions the document never writes with the document's own.
+
+    Run 38 repeats: RA6 called RIS a "Reflective Intelligent Surface" in 2 of 3 runs although the
+    paper defines "reconfigurable intelligent surface (RIS)" on p.1; the page was not among the
+    passages, so the model guessed. The expansion is not what was asked, so it is corrected in code:
+    to the document's definition when there is one, otherwise "RIS (...)" becomes "RIS". Returns the
+    answer, the corrections (acronym, old, new; new is "" when removed) and the expansions left as
+    they were (an invented "words (ACR)" with no definition to put in its place).
+    """
+    known = document_expansions(document_text)
+    fixed: list[tuple[str, str, str]] = []
+    left: list[str] = []
+    for item in unsupported_expansions(answer, document_text):
+        acronym, expansion = item[:-1].split(" (", 1)
+        words = r"[\s-]+".join(re.escape(w) for w in expansion.split())
+        inline = re.compile(rf"\b{re.escape(acronym)}\s*\(\s*{words}\s*\)")
+        first = re.compile(rf"\b{words}(\s*\(\s*{re.escape(acronym)}s?\s*\))")
+        right = known.get(acronym, "")
+        before = answer
+        if right:
+            answer = inline.sub(f"{acronym} ({right})", answer)
+            answer = first.sub(lambda m: right + m.group(1), answer)
+        else:
+            answer = inline.sub(acronym, answer)
+        if answer != before:
+            fixed.append((acronym, expansion, right))
+        else:
+            left.append(item)
+    return answer, fixed, left
+
+
+def drop_repeated_paragraphs(answer: str, min_chars: int = 40) -> tuple[str, int]:
+    """Remove paragraphs that repeat an earlier one word for word.
+
+    Run 38 repeats: one RA1 answer wrote the same paragraph three times. Short paragraphs
+    (a source line, "- [p.3]") are never removed."""
+    seen: set[str] = set()
+    kept, dropped = [], 0
+    for paragraph in re.split(r"\n\s*\n", answer):
+        key = re.sub(r"\W+", "", paragraph.lower())
+        if len(key) >= min_chars and key in seen:
+            dropped += 1
+            continue
+        seen.add(key)
+        kept.append(paragraph)
+    return ("\n\n".join(kept), dropped) if dropped else (answer, 0)
+
+
 def estimate_tokens(text: str) -> int:
     """Rough token count: about four characters per token for Latin text, one per Hangul."""
     ascii_chars = sum(1 for ch in text if ch.isascii())
@@ -328,6 +415,7 @@ class DocumentQuestionPlanner:
         self.on_event = on_event or (lambda message: None)
         self.captions: dict[int, str] = {}
         self.labels: dict[int, str] = {}  # papers: the section of each cited page, for the source line
+        self.formulas: list[FormulaReading] = []  # equations named in the question, read from the image
 
     def applies(self, question: str) -> str | None:
         return find_document_path(question, self.workspace)
@@ -559,9 +647,12 @@ class DocumentQuestionPlanner:
         user_question = question.replace(path, "").strip()
         self.captions = self._caption(document)
         self.labels = {}
+        self.formulas = self._read_equations(document, user_question)
         if document.dense:
             return self._run_paper(document, user_question, language, korean, start)
         scope, numbers = self._select(document, user_question)
+        if scope != "whole" and self.formulas:
+            numbers = list(dict.fromkeys([r.page for r in self.formulas] + numbers))
         notes: dict[int, str] = {}
         if scope == "whole":
             answer, given, sources = self._whole(document, user_question, language)
@@ -570,7 +661,7 @@ class DocumentQuestionPlanner:
             notes = self._look(document, numbers, user_question)
             context = self._context(document, numbers, notes, _CONTEXT_CHARS)
             answer = self._answer(context, user_question, language)
-            given, sources = numbers, context
+            given, sources = numbers, self._with_formulas(context)
             if self._needs_search(answer) and not page_references(user_question, document):
                 more = [n for n, score in rank_pages(document, user_question) if score > 0 and n not in numbers][:3]
                 if more:
@@ -578,11 +669,41 @@ class DocumentQuestionPlanner:
                     more_notes = self._look(document, more, user_question)
                     notes.update(more_notes)
                     given = more + numbers
-                    sources = self._context(document, given, notes, _CONTEXT_CHARS)
-                    answer = self._answer(sources, user_question, language)
+                    context = self._context(document, given, notes, _CONTEXT_CHARS)
+                    answer = self._answer(context, user_question, language)
+                    sources = self._with_formulas(context)
         return self._finish(document, answer, given, sources, user_question, korean, start, notes)
 
+    def _read_equations(self, document: Document, question: str) -> list[FormulaReading]:
+        """Equations named in the question ("equation (3)", "식 (55)"), located by their number and
+        read twice from the page image (agent/formula_tools.py).
+
+        Holdout Run 33: a question about φ, α in equation (3) found no passage (keyword search
+        ignores Greek letters), and an answer about equation (1) swapped two operators that the
+        text next to the equation defines."""
+        if self.vision is None or document.kind != "pdf":
+            return []
+        readings = []
+        for number in equation_refs(question):
+            reading = read_equation(self.vision, self.workspace, document, number, self.cache_dir.parent / "formulas")
+            for image in reading.images[:1]:
+                self.on_tool_call("read_equation", {"path": image, "equation": number}, f"{reading.status}: {reading.latex}")
+            where = f"p.{reading.page}" if reading.page else "not found"
+            self.on_event(f"equation ({number}): {where}, {reading.status.replace('_', ' ')}")
+            if reading.differences and reading.status != "confirmed":
+                # Run 37, SA8: the report showed "disagree" but not where the readings differed.
+                self.on_event("  readings differ: " + "; ".join(reading.differences[:4]))
+            if reading.page:
+                readings.append(reading)
+        return readings
+
+    def _with_formulas(self, context: str) -> str:
+        """Equations read from the image go first, so the context budget never drops them."""
+        blocks = [formula_block(r) for r in self.formulas if r.latex]
+        return "\n\n".join(blocks + [context]) if blocks else context
+
     def _answer(self, context: str, question: str, language: str) -> str:
+        context = self._with_formulas(context)
         prompt = f"Pages:\n\n{context}\n\nQuestion: {question}"
         answer = self._ask(ANSWER_PROMPT.format(language=language), prompt)
         if not cited_pages(answer) and not _NOT_COVERED.search(answer):
@@ -619,6 +740,11 @@ class DocumentQuestionPlanner:
                 if passage.section:
                     self.labels.setdefault(passage.page, passage.section)
             return self._finish(document, answer, given, sources, question, korean, start, {})
+        if self.formulas:
+            around = [p.id for r in self.formulas for p in passages
+                      if p.page == r.page and re.search(rf"\({r.number}\)", p.text)]
+            chosen = list(dict.fromkeys(around + chosen))
+            extra = [i for i in extra if i not in chosen]
         pages = list(dict.fromkeys(by_id[i].page for i in chosen))
         self.on_event(
             f"passages: {len(chosen)} chosen, {len(extra)} by keywords, on "
@@ -646,7 +772,7 @@ class DocumentQuestionPlanner:
                 notes.update(self._look(document, new_pages, question))
                 context, given, kept = self._passage_context(by_id, more + kept, notes, document, _CONTEXT_CHARS)
                 answer = self._answer(context, question, language)
-        return self._finish(document, answer, given, context, question, korean, start, notes)
+        return self._finish(document, answer, given, self._with_formulas(context), question, korean, start, notes)
 
     def _whole(self, document: Document, question: str, language: str) -> tuple[str, list[int], str]:
         limit = _PAPER_CHUNK_CHARS if document.dense else _CHUNK_CHARS
@@ -685,11 +811,14 @@ class DocumentQuestionPlanner:
 
     def _finish(self, document, answer, given, sources, question, korean, start, read: dict | None = None) -> str:
         t = _TEXT["ko" if korean else "en"]
-        read = read or {}
+        read = dict(read or {})
+        for reading in self.formulas:  # equations read from the image count as read
+            read[reading.page] = read.get(reading.page, "") + "\n" + formula_block(reading)
+        answer, repeated = drop_repeated_paragraphs(answer)
+        answer, corrected, expansions = repair_expansions(answer, "\n".join(p.text for p in document.pages))
         cited = cited_pages(answer)
         wrong = [n for n in cited if n not in given]
         numbers = unsupported_numbers(answer, sources, question)
-        expansions = unsupported_expansions(answer, "\n".join(p.text for p in document.pages))
         page_texts = {n: document.page(n).text + "\n" + read.get(n, "") for n in given if document.page(n)}
         misplaced = misplaced_citations(answer, page_texts)
         not_covered = not cited and bool(_NOT_COVERED.search(answer))
@@ -704,6 +833,14 @@ class DocumentQuestionPlanner:
         unread = [n for n in cited if n in given and document.page(n).math and n not in read]
         if unread and _EQUATION.search(answer):
             notes.append(t["unread_equations"].format(pages=", ".join(f"p.{n}" for n in unread)))
+        for reading in self.formulas:
+            notes.append(t["formula"].format(number=reading.number, page=reading.page,
+                                             status=t["formula_status"].get(reading.status, reading.status)))
+            written = [b for b in re.findall(r"\$\$(.+?)\$\$", answer, re.S) if len(b.strip()) > 5]
+            if reading.latex and written and not any(
+                    compare_latex(b, reading.latex)[0] != "different" or is_part_of(b, reading.latex)
+                    for b in written):
+                notes.append(t["formula_changed"].format(number=reading.number))
         if wrong:
             notes.append(t["wrong_citation"].format(pages=", ".join(f"p.{n}" for n in wrong)))
         if numbers:
@@ -712,6 +849,9 @@ class DocumentQuestionPlanner:
             notes.append(t["misplaced"].format(pairs=", ".join(t["pair"].format(cited=a, found=b) for a, b in misplaced)))
         if expansions:
             notes.append(t["expansions"].format(items=", ".join(expansions)))
+        if corrected:
+            notes.append(t["expansions_fixed"].format(items=", ".join(
+                f"{a}: {old} → {new or t['removed']}" for a, old, new in corrected)))
         used = [n for n in cited if n in given]
         source_line = t["sources"] + ", ".join(
             f"p.{n} ({(self.labels.get(n) or document.page(n).title or self.captions.get(n, ''))[:50]})" for n in used[:8]
@@ -722,6 +862,8 @@ class DocumentQuestionPlanner:
             + (f", {len(numbers)} number(s) not in the document" if numbers else "")
             + (f", {len(misplaced)} citation(s) to another page" if misplaced else "")
             + (f", {len(expansions)} expansion(s) not in the document" if expansions else "")
+            + (f", {len(corrected)} expansion(s) corrected" if corrected else "")
+            + (f", {repeated} repeated paragraph(s) removed" if repeated else "")
             + (", answer: not covered by the document" if not_covered else ", no citations" if not cited else "")
             + f" | total {time.perf_counter() - start:.1f} s"
         )
@@ -737,8 +879,14 @@ _TEXT = {
         "not_covered": "(문서에 없다는 답입니다. 확인한 페이지: {pages})",
         "unread_equations": "⚠ 답의 수식은 원본 페이지를 눈으로 확인하지 않고 쓴 것입니다 ({pages}). 원본과 대조가 필요합니다.",
         "misplaced": "⚠ 출처 페이지가 틀렸을 수 있습니다: {pairs}.",
+        "formula": "수식 ({number})은 p.{page}의 이미지에서 두 번 읽었습니다: {status}.",
+        "formula_status": {"confirmed": "두 번 일치", "close": "거의 일치 (세부는 불확실)", "disagree": "불일치 (불확실)",
+                           "check_failed": "두 번 일치했지만 확인 단계에서 문제 제기 (불확실)", "unreadable": "읽지 못함"},
+        "formula_changed": "⚠ 답에 쓴 수식이 이미지에서 읽은 수식 ({number})과 다릅니다.",
         "pair": "p.{cited}로 표시한 문장이 p.{found}에 있습니다",
         "expansions": "⚠ 문서에 없는 약어 풀이가 있습니다: {items}. 모델이 덧붙인 것이라 틀릴 수 있습니다.",
+        "expansions_fixed": "약어 풀이를 문서의 표현으로 고쳤습니다: {items}.",
+        "removed": "(삭제, 문서에 정의 없음)",
     },
     "en": {
         "sources": "Sources: ",
@@ -748,7 +896,15 @@ _TEXT = {
         "not_covered": "(The answer says the document does not cover this. Pages checked: {pages})",
         "unread_equations": "⚠ The equations in this answer were written without reading the original page ({pages}). Check them against the document.",
         "misplaced": "⚠ A citation may point to the wrong page: {pairs}.",
+        "formula": "Equation ({number}) was read twice from the image of p.{page}: {status}.",
+        "formula_status": {"confirmed": "the readings agree", "close": "the readings nearly agree (details uncertain)",
+                           "disagree": "the readings disagree (uncertain)",
+                           "check_failed": "the readings agree, but the check against the image raised a problem (uncertain)",
+                           "unreadable": "not readable"},
+        "formula_changed": "⚠ The equation written in the answer differs from equation ({number}) as read from the image.",
         "pair": "a sentence cited to p.{cited} is on p.{found}",
         "expansions": "⚠ Abbreviations spelled out in a way the document never uses: {items}. The model added these and they may be wrong.",
+        "expansions_fixed": "Abbreviations spelled out in a way the document never uses were corrected to the document's: {items}.",
+        "removed": "(removed; the document gives no definition)",
     },
 }

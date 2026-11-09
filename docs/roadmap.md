@@ -72,6 +72,16 @@ Carried over:
 Verify: formulas from papers with known LaTeX, including the equations in the document test sets.
 Done when: transcriptions match the known LaTeX or are marked uncertain.
 
+- [x] `agent/formula_tools.py`: locate a numbered equation from the text layer, crop it, read it twice, compare by code; structure check (sympy's LaTeX parser was tried and not used: it drops parts of paper formulas silently)
+- [x] Development set of 28 numbered equations with hand-made LaTeX, graded by code: `evals/formulas/`, `scripts/run_formula_set.py`
+- [x] First run, page reading against two crops (Run 34; crop errors and grading fixes recorded in evals/formulas/cases.md)
+- [x] Rerun after the crop fixes (Run 35: crop2 exact 23 of 28, page 19; a confirmed reading was exact 23 times of 24)
+- [x] Third call that checks the chosen reading against the image; the more complete of two readings is kept (Run 36: exact 26 of 28, no wrong reading; the check's catches still unmeasured)
+- [x] Use the formula reader in document answers: a question naming an equation gets it read twice and checked, given first with the passages around it; Greek letters and equation numbers are search keywords; an answer that changes the equation is flagged (Run 37: equation set ✅ 12 of 14, the 4 earlier failures fixed; Run 38: all five document sets passed their gates)
+- [ ] Unnumbered formulas in answers still come from the text layer or the page description (BS3: π⁴ for π^(1/4)); read them from a crop as well
+- [ ] Symbol table per document (what each symbol stands for, with its page)
+- [ ] Holdout: new papers, run once
+
 ### Stage 6 — Tables, financial statements and graphs
 - Table → CSV; code checks totals and subtotals (for example assets = liabilities + equity)
 - Ratios and growth rates computed by the math tools, never by the model

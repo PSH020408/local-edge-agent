@@ -383,3 +383,138 @@ D06 answered both parts in two of three repeats, with the same abbreviations spe
 
 The failures are no longer about finding pages: they are about reading equations and symbols. Two answers misread equation-heavy passages they were given (MR2, MR3), one question about Greek symbols could not be searched (MR4), one formula came from a text layer that lost an exponent (BS3), and the vision model missed a chart (BS9). These move to Stage 5 (formulas), where formulas are read from the page image and searched by symbol and equation number.
 
+
+## Run 37 — equation questions with the formula reader (2026-11-08)
+
+Stage 5 connects the formula reader (agent/formula_tools.py) to document questions. A question that
+names an equation ("equation (3)", "식 (55)", "수식 (13)") gets that equation located by its number,
+read twice from the page image and checked; the reading and the passages around the equation are
+given first. Greek letters and equation numbers are now search keywords. The set
+(evals/documents/equations.toml) holds 14 cases: four that failed before (MR2, MR4, SA8, RA11), two
+that passed (PA6, VA4), five new questions on numbered equations, and three controls without an
+equation number (BS3, D04, GC2). Code: d81fe90 + uncommitted changes, 15.1 minutes.
+
+Gate written before the run: ✅ 10 or more; at least 2 of the 4 earlier failures fixed; PA6, VA4
+and GC2 not ❌; no invented answers.
+
+| # | Before | Run 37 | Notes |
+|---|---|---|---|
+| MR2 Equation (1) and its operators | ❌ | ✅ | Equation confirmed; S, F and M now explained correctly from the text next to the equation (key facts 2/4 only because the key did not accept \mathcal letters) |
+| MR4 φ, α, ᾱ in equation (3) | ❌ | ✅ | Equation confirmed on p.5; passage selection failed again, but the equation's page was given first |
+| SA8 Equation (55), ρ = 1 | ❌ | ✅ | Zero-forcing signal, communication priority. Status "disagree", but the final reading is complete |
+| RA11 Equation (31) bound | ❌ | ✅ | √ρ term present. False warning: the answer wrote only the bound (one side of the equation) and the check called it a different equation. Fixed after the run |
+| PA6 Equation (1) | ✅ | ✅ | |
+| VA4 G_max, B_max (no number) | ✅ | ✅ | Unchanged path |
+| VA4N Equations (3) and (4), new | | ✅ | Both confirmed, every symbol explained |
+| EQ1 Equation (2), new | | ✅ | Shannon entropy, p_i the probability (key facts 3/4: the key asked for \log, which the question does not ask for) |
+| EQ2 Equation (13), new | | ✅ | |
+| EQ3 Equation (4), new | | ✅ | |
+| EQ4 Equation (1), new | | ✅ | N = 5, M = 1, R = 16. The answer copied the page description's form (one fraction raised to N), not the reading; the two are equal |
+| BS3 (control, no number) | ⚠️ | ⚠️ | Same π⁴ from the text layer. The answer also claimed the equation "was extracted from the page image", which is false; the code warning says the page was not read |
+| D04 (control, no number) | ✅/⚠️ | ⚠️ | Formula right, explanation leaves out the attenuation and the ICI term (varies since Run 25) |
+| GC2 (control, no number) | ✅ | ✅ | |
+
+**✅ 12, ⚠️ 2, ❌ 0. Gate passed: all four earlier failures fixed, controls unchanged, no invented answers.**
+
+Predictions: MR4, SA8 and RA11 were predicted to be fixed and were. MR2 was predicted to keep the
+S/M swap; it did not: with the equation and its "where ..." sentence given first, the operators were
+read correctly. The controls behaved as predicted.
+
+Seen during the run:
+
+- The passage selection could not be read three times (MR4, VA4N, EQ1); the keyword fallback and the
+  equation's page covered it. Left for later.
+- Mean time 65 s per question; the formula reader adds about 20 s per equation.
+- The report did not show where two readings differed (SA8). The differences are now logged.
+
+### Fixes after Run 37
+
+| Problem | Fix | Kind |
+|---|---|---|
+| An answer that writes one side of the equation (the bound of (31)) was flagged as a changed equation (RA11) | The equation is split at relations and commas outside braces; an answer whose parts are all exact parts of the reading is not flagged. A part with a term left out still is (√ρ, Run 32) | Code |
+| "disagree" with no detail in the report (SA8) | The differing pieces are logged after the status | Code |
+| Grading keys too narrow (MR2, EQ1, EQ4, VA4N) | Keys widened; the answers were already right | Grading |
+
+### Regression gate for Run 38 (written before the run)
+
+The tokenizer change (Greek letters, equation numbers) touches every paper search, and the dev set
+has two equation questions (E01, E02) that now use the reader. All five sets are run once:
+
+| Set | Last result | Gate |
+|---|---|---|
+| Development | ✅ 14-16 (Runs 30, 32) | ✅ 15 or more, no ❌, 3/3 |
+| First holdout, lectures | ✅ 19 (Run 32) | ✅ 18 or more, no ❌, 3/3 |
+| Second holdout, papers | ✅ 19 (Run 32) | ✅ 18 or more |
+| Third holdout, long papers | ✅ 18 (Run 32) | ✅ 18 or more, with SA8 and RA11 ✅ |
+| Fourth holdout, papers with equations | ✅ 14 (Run 33) | ✅ 16 or more, with MR2 and MR4 ✅ |
+
+Every "not in the document" check must pass. A case that drops from ✅ to ❌ is run three more
+times before it counts (Run 32 lesson).
+
+## Run 38 — regression check of all five sets after the formula reader (2026-11-09)
+
+One command, all five sets, 74.7 minutes. Code: d81fe90 + the Stage 5 changes (formula reader in
+document answers, Greek letters and equation numbers as search keywords, the part check of Run 37).
+
+| Set | Before | Run 38 | Gate | Time |
+|---|---|---|---|---|
+| Development (16 + 3) | ✅ 14-16 (Runs 30, 32) | ✅ 15, ⚠️ 1, ❌ 0; 3/3 | ✅ 15 or more, no ❌: passed | 14.1 min |
+| First holdout, lectures (21 + 3) | ✅ 19, ⚠️ 2 (Run 32) | ✅ 19, ⚠️ 2, ❌ 0; 3/3 | ✅ 18 or more, no ❌: passed | 13.6 min |
+| Second holdout, papers (21 + 3) | ✅ 19, ⚠️ 1, ❌ 1 (Run 32) | ✅ 19, ⚠️ 1, ❌ 1; 3/3 | ✅ 18 or more: passed | 11.4 min |
+| Third holdout, long papers (24 + 3) | ✅ 18, ⚠️ 3, ❌ 3 (Run 32) | ✅ 19, ⚠️ 3, ❌ 2; 3/3 | ✅ 18 or more, SA8 and RA11 ✅: passed | 22.4 min |
+| Fourth holdout, papers with equations (19 + 2) | ✅ 14, ⚠️ 2, ❌ 3 (Run 33) | ✅ 16, ⚠️ 2, ❌ 1; 2/2 | ✅ 16 or more, MR2 and MR4 ✅: passed | 13.2 min |
+
+All "not in the document" checks: 14/14. Every gate passed.
+
+Changes against the last run of each set:
+
+| Case | Before | Run 38 | Notes |
+|---|---|---|---|
+| E01, E02 (dev, equations (5) and (2)) | ✅ | ✅ | Now read by the formula reader; (5) came out "close" only because one reading broke the line with "\\" (fixed after the run) |
+| D04 (dev) | ✅/⚠️ | ⚠️ | Formula right; calls the desired term "the signal under perfect synchronization" again (varies since Run 25) |
+| PA8 WWD test set | ✅ | ⚠️ | 50, 500, 3500 and 3500 right, then an invented total of "10,000 samples" (the four add up to 7,550). The number check flagged 10000 |
+| PA10 Limitations | ⚠️ | ✅ | Simplified IAF encoder and simulated chips, as the Discussion states them |
+| VA1 Filters and ratios | ❌ | ❌ | Unchanged: the ratios are only in Figure 1 and the droop correction filter is said not to decimate |
+| SA8 Equation (55) | ❌ | ✅ | Formula reader: zero-forcing signal, communication priority |
+| RA11 Equation (31) | ❌ | ✅ | √ρ term present; no false warning after the Run 37 fix |
+| RA1 Layer 0 | ⚠️ | ❌ | Calls Layer 0 a layer that processes data and control information, cited to p.14; p.2 (the uncontrollable medium) was among the passages given. To be repeated before it counts |
+| RA6 Doppler cloaking | ✅ | ⚠️ | Content right, but "Reflective Intelligent Surface" is back (flagged by the expansion check); Run 31 had the same |
+| RA7 Channel estimation | ❌ | ❌ | Unchanged |
+| MR2, MR4 | ❌ | ✅ | As in Run 37 |
+| MR3 | ❌ | ❌ | Unchanged: "3 iterations" (the page: 5), regularizer misdescribed |
+| SA1, SA12, GA4, GA6, BS3, BS9 | ⚠️ | ⚠️ | Unchanged |
+
+None of the drops is on a question that names an equation, and none of the answers moved to another
+page because of the new keywords: RA1 had p.2 in its passages and PA8 and RA6 had the right page. They
+look like run-to-run variation of the answer model; RA1 (✅/⚠️ to ❌) is repeated three times, with
+PA8 and RA6, before it counts.
+
+### Fix after Run 38
+
+| Problem | Fix | Kind |
+|---|---|---|
+| A reading with "\\" line breaks was "close" to the same reading without them (E01) | Line breaks, alignment marks and aligned/split environments are dropped before comparing, except inside a matrix or cases, where they separate entries. Regrading Runs 35-36 with the change: no grade changed | Code |
+
+### Repeats after Run 38
+
+RA1, RA6 and PA8 were run three more times each (same code, about 6 minutes).
+
+| Case | Run 38 | Repeats | Counted as |
+|---|---|---|---|
+| RA1 Layer 0 | ❌ | ⚠️, ⚠️, ⚠️: "the wireless medium / an uncontrollable path made controllable", but never that the RIS extends protocol design to Layer 0. One repeat wrote the same paragraph three times | ⚠️ (as in Runs 31 and 32). The ❌ was one bad draw |
+| RA6 Doppler cloaking | ⚠️ | Content right 3/3; "Reflective Intelligent Surface" 2/3, "Reconfigurable" 1/3 | ⚠️: the expansion is wrong in most runs |
+| PA8 WWD test set | ⚠️ | ✅, ✅, ✅: no invented total | ✅ 3 of 4 |
+
+Third holdout in Run 38, counted after the repeats: ✅ 19, ⚠️ 4, ❌ 1. The gates are unchanged:
+every set passed.
+
+### Fixes after the repeats
+
+| Problem | Fix | Kind |
+|---|---|---|
+| RIS spelled out as "Reflective Intelligent Surface" in 2 of 3 runs (RA6), although the paper defines "reconfigurable intelligent surface (RIS)" on p.1, a page not among the passages | An expansion the document never writes is replaced by the document's own definition ("words (ACR)" found anywhere in the document); with no definition, "ACR (words)" becomes "ACR". The answer says what was corrected. An invented "words (ACR)" with no definition to put in its place keeps the warning | Code |
+| The same paragraph written three times (RA1 repeat) | Paragraphs of 40 or more letters that repeat an earlier one word for word are removed | Code |
+
+Backtest on the 124 answers of Run 38 and the repeats: the three RA6 answers were corrected to
+"reconfigurable intelligent surface", the RA1 answer lost its two copies, D08's "Maximum Likelihood
+(ML)" (not defined on the slides) keeps its warning, and no other answer changed.

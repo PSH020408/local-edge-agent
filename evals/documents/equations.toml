@@ -1,0 +1,159 @@
+# Equation questions for the document planner (Stage 5).
+# These are development cases: the questions about equations that failed or were partly right in
+# earlier runs, four new questions on numbered equations, and three controls that name no
+# equation number (the formula reader is not used for them, so they should not change).
+#     python scripts/run_eval_set.py --set documents --cases evals/documents/equations.toml --fast
+# The files are kept in evals/documents/files/ (not committed).
+#
+# expect: key facts that a correct answer contains. One entry may list alternatives separated by " | ".
+# avoid:  text that signals a wrong or invented claim.
+# pages:  the pages that hold the answer.
+#
+# Last results before the formula reader was connected:
+#   MR2 ❌ (S and M swapped), MR4 ❌ (not found), SA8 ❌ (not found), RA11 ❌ (√ρ term missing),
+#   PA6 ✅, VA4 ✅, BS3 ⚠️ (π^4 for π^(1/4)), D04 ✅/⚠️ (explanation varies), GC2 ✅.
+#
+# Predictions written before the first run:
+# - MR4 and SA8 now find their pages, because the equation's page and the passages around it are
+#   given first. MR4 depends on the "where ..." text next to equation (3).
+# - RA11 gets the √ρ term from the two readings of equation (31) (Run 36: exact).
+# - MR2 gets the equation, but the S/M swap is a reading mistake of the answer model, not of the
+#   equation, so it may stay wrong.
+# - VA4 names no equation number, so it runs as before; VA4N names (3) and (4).
+# - BS3, D04 and GC2 have no equation numbers: unchanged.
+#
+# Grading keys corrected after Run 37 (the answers were right; the keys were too narrow): MR2 now
+# accepts \mathcal letters, EQ1 asks for "distribution" instead of \log (the question does not ask
+# for the equation), EQ4 and VA4N accept 다운샘플링 for the decimation factor.
+
+# --- Cases from earlier runs ---
+
+[[case]]
+id = "MR2"
+file = "mri_4d_reconstruction.pdf"
+question = "Write the forward model of equation (1) in LaTeX and explain what each operator in A does."
+expect = ["y = Ax + n | y = A x + n | y=Ax+n | y = \\mathbf{A} | y = \\mathcal{A}", "MFS | M F S | \\mathcal{M}\\mathcal{F}\\mathcal{S} | \\mathbf{M}\\mathbf{F}\\mathbf{S}", "coil", "Fourier"]
+avoid = []
+pages = [4]
+note = "y = Ax + n, A = MFS: S applies the coil maps, F is the 2D Fourier transform over the 2 phase-encoding axes, M selects the sampled points, n is noise. Graded ❌ if S and M are swapped."
+
+[[case]]
+id = "MR4"
+file = "mri_4d_reconstruction.pdf"
+question = "In equation (3), what do φ, α and ᾱ stand for?"
+expect = ["motion field | field", "breathing amplitude | amplitude", "mean | average"]
+avoid = []
+pages = [5]
+note = "u(r) = (α − ᾱ) φ(r): φ is one motion field per volunteer, α the window's breathing amplitude, ᾱ the mean amplitude of the setup scan."
+
+[[case]]
+id = "SA8"
+file = "isac_survey.pdf"
+question = "식 (55)에서 ρ = 1이면 어떤 신호가 해가 되고, 그 의미는 뭐야?"
+expect = ["zero-forcing | ZF", "communication | 통신"]
+avoid = []
+pages = [20]
+note = "Communication gets full priority and the solution is the zero-forcing precoded signal for the channel H. (The paper writes ρ = 1 for both extremes; the sensing case means ρ = 0, giving X = X0.)"
+
+[[case]]
+id = "RA11"
+file = "ris_tutorial.pdf"
+question = "Write the SNR upper bound of equation (31) in LaTeX."
+expect = ["\\sqrt{\\rho} | \\sqrt \\rho", "\\alpha_n | \\alpha_{n}", "\\beta_n | \\beta_{n}", "BN_0 | B N_0 | BN_{0} | B N_{0}"]
+avoid = []
+pages = [16]
+note = "SNR <= P/(B N0) | sqrt(rho) + sum_{n=1}^N sqrt(alpha_n beta_n gamma) |^2."
+
+[[case]]
+id = "PA6"
+file = "peaf_analog_features.pdf"
+question = "Write equation (1) for the total power in LaTeX."
+expect = ["P_{tot} | P_{\\text{tot}} | P_{\\mathrm{tot}}", "N_{OPS} | N_{\\text{OPS}} | N_{\\mathrm{OPS}}", "E_{eff} | E_{\\text{eff}} | E_{\\mathrm{eff}}", "FR | F R"]
+avoid = []
+pages = [2]
+note = "P_tot = P_feat + P_class = P_feat + (N_OPS × FR) / E_eff."
+
+[[case]]
+id = "VA4"
+file = "cic_decimation_vlsi.pdf"
+question = "Write the formulas for the maximum register growth G_max and the output MSB B_max in LaTeX."
+expect = ["(RM)^N | (RM)^{N} | (R M)^N | (R M)^{N}", "\\log_2 | \\log_{2} | log2 | log_2", "B_{in} | B_in | B_{\\text{in}}"]
+avoid = []
+pages = [3]
+note = "G_max = (RM)^N; B_max = [N log2 R + B_in - 1] (as printed). No equation number in the question: the formula reader is not used."
+
+# --- New questions on numbered equations ---
+
+[[case]]
+id = "VA4N"
+file = "cic_decimation_vlsi.pdf"
+question = "식 (3)과 식 (4)를 LaTeX로 쓰고 각 기호의 뜻을 설명해 줘."
+expect = ["(RM)^N | (RM)^{N} | (R M)^N | (R M)^{N}", "\\log_2 | \\log_{2} | log_2", "B_{in} | B_in | B_{\\text{in}}", "decimation | 데시메이션 | 축소 | 다운샘플링"]
+avoid = []
+pages = [3]
+note = "G_max = (RM)^N, B_max = [N log2 R + B_in - 1]: N stages, M differential delay, R decimation factor, B_in input word length."
+
+[[case]]
+id = "EQ1"
+file = "peaf_analog_features.pdf"
+question = "What does equation (2) compute, and what is p_i?"
+expect = ["Shannon", "entropy | 엔트로피", "probability | 확률", "distribution | 분포"]
+avoid = []
+pages = [2]
+note = "S_Shannon = − Σ_{i=0}^{N} p_i log(p_i), with p_i the probability of the data distribution; used to compare the features."
+
+[[case]]
+id = "EQ2"
+file = "isac_survey.pdf"
+question = "수식 (13)을 LaTeX로 쓰고, G와 N_R이 각각 무엇인지 알려 줘."
+expect = ["Y_R | Y_{R} | \\mathbf{Y}_R | \\mathbf{Y}_{R}", "GX | G X | \\mathbf{G}\\mathbf{X} | \\mathbf{G} \\mathbf{X}", "target response | 표적 응답 | 타겟 응답 | 목표 응답 | TRM", "AWGN | 잡음 | noise"]
+avoid = []
+pages = [12]
+note = "Y_R = G X + N_R: the echo received at the BS; G is the target response matrix (TRM), N_R an AWGN matrix with variance σ_R^2."
+
+[[case]]
+id = "EQ3"
+file = "mri_4d_reconstruction.pdf"
+question = "Write equation (4) in LaTeX. What is p, and what does λ weigh?"
+expect = ["\\lambda", "\\|x - p\\| | \\|x-p\\| | x - p | x-p", "prior", "moved | amplitude | 이동"]
+avoid = []
+pages = [6]
+note = "x̂ = argmin_x ||Ax − y||_2^2 + λ||x − p||_2^2: p is the setup prior moved along the same field by an amplitude fitted to the window; λ weighs closeness to the prior against data consistency."
+
+[[case]]
+id = "EQ4"
+file = "cic_decimation_vlsi.pdf"
+question = "식 (1)의 CIC 전달함수를 LaTeX로 쓰고, N, M, R이 무엇이며 이 논문에서 어떤 값을 썼는지 알려 줘."
+expect = ["z^{-RM} | z^{-R M} | z^{- RM}", "z^{-1} | z^{- 1}", "5", "16", "decimation | 데시메이션 | 축소 | 다운샘플링"]
+avoid = []
+pages = [3]
+note = "H(z) = H_I^N(z) H_C^N(z) = (1 − z^{−RM})^N / (1 − z^{−1})^N; N stages, M differential delay, R decimation factor; N = 5, M = 1, R = 16."
+
+# --- Controls: no equation number in the question ---
+
+[[case]]
+id = "BS3"
+file = "pulsenet_canine_ecg.pdf"
+question = "Which mother wavelet is used for the scalograms, why, and how is it defined?"
+expect = ["Ricker", "Mexican hat", "second derivative", "Gaussian"]
+avoid = []
+pages = [7]
+note = "The Ricker (Mexican hat) wavelet, which somewhat mimics the ECG shape; the second derivative of a Gaussian. The formula is unnumbered, so the text layer is used (π^(1/4) comes out as π4)."
+
+[[case]]
+id = "D04"
+file = "ofdm_sync_lecture.pdf"
+question = "Case C의 최종 복조 출력 식에서 desired signal 항을 LaTeX로 써 주고 무슨 뜻인지 설명해 줘."
+expect = ["N-\\tau | N - \\tau | N − τ | N-τ | N - τ", "X_{n,p} | X_{n, p} | X_n,p", "inter-carrier | ICI"]
+avoid = []
+pages = [13]
+note = "Desired signal ((N-τ)/N) X_{n,p} e^{j2π p τ / N}: attenuated and phase-shifted; the other sum is inter-carrier interference."
+
+[[case]]
+id = "GC2"
+file = "dl_transformer_lecture.pdf"
+question = "Write the positional encoding formulas shown in the slides."
+expect = ["sin", "cos", "10000", "d_model | d_{model} | d_{\\text{model}} | dmodel"]
+avoid = []
+pages = [7]
+note = "PE(pos,2i) = sin(pos / 10000^(2i/d_model)), PE(pos,2i+1) = cos(pos / 10000^(2i/d_model)). The formulas are an image."

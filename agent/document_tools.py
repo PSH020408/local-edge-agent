@@ -314,6 +314,12 @@ _STOP = {
 }
 
 
+_GREEK = re.compile(r"[α-ωΑ-Ωϑϕϵϱς]")
+# a displayed equation's number at a line end, or a reference to one in a question
+_EQUATION_NUMBER_TOKEN = re.compile(
+    r"\((\d{1,3})\)[ \t]*$|(?:equations?|eqs?\.|eqn\.?|수식|공식|식)\s*\(\s*(\d{1,3})\s*\)", re.M | re.IGNORECASE)
+
+
 def _tokens(text: str) -> list[str]:
     words = [w for w in re.findall(r"[A-Za-z0-9]+|[가-힣]+", text.lower()) if w not in _STOP]
     tokens = []
@@ -322,6 +328,9 @@ def _tokens(text: str) -> list[str]:
             tokens.extend(word[i:i + 2] for i in range(len(word) - 1))  # Korean: two-syllable pieces
         elif len(word) > 1:
             tokens.append(word)
+    # Run 33 (MR4): a question about φ, α and ᾱ in equation (3) had no searchable words left.
+    tokens.extend(ch.lower() for ch in _GREEK.findall(text))
+    tokens.extend(f"eq{a or b}" for a, b in _EQUATION_NUMBER_TOKEN.findall(text))
     return tokens
 
 
