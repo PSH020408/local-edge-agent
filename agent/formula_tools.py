@@ -1,8 +1,8 @@
 """Formulas: find a numbered equation on a PDF page, read it twice from the page image, compare.
 
-Why (Stage 4 holdouts): the PDF text layer scatters equations into symbols and loses exponents
-(pi^(1/4) came out as pi^4), and a whole-page reading by the vision model can drop or mislabel an
-equation. A formula is therefore read from the page image only, twice, from two different crops
+Why (Stage 4 holdouts): the PDF text layer scatters equations into symbols (fractions, sums and
+exponents come out as separate lines of characters), and a whole-page reading by the vision model can
+drop or mislabel an equation. A formula is therefore read from the page image only, twice, from two different crops
 around its equation number, and code compares the two readings:
 
     confirmed  both readings are the same after normalisation (fonts, spacing, \\left/\\right)
@@ -23,7 +23,7 @@ from pathlib import Path
 
 from .document_tools import Document
 
-READ_PROMPT = """This image shows part of a page. Transcribe the equation numbered ({number}) into LaTeX.
+READ_PROMPT = """This image shows part of a page. Transcribe {target} into LaTeX.
 Write only that equation between $$ and $$: no equation number, no explanation, no other equation.
 Copy every symbol, subscript, superscript, exponent, bar, hat and bold letter exactly as printed. If a part cannot be read, write \\unreadable in its place."""
 
@@ -43,6 +43,17 @@ class EquationSpot:
     math_nearby: bool = True
     column: tuple[float, float] = (0.0, 1.0)  # horizontal range to crop, as fractions of the width
     band: tuple[float, float] | None = None   # bottom, top of the whole displayed equation (points)
+    before: str = ""   # unnumbered equations: the text just before it ("... is given by")
+    after: str = ""    # and just after it ("where ... is ...")
+    text: str = ""     # its own characters in the text layer (scattered, but words survive)
+
+    def target(self) -> str:
+        """How the reading prompts name this equation."""
+        if self.number:
+            return f"the equation numbered ({self.number})"
+        if self.before:
+            return f'the displayed equation that comes right after the text "...{self.before[-60:].strip()}"'
+        return "the displayed equation in the middle of the image"
 
 
 @dataclass
@@ -56,6 +67,10 @@ class FormulaReading:
     problems: list[str] = field(default_factory=list)
     images: list[str] = field(default_factory=list)
     check: str = ""                     # the vision model's answer when asked to check the reading
+    before: str = ""                    # unnumbered equations: the text just before it, to name it
+
+    def name(self) -> str:
+        return f"equation ({self.number})" if self.number else "the unnumbered equation"
 
 
 # --- locating ---------------------------------------------------------------------------------
@@ -220,6 +235,108 @@ def find_equation(document: Document, number: int) -> EquationSpot | None:
     return equation_index(document).get(number)
 
 
+_RELATION_CHARS = set("=≤≥≈≜∝<>")
+_DISPLAY_MATH = (set("+−×·∑∏∫√≤≥≈∞∂∇∆Δϵ") | set("αβγδεθλμνπρστφχψωΣΦΨΩ")
+                 | {chr(c) for c in range(0xF000, 0xF100)})
+_DISPLAY_CACHE: dict[tuple, list[EquationSpot]] = {}
+
+
+def _text_lines(boxes, x0: float, x1: float) -> list[tuple[float, list, float]]:
+    """Characters whose centre lies between x0 and x1, grouped into lines from the top down:
+    (centre height, characters left to right, character height)."""
+    inside = sorted((b for b in boxes if x0 <= (b[0] + b[2]) / 2 <= x1), key=lambda b: -(b[1] + b[3]) / 2)
+    lines: list[list] = []
+    for b in inside:
+        centre, height = (b[1] + b[3]) / 2, max(b[3] - b[1], 4.0)
+        if lines and abs(lines[-1][0] - centre) < 0.45 * max(lines[-1][2], height):
+            lines[-1][1].append(b)
+        else:
+            lines.append([centre, [b], height])
+    for line in lines:
+        line[1].sort(key=lambda b: b[0])
+    return [tuple(line) for line in lines]
+
+
+def _line_text(chars, height: float) -> str:
+    out, last = "", None
+    for b in chars:
+        if last is not None and b[0] - last > 0.25 * height:
+            out += " "
+        out += b[4]
+        last = b[2]
+    return out
+
+
+def display_formulas(document: Document, page_number: int) -> list[EquationSpot]:
+    """Displayed equations without a number on a PDF page, each with the text around it.
+
+    Holdout Run 33, BS3: the Ricker wavelet's formula has no number, so the answer rebuilt it from
+    the text layer's scattered characters and changed the printed exponent. A displayed equation is a run of lines, set in from both
+    edges of its column, that are not prose, not a figure or table caption, and together hold a
+    relation (=, ≤, ≈ ...) and at least one other math symbol. Runs near a numbered equation belong
+    to it and are left out (they are read through their number)."""
+    import pypdfium2 as pdfium
+
+    if document.kind != "pdf" or not 1 <= page_number <= len(document.pages):
+        return []
+    key = (str(document.path), page_number)
+    if key in _DISPLAY_CACHE:
+        return _DISPLAY_CACHE[key]
+    pdf = pdfium.PdfDocument(str(document.path))
+    try:
+        page = pdf[page_number - 1]
+        width, height = page.get_size()
+        textpage = page.get_textpage()
+        boxes = _char_boxes(textpage, textpage.count_chars())
+    finally:
+        pdf.close()
+    numbered = [s for s in equation_index(document).values() if s.page == page_number]
+    gutter = _gutter(boxes, width, 0.0, height)
+    columns = [(0.0, 1.0)] if gutter is None else [(0.0, gutter), (gutter, 1.0)]
+    spots: list[EquationSpot] = []
+    for column in columns:
+        lines = _text_lines(boxes, column[0] * width, column[1] * width)
+        if not lines:
+            continue
+        left = min(c[1][0][0] for c in lines)
+        right = max(c[1][-1][2] for c in lines)
+        span = max(right - left, 1.0)
+        texts = [_line_text(chars, h) for _, chars, h in lines]
+
+        def displayed(i: int) -> bool:
+            _, chars, _ = lines[i]
+            text = texts[i]
+            return (chars[0][0] >= left + 0.12 * span and chars[-1][2] <= right - 0.06 * span
+                    and not _PROSE.search(text) and bool(re.search(r"[^\s,.;]", text))
+                    and not re.match(r"\s*(?:fig(?:ure)?|table)\b", text, re.IGNORECASE))
+
+        i = 0
+        while i < len(lines):
+            if not displayed(i):
+                i += 1
+                continue
+            j = i
+            while j + 1 < len(lines) and displayed(j + 1) and lines[j][0] - lines[j + 1][0] < 2.5 * lines[j][2]:
+                j += 1
+            text = " ".join(texts[i:j + 1])
+            if any(ch in _RELATION_CHARS for ch in text) and any(ch in _DISPLAY_MATH for ch in text):
+                chars = [b for k in range(i, j + 1) for b in lines[k][1]]
+                low, high = min(b[1] for b in chars), max(b[3] for b in chars)
+                h = sorted(lines[k][2] for k in range(i, j + 1))[(j - i) // 2]
+                near_number = any(s.page == page_number and (s.band or (s.bottom, s.top))[0] - 2 * h <= high
+                                  and low <= (s.band or (s.bottom, s.top))[1] + 2 * h for s in numbered)
+                if not near_number:
+                    centre = (low + high) / 2
+                    wordy = [k for k in range(len(texts)) if re.search(r"[A-Za-z]{3}", texts[k])]
+                    before = " ".join(texts[k] for k in [k for k in wordy if k < i][-2:])
+                    after = " ".join(texts[k] for k in [k for k in wordy if k > j][:2])
+                    spots.append(EquationSpot(page_number, 0, centre - h / 2, centre + h / 2, height, width,
+                                              True, column, (low, high), before[-160:], after[:200], text))
+            i = j + 1
+    _DISPLAY_CACHE[key] = spots
+    return spots
+
+
 def crop_equation(document: Document, spot: EquationSpot, margin: float, out_dir: Path) -> Path:
     """Render a full-width band of the page around the equation number."""
     import pypdfium2 as pdfium
@@ -231,7 +348,8 @@ def crop_equation(document: Document, spot: EquationSpot, margin: float, out_dir
     band_bottom = max(0.0, min(spot.bottom - margin * line, low - (margin - 1.5) * line))
     scale = max(2.0, 1600 / (spot.page_width * (spot.column[1] - spot.column[0])))
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"{document.path.stem}_eq{spot.number}_m{margin:g}.png"
+    name = f"eq{spot.number}" if spot.number else f"p{spot.page}_y{int(high)}"
+    out = out_dir / f"{document.path.stem}_{name}_m{margin:g}.png"
     pdf = pdfium.PdfDocument(str(document.path))
     try:
         page = pdf[spot.page - 1]
@@ -398,7 +516,7 @@ def _only_additions(shorter: str, longer: str) -> bool:
     return len(b) > len(a) and all(tag in ("equal", "insert") for tag, *_ in ops)
 
 
-VERIFY_PROMPT = """The image shows equation ({number}). Below is a LaTeX transcription of it.
+VERIFY_PROMPT = """The image shows {target}. Below is a LaTeX transcription of it.
 Compare them part by part: every line, term, fraction, subscript, superscript and constraint.
 If the transcription contains everything in the image, answer exactly: COMPLETE
 Otherwise answer: MISSING: and name the parts of the image that the transcription leaves out or gets wrong.
@@ -418,17 +536,24 @@ def read_equation(vision, workspace: Path, document: Document, number: int, cach
     spot = find_equation(document, number)
     if spot is None:
         return FormulaReading(number, None, "not_found")
+    return read_spot(vision, workspace, document, spot, cache_dir, verify)
+
+
+def read_spot(vision, workspace: Path, document: Document, spot: EquationSpot, cache_dir: Path,
+              verify: bool = True) -> FormulaReading:
+    """Read the equation at `spot` (numbered or not) from two crops, compare, and check."""
+    number = spot.number
     readings, images = [], []
     for margin in MARGINS:
         image = crop_equation(document, spot, margin, cache_dir)
         relative = str(image.resolve().relative_to(workspace.resolve()))
-        result = vision.describe(relative, READ_PROMPT.format(number=number))
+        result = vision.describe(relative, READ_PROMPT.format(target=spot.target()))
         readings.append(extract_latex(result.get("answer", "")) if result.get("status") == "ok" else "")
         images.append(relative)
     problems = [f"reading {i + 1}: {p}" for i, r in enumerate(readings) for p in check_structure(r)]
     usable = [r for r in readings if r and not check_structure(r)]
     if not usable:
-        return FormulaReading(number, spot.page, "unreadable", "", readings, [], problems, images)
+        return FormulaReading(number, spot.page, "unreadable", "", readings, [], problems, images, before=spot.before)
     if len(usable) == 1:
         reading = FormulaReading(number, spot.page, "disagree", usable[0], readings, ["only one reading is usable"], problems, images)
     else:
@@ -443,8 +568,9 @@ def read_equation(vision, workspace: Path, document: Document, number: int, cach
             elif _only_additions(usable[1], usable[0]):
                 differences = ["the first reading has more: " + "; ".join(differences)]
         reading = FormulaReading(number, spot.page, status, chosen, readings, differences, problems, images)
+    reading.before = spot.before
     if verify and reading.latex:
-        result = vision.describe(images[-1], VERIFY_PROMPT.format(number=number, latex=reading.latex))
+        result = vision.describe(images[-1], VERIFY_PROMPT.format(target=spot.target().replace("the equation numbered", "equation"), latex=reading.latex))
         answer = (result.get("answer", "") if result.get("status") == "ok" else "").strip()
         reading.check = answer[:300]
         if answer and not answer.upper().startswith("COMPLETE"):

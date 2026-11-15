@@ -363,7 +363,7 @@ D06 answered both parts in two of three repeats, with the same abbreviations spe
 | MR8 Table 1 cell | ✅ | Found by the second search; the run-together table rows were read correctly |
 | MR9 Four limitations | ✅ | |
 | BS1, BS2, BS4-BS7, BS10 | ✅ | |
-| BS3 Mexican hat wavelet | ⚠️ | Name, reason and "second derivative of a Gaussian" right; the formula has π⁴ where the paper has π^(1/4): the text layer lost the exponent. The unread-equation warning was shown |
+| BS3 Mexican hat wavelet | ⚠️ | Name, reason and "second derivative of a Gaussian" right; the formula has π⁴ where the paper has π^(1/4): the text layer lost the exponent. The unread-equation warning was shown. *Corrected in Run 39: the paper itself prints π⁴; the answer's error is the exponent of e (t² where the page prints t), see Run 39*  |
 | BS8 Best model vs cardiologists | ✅ | Correct, but 15 false number warnings: the paper writes decimal commas ("89,28%"). Fixed after the run (check only) |
 | BS9 Figure 4 labels | ⚠️ | NORMAL and supraventricular are right, but cited p.4 instead of p.5, and the vision model returned [none] for the page with the bar chart; the answer matches the order in which p.4 lists the categories, not the chart |
 | MH1, BH1 | 2/2 | |
@@ -381,7 +381,7 @@ D06 answered both parts in two of three repeats, with the same abbreviations spe
 
 ### What is left
 
-The failures are no longer about finding pages: they are about reading equations and symbols. Two answers misread equation-heavy passages they were given (MR2, MR3), one question about Greek symbols could not be searched (MR4), one formula came from a text layer that lost an exponent (BS3), and the vision model missed a chart (BS9). These move to Stage 5 (formulas), where formulas are read from the page image and searched by symbol and equation number.
+The failures are no longer about finding pages: they are about reading equations and symbols. Two answers misread equation-heavy passages they were given (MR2, MR3), one question about Greek symbols could not be searched (MR4), one formula came from a text layer that lost an exponent (BS3; corrected in Run 39: the formula was rebuilt from the text layer and changed, the exponent was printed that way), and the vision model missed a chart (BS9). These move to Stage 5 (formulas), where formulas are read from the page image and searched by symbol and equation number.
 
 
 ## Run 37 — equation questions with the formula reader (2026-11-08)
@@ -410,7 +410,7 @@ and GC2 not ❌; no invented answers.
 | EQ2 Equation (13), new | | ✅ | |
 | EQ3 Equation (4), new | | ✅ | |
 | EQ4 Equation (1), new | | ✅ | N = 5, M = 1, R = 16. The answer copied the page description's form (one fraction raised to N), not the reading; the two are equal |
-| BS3 (control, no number) | ⚠️ | ⚠️ | Same π⁴ from the text layer. The answer also claimed the equation "was extracted from the page image", which is false; the code warning says the page was not read |
+| BS3 (control, no number) | ⚠️ | ⚠️ | Same formula rebuilt from the text layer (the π⁴ is as printed; corrected in Run 39). The answer also claimed the equation "was extracted from the page image", which is false; the code warning says the page was not read |
 | D04 (control, no number) | ✅/⚠️ | ⚠️ | Formula right, explanation leaves out the attenuation and the ICI term (varies since Run 25) |
 | GC2 (control, no number) | ✅ | ✅ | |
 
@@ -518,3 +518,67 @@ every set passed.
 Backtest on the 124 answers of Run 38 and the repeats: the three RA6 answers were corrected to
 "reconfigurable intelligent surface", the RA1 answer lost its two copies, D08's "Maximum Likelihood
 (ML)" (not defined on the slides) keeps its warning, and no other answer changed.
+
+## Before Run 39 — unnumbered equations, and a grading correction (2026-11-15)
+
+**Correction.** BS3 was graded ⚠️ in Runs 33, 37 and 38 for "π⁴ where the paper has π^(1/4): the
+text layer lost the exponent". Looking at the page image, the paper itself prints
+ψ(t) = 2/(√3σπ⁴)(1 − (t/σ)²) e^− t/(2σ²): π⁴ is what is printed, not a reading error. The textbook
+Ricker wavelet has π^(1/4) and t², and the grade came from comparing with that instead of with the
+page. The answers in all three runs wrote π⁴ (as printed) and t² in the exponent (not as printed):
+they rebuilt the formula from the scattered characters of the text layer and "corrected" one part
+of it. BS3 stays ⚠️ for those runs, for that reason. The statements about a lost exponent in the
+roadmap, the benchmarks and the code comments are corrected. Lesson: grade a formula against the
+page image, not against the formula one expects.
+
+**Change.** A question that asks for a formula without naming a number ("how is it defined?",
+"write ... in LaTeX", "식", "정의") now gets the displayed unnumbered equations on the first four
+pages of its chosen passages, if the text before, inside or after them shares words with the
+question; at most two are read, like numbered ones (two crops, compared, checked). The detector
+found 8 unnumbered displayed equations in the six papers (4 in the ECG paper, 1 in the MRI paper,
+3 in the RIS tutorial, none in the other three) and none that belong to a numbered equation. Questions that
+name "equations (1) and (2)" or "식 (3)과 (4)" now get both numbers. With two equations read, an
+answer that writes only one of them is no longer flagged.
+
+Four questions on unnumbered equations are added to `evals/documents/equations.toml` (UN1-UN4).
+
+Gate written before Run 39 (the equation set, 18 cases): the 12 ✅ of Run 37 stay ✅ (a drop is
+repeated before it counts); BS3 copies the formula as printed; at least 3 of UN1-UN4 ✅; no
+invented answers. Only questions that ask for a formula in a paper reach the new code, and in the
+other sets those are VA4, SA1 and BS3, whose papers have no unnumbered displayed equation on the
+relevant pages except BS3's, so the other sets are not rerun.
+
+## Run 39 — equation set with unnumbered equations (2026-11-15)
+
+18 cases, code abf92cd + the unnumbered-equation changes. 64.1 minutes: every model call was 3-5
+times slower than in Run 37 (a page description took 40-90 s instead of 10-15 s) on the same
+code path, so the machine was busy, not the code; times in this run are not comparable.
+
+| Case | Run 37 | Run 39 | Notes |
+|---|---|---|---|
+| MR2, MR4, SA8, RA11, PA6, VA4, VA4N, EQ1-EQ4, GC2 | ✅ | ✅ | All twelve kept. RA11 without a false warning. SA8 "disagree" again; the logged difference shows the check misreading the subscript F as missing |
+| D04 | ⚠️ | ⚠️ | Unchanged |
+| BS3 | ⚠️ | ✅ | Both formulas on p.7 read from the image; the answer copies the Ricker wavelet exactly as printed (π⁴, e^(−t/(2σ²))) and says it is uncertain. The third call raised a false alarm ("missing exponent" while quoting the same expression) |
+| UN1 PolyLoss | | ✅ | Answer right, but the reader read the two p.7 formulas (the shared word "function") instead of the PolyLoss one on p.11, and the answer's PolyLoss formula was then flagged as differing from the Ricker wavelet: a false warning |
+| UN2 k-space error | | ❌ | The formula is on p.22, a page no chosen passage was on, so it was never considered; the answer said the exact formula is not given |
+| UN3 CWT | | ✅ | Confirmed and copied |
+| UN4 Endpoints | | ✅ | Confirmed and copied |
+
+**✅ 16, ⚠️ 1, ❌ 1. Gate passed** (the twelve kept, BS3 as printed, 3 of 4 unnumbered, no
+invented answers). Predictions: UN1, UN3, UN4 found as predicted, though UN1 for the wrong reason;
+UN2 failed in the way predicted.
+
+### Fixes after Run 39
+
+| Problem | Fix | Kind |
+|---|---|---|
+| A common word ("function") chose the wrong formula (UN1) | Shared words are weighted by how rare they are among the document's passages | Code |
+| The formula was on a page no chosen passage was on (UN2) | Every displayed equation in the document is a candidate, not only those on the chosen pages; the passage next to a chosen formula is given first | Code |
+| A formula about something else was flagged as a changed reading (UN1) | An unnumbered reading counts as the target of a formula in the answer only when the two look alike (similarity ≥ 0.5); a named equation always does | Code |
+| Two notes read the same for two unnumbered equations on one page | The note names the text before the equation | Code |
+
+Offline check of the selection on the real papers: UN1 now reads PolyLoss first, UN2 reads the
+p.22 formula, UN3, UN4 and BS3 read the same formulas as in Run 39. No question in the other sets
+reaches this code except VA4 and SA1, whose papers have no unnumbered displayed equation.
+Gate for the check run (UN1, UN2, UN3, BS3, written before it): UN1 without a false warning, UN2
+copies the p.22 formula, UN3 and BS3 stay ✅.

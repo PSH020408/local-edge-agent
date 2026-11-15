@@ -618,7 +618,7 @@ Two unseen one-column papers (4D MRI reconstruction, 41 pages; canine ECG classi
 | Run 31 | Long papers | 62.5% |
 | Run 33 | Papers with equations, tables and figures | 74% |
 
-Finding pages is no longer the main problem: the failures are misread equation-heavy passages (two operators swapped, 5 iterations read as 3), a question about Greek symbols that keyword search cannot match, a formula whose exponent the text layer lost, and a chart the vision model did not see. Stage 4 is closed; these move to Stage 5 (formulas). Per-case results are in `evals/documents/cases.md`.
+Finding pages is no longer the main problem: the failures are misread equation-heavy passages (two operators swapped, 5 iterations read as 3), a question about Greek symbols that keyword search cannot match, a formula rebuilt from the text layer instead of read from the page (first recorded as a lost exponent; the paper prints it that way, corrected before Run 39), and a chart the vision model did not see. Stage 4 is closed; these move to Stage 5 (formulas). Per-case results are in `evals/documents/cases.md`.
 
 221 offline tests pass.
 

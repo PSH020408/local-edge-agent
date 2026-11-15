@@ -11,7 +11,7 @@
 #
 # Last results before the formula reader was connected:
 #   MR2 ❌ (S and M swapped), MR4 ❌ (not found), SA8 ❌ (not found), RA11 ❌ (√ρ term missing),
-#   PA6 ✅, VA4 ✅, BS3 ⚠️ (π^4 for π^(1/4)), D04 ✅/⚠️ (explanation varies), GC2 ✅.
+#   PA6 ✅, VA4 ✅, BS3 ⚠️ (formula rebuilt from the text layer; exponent of e changed), D04 ✅/⚠️ (explanation varies), GC2 ✅.
 #
 # Predictions written before the first run:
 # - MR4 and SA8 now find their pages, because the equation's page and the passages around it are
@@ -129,6 +129,48 @@ avoid = []
 pages = [3]
 note = "H(z) = H_I^N(z) H_C^N(z) = (1 − z^{−RM})^N / (1 − z^{−1})^N; N stages, M differential delay, R decimation factor; N = 5, M = 1, R = 16."
 
+# --- Unnumbered equations (added for Run 39) ---
+# The question asks for a formula without a number; the reader looks for displayed equations on the
+# pages of the chosen passages whose surrounding text shares words with the question.
+# Predictions written before Run 39: UN1, UN3 and UN4 are found (their pages hold the passages that
+# match the question); UN2 depends on whether the supplement page p.22 is among the chosen passages.
+
+[[case]]
+id = "UN1"
+file = "pulsenet_canine_ecg.pdf"
+question = "How is the PolyLoss function defined? Write it in LaTeX."
+expect = ["\\epsilon | ϵ | epsilon", "log", "\\hat{y}_i | \\hat{y_i} | \\hat y_i | ŷ", "1 - \\hat | 1-\\hat | 1 − ŷ"]
+avoid = []
+pages = [11]
+note = "PolyLoss = − Σ_{n=1}^{k} y_i * log(ŷ_i) + ϵ * (1 − ŷ_i); best results with epsilon = 2.5 or 3.5."
+
+[[case]]
+id = "UN2"
+file = "mri_4d_reconstruction.pdf"
+question = "How is the held-out k-space error E defined? Write the formula in LaTeX."
+expect = ["\\frac{1}{B} | 1/B", "P_b | P_{b}", "_1", "_2"]
+avoid = []
+pages = [22]
+note = "E = (1/B) Σ_{b=1}^{B} ( ||P_b(Ax − y)||_1 / ||P_b y||_1 + ||P_b(Ax − y)||_2 / ||P_b y||_2 ): relative l1 and l2 errors on held-out k-space blocks."
+
+[[case]]
+id = "UN3"
+file = "pulsenet_canine_ecg.pdf"
+question = "스칼로그램을 만드는 continuous wavelet transform 식을 LaTeX로 써 줘."
+expect = ["\\int | ∫", "\\infty | ∞", "1/2 | \\frac{1}{2} | \\sqrt", "\\Delta | Δ | ∆"]
+avoid = []
+pages = [7]
+note = "X_w(σ, Δ) = 1/|σ|^{1/2} ∫_{−∞}^{+∞} x(t) ψ̄((t − Δ)/σ) dt; σ the dilation, Δ the location parameter, ψ̄ the complex conjugate of the mother wavelet."
+
+[[case]]
+id = "UN4"
+file = "pulsenet_canine_ecg.pdf"
+question = "What formula estimates the number of available endpoints in the deployment?"
+expect = ["node pool count | nodepool count | node\\ pool", "total node resources | total\\ node", "utilisation | utilization", "≈ | \\approx | approx"]
+avoid = []
+pages = [14]
+note = "available endpoints ≈ node pool count * (total node resources / single instance utilisation)."
+
 # --- Controls: no equation number in the question ---
 
 [[case]]
@@ -138,7 +180,7 @@ question = "Which mother wavelet is used for the scalograms, why, and how is it 
 expect = ["Ricker", "Mexican hat", "second derivative", "Gaussian"]
 avoid = []
 pages = [7]
-note = "The Ricker (Mexican hat) wavelet, which somewhat mimics the ECG shape; the second derivative of a Gaussian. The formula is unnumbered, so the text layer is used (π^(1/4) comes out as π4)."
+note = "The Ricker (Mexican hat) wavelet, which somewhat mimics the ECG shape; the second derivative of a Gaussian. The page prints ψ(t) = 2/(√3σπ^4) (1 − (t/σ)^2) e^− t/(2σ^2), with π^4 and t where the textbook formula has π^(1/4) and t^2; an answer should copy the page and may point out the difference."
 
 [[case]]
 id = "D04"

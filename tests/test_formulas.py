@@ -197,6 +197,8 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(equation_refs("수식 (3)과 Eq. (4)를 비교해 줘"), [3, 4])
         self.assertEqual(equation_refs("(31)번 식의 뜻은?"), [31])
         self.assertEqual(equation_refs("What was the error in 2023 (Table 1)?"), [])
+        self.assertEqual(equation_refs("Compare equations (1) and (2)."), [1, 2])
+        self.assertEqual(equation_refs("식 (3)과 (4)를 비교해 줘"), [3, 4])
 
     def test_a_named_equation_is_read_from_the_image_and_given_first(self):
         import json
@@ -238,6 +240,124 @@ class PartTests(unittest.TestCase):
     def test_parts_split_outside_braces_only(self):
         parts = ft.latex_parts(r"y = \sum_{i=1,\dots,N} x_i, \quad A = MFS")
         self.assertEqual(["".join(p) for p in parts], ["y", r"\sum_{i=1,\dots,N}x_i", "A", "MFS"])
+
+
+
+class UnnumberedTests(unittest.TestCase):
+    """Holdout Run 33, BS3: an unnumbered formula was rebuilt from the text layer, not read from the page."""
+
+    PROSE = "The mother wavelet used in this work is the Ricker wavelet, defined as the second derivative of a"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+        make_pdf(self.root / "paper.pdf", [[
+            (self.PROSE, 40, 700), ("Gaussian function, and it is given by", 40, 686),
+            ("psi = c + d * t", 250, 650),
+            ("where c is a constant and the time t is measured in seconds from the start.", 40, 614),
+            ("Figure 2: the score = a + b for each of the classes in the large test set", 40, 560),
+            ("y = Ax + n      (1)", 250, 500),
+        ]])
+        self.document = load_document(self.root / "paper.pdf")
+
+    def test_a_displayed_unnumbered_equation_is_found_with_its_text(self):
+        spots = ft.display_formulas(self.document, 1)
+        self.assertEqual(len(spots), 1)  # not the caption, not the numbered equation
+        spot = spots[0]
+        self.assertEqual(spot.number, 0)
+        self.assertLessEqual(spot.band[0], 652)
+        self.assertGreaterEqual(spot.band[1], 655)
+        self.assertIn("given by", spot.before)
+        self.assertIn("where c is a constant", spot.after)
+        self.assertIn('right after the text "...', spot.target())
+
+    def test_it_is_read_and_named_by_its_text(self):
+        spot = ft.display_formulas(self.document, 1)[0]
+        vision = FakeVision("$$ \\psi = c + d t $$", "$$\\psi=c+dt$$", "COMPLETE")
+        reading = ft.read_spot(vision, self.root, self.document, spot, self.root / "cache")
+        self.assertEqual(reading.status, "confirmed")
+        self.assertIn("given by", vision.calls[0][1])
+        self.assertNotEqual(vision.calls[0][0], vision.calls[1][0])
+        from agent.document_planner import formula_block
+        self.assertIn('[p.1, the unnumbered equation after "...', formula_block(reading))
+
+    def test_the_planner_reads_it_for_a_formula_question(self):
+        from agent import document_planner as dp
+
+        vision = FakeVision("$$ \\psi = c + d t $$", "$$ \\psi = c + d t $$", "COMPLETE")
+        events = []
+        registry = type("R", (), {"vision": vision})()
+        planner = dp.DocumentQuestionPlanner(FakeLLM(), registry, self.root, on_event=events.append)
+        from agent.document_tools import split_passages
+
+        passages = split_passages(self.document)
+        readings, around = planner._read_displayed(self.document, "How is the Ricker wavelet defined?", passages, [1])
+        self.assertEqual([r.latex for r in readings], ["\\psi = c + d t"])
+        self.assertTrue(around)  # the passage next to it is given too
+        self.assertTrue(any("unnumbered equation on p.1" in e for e in events))
+        # no formula words, or no shared words: nothing is read
+        self.assertEqual(planner._read_displayed(self.document, "What is the Ricker wavelet used for?", passages, [1]), ([], []))
+        self.assertEqual(planner._read_displayed(self.document, "How is the loss defined?", passages, [1]), ([], []))
+
+    def test_rare_words_decide_and_other_pages_count(self):
+        # Run 39, UN1: "function" (common) chose the wrong formula over "PolyLoss" (rare);
+        # UN2: the formula was on a page no chosen passage was on.
+        from agent import document_planner as dp
+        from agent.document_tools import load_document, split_passages
+
+        filler = "The function of this part of the system is described in the text of this function section here."
+        make_pdf(self.root / "two.pdf", [
+            [(filler, 40, 740), (filler, 40, 726), ("A Gaussian function is used, given by", 40, 700),
+             ("g = c + d * t", 250, 664), ("where the function g is smooth and the time t is measured in seconds.", 40, 628)],
+            [(filler, 40, 740), ("The best results came with PolyLoss, which is", 40, 700),
+             ("L = e + f * y", 250, 664), ("where y is the predicted probability of each of the classes here.", 40, 628)],
+        ])
+        document = load_document(self.root / "two.pdf")
+        vision = FakeVision("$$ L = e + f y $$", "$$ L = e + f y $$", "COMPLETE", "$$ g = c + d t $$", "$$ g = c + d t $$", "COMPLETE")
+        planner = dp.DocumentQuestionPlanner(FakeLLM(), type("R", (), {"vision": vision})(), self.root)
+        readings, _ = planner._read_displayed(document, "How is the PolyLoss function defined?", split_passages(document), [1])
+        self.assertEqual(readings[0].page, 2)  # the rare word wins, although p.1 holds the chosen passages
+        self.assertEqual(readings[0].latex, "L = e + f y")
+
+    def test_an_answer_about_another_formula_is_not_flagged(self):
+        # Run 39, UN1: the answer wrote PolyLoss; the Ricker reading must not call it "changed".
+        from agent import document_planner as dp
+
+        vision = FakeVision("$$ \\psi = c + d t $$", "$$ \\psi = c + d t $$", "COMPLETE")
+        planner = dp.DocumentQuestionPlanner(FakeLLM(), type("R", (), {"vision": vision})(), self.root)
+        spot = ft.display_formulas(self.document, 1)[0]
+        planner.formulas = [ft.read_spot(vision, self.root, self.document, spot, self.root / "cache")]
+        answer = ("PolyLoss is $$ -\\sum_{n=1}^{k} y_i \\log(\\hat{y}_i) + \\epsilon (1 - \\hat{y}_i) $$ [p.1].")
+        result = planner._finish(self.document, answer, [1], "", "How is PolyLoss defined?", False, 0.0)
+        self.assertNotIn("differs from", result)
+        self.assertIn('The unnumbered equation on p.1 (after "...', result)
+        # a formula that does look like the reading but changes it is still flagged
+        result = planner._finish(self.document, "It is $$ \\psi = c - d t^2 $$ [p.1].", [1], "", "How is psi defined?", False, 0.0)
+        self.assertIn("differs from the unnumbered equation on p.1", result)
+
+
+class TwoEquationTests(unittest.TestCase):
+    def test_an_answer_that_writes_one_of_two_equations_is_not_flagged(self):
+        import json
+        from agent import document_planner as dp
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        make_pdf(root / "paper.pdf", [[("The model is", 72, 700), ("y = Ax + n,      (1)", 250, 660),
+                                       ("and the estimate is", 72, 620), ("z = By - m      (2)", 250, 580)]])
+        vision = FakeVision("$$ y = Ax + n $$", "$$ y = Ax + n $$", "COMPLETE",
+                            "$$ z = By - m $$", "$$ z = By - m $$", "COMPLETE")
+        llm = FakeLLM(json.dumps({"scope": "pages", "pages": [1]}), "Equation (1) is $$ y = Ax + n $$ [p.1].")
+        registry = type("R", (), {"vision": vision})()
+        answer = dp.DocumentQuestionPlanner(llm, registry, root).run("paper.pdf Compare equations (1) and (2).")
+        self.assertNotIn("⚠", answer)
+        llm = FakeLLM(json.dumps({"scope": "pages", "pages": [1]}), "Equation (2) is $$ z = By + m^2 $$ [p.1].")
+        vision.answers = ["$$ y = Ax + n $$", "$$ y = Ax + n $$", "COMPLETE", "$$ z = By - m $$", "$$ z = By - m $$", "COMPLETE"]
+        answer = dp.DocumentQuestionPlanner(llm, registry, root).run("paper.pdf Compare equations (1) and (2).")
+        self.assertIn("differs from equation (2)", answer)
+        self.assertNotIn("differs from equation (1)", answer)
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Callable
 
-from .formula_tools import FormulaReading, compare_latex, is_part_of, read_equation
+from .formula_tools import FormulaReading, compare_latex, display_formulas, is_part_of, read_equation, read_spot
 from .document_tools import (
     DOCUMENT_EXTENSIONS,
     Document,
@@ -39,6 +39,7 @@ from .document_tools import (
     load_document,
     page_image,
     page_references,
+    _tokens,
     rank_pages,
     rank_passages,
     split_passages,
@@ -123,8 +124,10 @@ Return JSON. "scope" is "whole" only when the question needs the whole document:
 The question and the document may be in different languages: match by meaning, not by words."""
 
 # "equation (3)", "Eq. (55)", "식 (55)", "수식 (3)", "(3)번 식"
+_NUMBER_LIST = r"\(\s*\d{1,3}\s*\)(?:\s*(?:,|and|or|&|와|과|및|,?\s*and)\s*\(\s*\d{1,3}\s*\))*"
+# "equation (3)", "equations (1) and (2)", "식 (3)과 (4)", "(31)번 식"
 _EQUATION_REF = re.compile(
-    r"(?:equations?|eqs?\.|eqn\.?|수식|공식|식)\s*\(\s*(\d{1,3})\s*\)|\(\s*(\d{1,3})\s*\)\s*번?\s*(?:식|수식)",
+    rf"(?:equations?|eqs?\.|eqn\.?|수식|공식|식)\s*({_NUMBER_LIST})|({_NUMBER_LIST})\s*번?\s*(?:식|수식)",
     re.IGNORECASE,
 )
 MAX_EQUATIONS = 2
@@ -132,8 +135,25 @@ MAX_EQUATIONS = 2
 
 def equation_refs(question: str) -> list[int]:
     """Equation numbers named in a question, in order, at most MAX_EQUATIONS."""
-    found = [int(a or b) for a, b in _EQUATION_REF.findall(question)]
+    found = [int(n) for a, b in _EQUATION_REF.findall(question) for n in re.findall(r"\d{1,3}", a or b)]
     return list(dict.fromkeys(found))[:MAX_EQUATIONS]
+
+
+# Questions that ask for a formula without naming its number (BS3: "how is it defined?").
+_FORMULA_QUESTION = re.compile(
+    r"\b(?:formulas?|equations?|expressions?|defin(?:e|ed|es|ition)|latex|derived?)\b|수식|공식|정의|표현식|(?<![가-힣])식",
+    re.IGNORECASE)
+_GENERIC_FORMULA_WORDS = {"formula", "formulas", "equation", "equations", "expression", "expressions", "define",
+                          "defined", "defines", "definition", "latex", "derive", "derived", "write", "used", "given"}
+MAX_DISPLAYED = 2  # unnumbered equations read for one question
+
+
+def formula_name(reading: FormulaReading) -> str:
+    """How the context names an equation read from the image."""
+    if reading.number:
+        return f"equation ({reading.number})"
+    tail = " ".join(reading.before.split())[-50:]
+    return f'the unnumbered equation after "...{tail}"' if tail else "an unnumbered equation"
 
 
 def formula_block(reading: FormulaReading) -> str:
@@ -144,7 +164,7 @@ def formula_block(reading: FormulaReading) -> str:
         how = "read twice from the page image; the readings differ slightly, so details are uncertain: " + "; ".join(reading.differences)[:200]
     else:
         how = "read twice from the page image; the readings disagree, so this transcription is uncertain"
-    return f"[p.{reading.page}, equation ({reading.number}), {how}]\n$$ {reading.latex} $$"
+    return f"[p.{reading.page}, {formula_name(reading)}, {how}]\n$$ {reading.latex} $$"
 
 
 ANSWER_PROMPT = """You answer questions about a document using only the pages given below.
@@ -697,6 +717,55 @@ class DocumentQuestionPlanner:
                 readings.append(reading)
         return readings
 
+    def _read_displayed(self, document: Document, question: str, passages: list[Passage],
+                        chosen_pages: list[int]) -> tuple[list[FormulaReading], list[int]]:
+        """Unnumbered equations for a question that asks for a formula without a number, read like
+        numbered ones. Returns the readings and the passages next to them, to be given first.
+
+        Holdout Run 33, BS3: the Ricker wavelet's formula has no number; the answer rebuilt it from
+        the text layer's scattered characters and wrote an exponent the page does not print.
+
+        Every displayed equation in the document is a candidate, scored by the words it shares with
+        the question in the text before, inside and after it, each word weighted by how rare it is
+        among the document's passages. Run 39: counting shared words picked the Ricker wavelet
+        ("Gaussian function") over PolyLoss for "How is the PolyLoss function defined?", and looking
+        only on the chosen pages missed the k-space error formula on p.22, a page no passage chosen
+        for the question was on."""
+        if self.vision is None or document.kind != "pdf" or not _FORMULA_QUESTION.search(question):
+            return [], []
+        import math
+
+        words = set(_tokens(question)) - _GENERIC_FORMULA_WORDS
+        passage_words = [set(_tokens(p.text)) for p in passages]
+        def weight(word: str) -> float:
+            df = sum(word in w for w in passage_words)
+            return math.log((len(passages) + 1) / (df + 1)) + 0.1
+        found = []
+        for page in range(1, len(document.pages) + 1):
+            for spot in display_formulas(document, page):
+                shared = words & set(_tokens(" ".join((spot.before, spot.text, spot.after))))
+                score = sum(weight(w) for w in shared)
+                if score > 0:
+                    found.append((score, page in chosen_pages, -page, spot.band[1], spot))
+        found.sort(key=lambda f: f[:4], reverse=True)
+        found = found[:MAX_DISPLAYED]
+        readings, around = [], []
+        for *_, spot in found:
+            reading = read_spot(self.vision, self.workspace, document, spot, self.cache_dir.parent / "formulas")
+            for image in reading.images[:1]:
+                self.on_tool_call("read_equation", {"path": image, "page": spot.page}, f"{reading.status}: {reading.latex}")
+            self.on_event(f"unnumbered equation on p.{spot.page} after \"...{spot.before[-40:].strip()}\": "
+                          + reading.status.replace("_", " "))
+            if reading.differences and reading.status != "confirmed":
+                self.on_event("  readings differ: " + "; ".join(reading.differences[:4]))
+            if reading.latex:
+                readings.append(reading)
+                near = set(_tokens(spot.before + " " + spot.after))
+                same_page = [p for p in passages if p.page == spot.page]
+                if same_page:
+                    around.append(max(same_page, key=lambda p: len(near & set(_tokens(p.text)))).id)
+        return readings, around
+
     def _with_formulas(self, context: str) -> str:
         """Equations read from the image go first, so the context budget never drops them."""
         blocks = [formula_block(r) for r in self.formulas if r.latex]
@@ -743,6 +812,11 @@ class DocumentQuestionPlanner:
         if self.formulas:
             around = [p.id for r in self.formulas for p in passages
                       if p.page == r.page and re.search(rf"\({r.number}\)", p.text)]
+            chosen = list(dict.fromkeys(around + chosen))
+            extra = [i for i in extra if i not in chosen]
+        if not self.formulas:
+            self.formulas, around = self._read_displayed(
+                document, question, passages, list(dict.fromkeys(by_id[i].page for i in chosen)))
             chosen = list(dict.fromkeys(around + chosen))
             extra = [i for i in extra if i not in chosen]
         pages = list(dict.fromkeys(by_id[i].page for i in chosen))
@@ -833,14 +907,29 @@ class DocumentQuestionPlanner:
         unread = [n for n in cited if n in given and document.page(n).math and n not in read]
         if unread and _EQUATION.search(answer):
             notes.append(t["unread_equations"].format(pages=", ".join(f"p.{n}" for n in unread)))
+        # Run 38+: with two equations read, an answer that writes only one of them is fine. Each
+        # formula in the answer is paired with the reading it is closest to; a reading is flagged
+        # when some formula was aimed at it and none reproduces it (whole, or one side exactly).
+        written = [b for b in re.findall(r"\$\$(.+?)\$\$", answer, re.S) if len(b.strip()) > 5]
+        usable = [r for r in self.formulas if r.latex]
+        aimed = set()
+        for b in written:
+            if usable:
+                best = max(usable, key=lambda r: compare_latex(b, r.latex)[1])
+                # Run 39, UN1: the PolyLoss formula was "aimed" at the Ricker wavelet read for the
+                # same question. An unnumbered reading was found by its words, not named, so a
+                # formula only counts as aimed at it when the two look alike.
+                if best.number or compare_latex(b, best.latex)[1] >= 0.5:
+                    aimed.add(id(best))
         for reading in self.formulas:
-            notes.append(t["formula"].format(number=reading.number, page=reading.page,
+            name = (t["formula_name"].format(number=reading.number) if reading.number
+                    else t["formula_unnumbered_name"].format(page=reading.page, after=" ".join(reading.before.split())[-30:]))
+            notes.append(t["formula"].format(name=name, page=reading.page,
                                              status=t["formula_status"].get(reading.status, reading.status)))
-            written = [b for b in re.findall(r"\$\$(.+?)\$\$", answer, re.S) if len(b.strip()) > 5]
-            if reading.latex and written and not any(
+            if id(reading) in aimed and not any(
                     compare_latex(b, reading.latex)[0] != "different" or is_part_of(b, reading.latex)
                     for b in written):
-                notes.append(t["formula_changed"].format(number=reading.number))
+                notes.append(t["formula_changed"].format(name=name[:1].lower() + name[1:]))
         if wrong:
             notes.append(t["wrong_citation"].format(pages=", ".join(f"p.{n}" for n in wrong)))
         if numbers:
@@ -879,10 +968,12 @@ _TEXT = {
         "not_covered": "(문서에 없다는 답입니다. 확인한 페이지: {pages})",
         "unread_equations": "⚠ 답의 수식은 원본 페이지를 눈으로 확인하지 않고 쓴 것입니다 ({pages}). 원본과 대조가 필요합니다.",
         "misplaced": "⚠ 출처 페이지가 틀렸을 수 있습니다: {pairs}.",
-        "formula": "수식 ({number})은 p.{page}의 이미지에서 두 번 읽었습니다: {status}.",
+        "formula": "{name}은 p.{page}의 이미지에서 두 번 읽었습니다: {status}.",
+        "formula_name": "수식 ({number})",
+        "formula_unnumbered_name": "p.{page}의 번호 없는 수식(\"...{after}\" 다음)",
         "formula_status": {"confirmed": "두 번 일치", "close": "거의 일치 (세부는 불확실)", "disagree": "불일치 (불확실)",
                            "check_failed": "두 번 일치했지만 확인 단계에서 문제 제기 (불확실)", "unreadable": "읽지 못함"},
-        "formula_changed": "⚠ 답에 쓴 수식이 이미지에서 읽은 수식 ({number})과 다릅니다.",
+        "formula_changed": "⚠ 답에 쓴 수식이 이미지에서 읽은 {name}과 다릅니다.",
         "pair": "p.{cited}로 표시한 문장이 p.{found}에 있습니다",
         "expansions": "⚠ 문서에 없는 약어 풀이가 있습니다: {items}. 모델이 덧붙인 것이라 틀릴 수 있습니다.",
         "expansions_fixed": "약어 풀이를 문서의 표현으로 고쳤습니다: {items}.",
@@ -896,12 +987,14 @@ _TEXT = {
         "not_covered": "(The answer says the document does not cover this. Pages checked: {pages})",
         "unread_equations": "⚠ The equations in this answer were written without reading the original page ({pages}). Check them against the document.",
         "misplaced": "⚠ A citation may point to the wrong page: {pairs}.",
-        "formula": "Equation ({number}) was read twice from the image of p.{page}: {status}.",
+        "formula": "{name} was read twice from the image of p.{page}: {status}.",
+        "formula_name": "Equation ({number})",
+        "formula_unnumbered_name": "The unnumbered equation on p.{page} (after \"...{after}\")",
         "formula_status": {"confirmed": "the readings agree", "close": "the readings nearly agree (details uncertain)",
                            "disagree": "the readings disagree (uncertain)",
                            "check_failed": "the readings agree, but the check against the image raised a problem (uncertain)",
                            "unreadable": "not readable"},
-        "formula_changed": "⚠ The equation written in the answer differs from equation ({number}) as read from the image.",
+        "formula_changed": "⚠ The equation written in the answer differs from {name} as read from the image.",
         "pair": "a sentence cited to p.{cited} is on p.{found}",
         "expansions": "⚠ Abbreviations spelled out in a way the document never uses: {items}. The model added these and they may be wrong.",
         "expansions_fixed": "Abbreviations spelled out in a way the document never uses were corrected to the document's: {items}.",

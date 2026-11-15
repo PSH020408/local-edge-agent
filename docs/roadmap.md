@@ -59,7 +59,7 @@ Done when: answers cite the right pages and no content is invented in the test d
 
 Carried over:
 - Stage 3: redesign the accurate profile from the Run 24 findings; a vision holdout on new images
-- Stage 4: keyword search ignores Greek letters and equation numbers (a question about φ, α in equation (3) found nothing); explanations of equation-heavy passages are misread (operators swapped, a count of 5 read as 3); the vision model can miss a chart when asked for "equations and figures"; formulas from the text layer are wrong when it loses exponents (π^(1/4) read as π⁴). These go to Stage 5.
+- Stage 4: keyword search ignores Greek letters and equation numbers (a question about φ, α in equation (3) found nothing); explanations of equation-heavy passages are misread (operators swapped, a count of 5 read as 3); the vision model can miss a chart when asked for "equations and figures"; an unnumbered formula was rebuilt from the text layer's scattered characters instead of read from the page (BS3; first recorded as a lost exponent, corrected in Run 39). These go to Stage 5.
 
 ## Next
 
@@ -78,7 +78,7 @@ Done when: transcriptions match the known LaTeX or are marked uncertain.
 - [x] Rerun after the crop fixes (Run 35: crop2 exact 23 of 28, page 19; a confirmed reading was exact 23 times of 24)
 - [x] Third call that checks the chosen reading against the image; the more complete of two readings is kept (Run 36: exact 26 of 28, no wrong reading; the check's catches still unmeasured)
 - [x] Use the formula reader in document answers: a question naming an equation gets it read twice and checked, given first with the passages around it; Greek letters and equation numbers are search keywords; an answer that changes the equation is flagged (Run 37: equation set ✅ 12 of 14, the 4 earlier failures fixed; Run 38: all five document sets passed their gates)
-- [ ] Unnumbered formulas in answers still come from the text layer or the page description (BS3: π⁴ for π^(1/4)); read them from a crop as well
+- [ ] Unnumbered formulas in answers still come from the text layer or the page description (BS3); read them from a crop as well
 - [ ] Symbol table per document (what each symbol stands for, with its page)
 - [ ] Holdout: new papers, run once
 

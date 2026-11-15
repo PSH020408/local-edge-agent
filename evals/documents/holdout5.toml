@@ -1,0 +1,199 @@
+# Fifth holdout for the document planner, the final check of Stage 5 (formulas): one two-column paper
+# never used during development (a RISC-V vector extension for wireless baseband processing), with
+# 13 numbered equations, unnumbered and inline formulas, tables and figures.
+# Run ONCE, after the code is frozen and committed, and do not change the code because of these results:
+#     python scripts/run_eval_set.py --set documents --cases evals/documents/holdout5.toml --fast
+# The file is kept in evals/documents/files/ (not committed).
+#
+# expect: key facts that a correct answer contains. One entry may list alternatives separated by " | ".
+# avoid:  text that signals a wrong or invented claim.
+# pages:  the pages that hold the answer.
+# The expected equations were written from the page images, as printed.
+#
+# Predictions written before the run (from counting equations and columns only; nothing was fixed):
+# - The equation locator takes (7), (9) and (13) as full-width on a two-column page, so their crops
+#   also hold text of the other column. They may come out as "close" or "disagree".
+# - (7) has an overbrace and a tall bracket and is the least likely to be read exactly.
+# - (1) is two lines of assembly code, not mathematics; the reader may write it as \text{...}.
+# - RV6 names three equations; only two are read (MAX_EQUATIONS = 2), the third comes from the text.
+# - RV8 depends on inline superscripts (2^(N-1), N/2^n) that the text layer may flatten.
+# - RV11 reads one column of Table III, whose rows come out of the text layer run together.
+
+# --- Numbered equations ---
+
+[[case]]
+id = "RV1"
+file = "riscv_vector_baseband.pdf"
+question = "Write equation (12) in LaTeX and explain what VL_i, N_lane and N_tail,i are."
+expect = ["\\lfloor | ⌊ | floor", "AVL", "lane", "N_{tail,i} | N_{tail, i} | N_{\\text{tail},i} | N_{\\mathrm{tail},i} | N_tail"]
+avoid = []
+pages = [7, 8]
+note = "VL_i = ⌊AVL/N_lane⌋ + N_tail,i: the vector length processed by lane i; N_lane is the number of lanes; N_tail,i (equation (13)) adds one element to some lanes for the remainder."
+
+[[case]]
+id = "RV2"
+file = "riscv_vector_baseband.pdf"
+question = "식 (13)을 LaTeX로 쓰고, N_tail,i가 언제 0이고 언제 1인지 설명해 줘."
+expect = ["mod", "\\geq | \\ge | ≥", "< i | <i | \\lt i", "\\begin{cases} | cases | {"]
+avoid = []
+pages = [8]
+note = "As printed: N_tail,i = 0 if (AVL mod N_lane) ≥ i, and 1 if (AVL mod N_lane) < i."
+
+[[case]]
+id = "RV3"
+file = "riscv_vector_baseband.pdf"
+question = "Which instructions do equations (2) and (3) describe, and how do the vector lengths of the source and destination differ?"
+expect = ["scatter", "gather", "longer | 길", "shorter | 짧"]
+avoid = []
+pages = [5]
+note = "(2) vd[vs2[i]] ← vs1[i]: uvp_scatter, often gives longer vectors (no padding of vs1, vs2 to the VL of vd); (3) vd[i] ← vs1[vs2[i]]: uvp_gather, often gives shorter vectors (vd and vs2 cropped)."
+
+[[case]]
+id = "RV4"
+file = "riscv_vector_baseband.pdf"
+question = "Write equation (7) in LaTeX. What does the circled dot denote, and what are a_i and b_i?"
+expect = ["Hadamard", "\\odot | ⊙", "\\sum", "column", "row"]
+avoid = []
+pages = [6]
+note = "C = Σ_i ( [a_i a_i ... a_i] (n copies) ⊙ [b_i; b_i; ...; b_i] (n rows) ); ⊙ is the Hadamard product; a_i is the i-th column vector of A (m×n), b_j the j-th row vector of B (n×k)."
+
+[[case]]
+id = "RV5"
+file = "riscv_vector_baseband.pdf"
+question = "식 (10)과 (11)의 π_A와 π_B는 무엇이고 원소는 어떻게 돼?"
+expect = ["(m - 1)n | (m-1)n | (m − 1)n | (m-1) n | (m - 1) n", "k - 1 | k-1 | k − 1", "column | 열", "row | 행"]
+avoid = []
+pages = [6]
+note = "π_A = [0 n ... (m−1)n]^T, the column vector of the permutation matrix Π_A; π_B = [0 1 ... k−1], the row vector of Π_B."
+
+[[case]]
+id = "RV6"
+file = "riscv_vector_baseband.pdf"
+question = "In equations (4), (5) and (6), what do the three types of f_uvp correspond to, and what do B_r and B_w indicate?"
+expect = ["load", "arithmetic", "asymmetric | complex", "MRF | mask", "read", "write"]
+avoid = []
+pages = [6]
+note = "f_uvp1: load/store operations; f_uvp2: normal arithmetic instructions; f_uvp3: complex/asymmetric instructions. B_r and B_w are optional flags for whether the hardware reads from or writes to the MRFs."
+
+[[case]]
+id = "RV7"
+file = "riscv_vector_baseband.pdf"
+question = "What does equation (1) show, and how does UVP tell the hardware the application vector length?"
+expect = ["addi", "uvp_add", "a0", "AVL"]
+avoid = []
+pages = [4]
+note = "(1) is assembly: addi a0, a0, <immediates> then uvp_add v0, v0, v1, a0. A general-purpose scalar register holds the AVL, its number is encoded in the instruction; add/addi are reused instead of vsetvli."
+
+# --- Inline and unnumbered formulas ---
+
+[[case]]
+id = "RV8"
+file = "riscv_vector_baseband.pdf"
+question = "How many logic register configurations are possible in RVV across LMULs and in UVP, given N physical vector registers?"
+expect = ["N/2 | \\frac{N}{2", "N-1 | N−1 | N - 1 | N − 1", "head | 헤드"]
+avoid = []
+pages = [8]
+note = "RVV: Σ_{n_lmul=0}^{3} N/2^{n_lmul} (only registers V_{k 2^{n_lmul}} can head an RG); UVP: any register can be head or tail, 2^{N−1} configurations."
+
+[[case]]
+id = "RV9"
+file = "riscv_vector_baseband.pdf"
+question = "For fixed-point division with a divisor aQb and a dividend cQd, what is the quotient format, and what does a left shift of s change?"
+expect = ["(a + d + 1)Q(b + c) | (a+d+1)Q(b+c) | (a + d + 1) Q (b + c)", "a + d + 1 − s | a+d+1-s | a + d + 1 - s", "b + c + s | b+c+s", "underflow | 언더플로"]
+avoid = []
+pages = [9]
+note = "Full precision gives (a + d + 1)Q(b + c); a left shift of s on the divisor (vshamt CSR) against underflow gives (a + d + 1 − s)Q(b + c + s): more fractional, less integer precision."
+
+# --- Text, tables and figures ---
+
+[[case]]
+id = "RV10"
+file = "riscv_vector_baseband.pdf"
+question = "UVP의 16-lane 구성은 어떤 공정에서 면적이 얼마이고, 면적 효율은 얼마야?"
+expect = ["40", "0.94", "21.2"]
+avoid = []
+pages = [1, 13]
+note = "SMIC 40nm, 0.94 mm², 21.2 GOPS/mm²."
+
+[[case]]
+id = "RV11"
+file = "riscv_vector_baseband.pdf"
+question = "Table III에서 이 논문 설계(Lane16Reg32)의 동작 주파수, 공급 전압, 최고 정수 에너지 효율은?"
+expect = ["400", "1.1", "250.5"]
+avoid = []
+pages = [11]
+note = "400 MHz, 1.1 V, 250.5 GOPS/W (synthesis results)."
+
+[[case]]
+id = "RV12"
+file = "riscv_vector_baseband.pdf"
+question = "matmul과 FFT에서 Ara 대비 최대 속도 향상은 얼마고, 비교할 때 lane 수를 어떻게 맞췄어?"
+expect = ["3.0", "2.1", "4 | four | 네 배"]
+avoid = []
+pages = [10, 1]
+note = "Up to 3.0x for matmul and 2.1x for FFT; an L-lane Ara is compared with a 4L-lane UVP (equal execution units, wider SRAMs)."
+
+[[case]]
+id = "RV13"
+file = "riscv_vector_baseband.pdf"
+question = "How much does UVP reduce the dynamic instruction count of the 2048-point FFT kernel, and which three improvements explain it?"
+expect = ["38", "1.6", "configuration | config", "spill"]
+avoid = []
+pages = [11]
+note = "To 38% of RVV's count: arithmetic instructions 1.6x fewer (complex multiplication), far fewer configuration instructions (flexible register grouping), fewer spilling/filling instructions (asymmetric gather/scatter, no divide-and-conquer)."
+
+[[case]]
+id = "RV14"
+file = "riscv_vector_baseband.pdf"
+question = "Why does UVP fall short of the maximum frequency of the other designs?"
+expect = ["fan-in", "AOI | and-or-invert", "routing", "EXE"]
+avoid = []
+pages = [11]
+note = "Densely packed arithmetic units in each lane with high fan-in logic (AOI cells) cause local routing congestion; the centralized EXE must connect to all lanes, causing placement contention and routing complexity."
+
+[[case]]
+id = "RV15"
+file = "riscv_vector_baseband.pdf"
+question = "EXE를 제어하는 FSM의 세 단계는 뭐고 각 단계에서 무엇을 해?"
+expect = ["configuration | Config | 설정 | 구성", "data movement | 데이터 이동", "commit | 커밋"]
+avoid = []
+pages = [9]
+note = "Configuration (decode, number of data movements per PE, counters and thresholds), data movement (PEs load indices and elements, interconnect, lockstep write-back), instruction commit (complete signal to the main sequencer)."
+
+[[case]]
+id = "RV16"
+file = "riscv_vector_baseband.pdf"
+question = "In the hazard detection logic, how many concurrent instructions does the instruction monitor manage, and how many more comparators does the approach need than traditional methods?"
+expect = ["8", "2N"]
+avoid = []
+pages = [8]
+note = "N_ID = 8 concurrent instructions; 2N more comparators than traditional data hazard recording."
+
+# --- Not in the document ---
+
+[[case]]
+id = "RH1"
+file = "riscv_vector_baseband.pdf"
+question = "What is UVP's power consumption in milliwatts when built in a 7 nm process?"
+expect = ["not | no "]
+avoid = ["7 nm process, UVP consumes", "mW at 7"]
+pages = []
+note = "Only SMIC 40nm synthesis is reported (energy efficiency 250.5 GOPS/W); no 7 nm result and no power in mW."
+
+[[case]]
+id = "RH2"
+file = "riscv_vector_baseband.pdf"
+question = "논문에서 보고한 UVP의 FPGA 구현 결과(LUT 수)는 얼마야?"
+expect = ["없 | 않 | not"]
+avoid = []
+pages = []
+note = "No FPGA implementation is reported; results are from RTL synthesis (Design Compiler) and simulation (VCS, QuestaSim)."
+
+[[case]]
+id = "RH3"
+file = "riscv_vector_baseband.pdf"
+question = "How much faster does the authors' LLVM compiler make compilation, in percent?"
+expect = ["not | no | beyond | scope"]
+avoid = []
+pages = [5]
+note = "Several LLVM passes were implemented, but the details are beyond the scope of the paper; no compilation speed is reported."
