@@ -209,20 +209,22 @@ EXAM_TASK = (
 # Run 42: asked for "equations and figures", the vision model answered [none] for chart pages of
 # results decks, and charts lost the pairing of numbers and bars. Charts and pictured tables are now
 # asked for as tables, with values read from an axis marked "~".
-VISUAL_PROMPT = """This image is page {n} of a document. Transcribe what a text extraction cannot show, in this order:
+# Run 44: told "this is page n", the vision model spent words on the printed page number ("the page
+# number is 11, not 12"); the prompts no longer give a number.
+VISUAL_PROMPT = """This image is a page of a document. Transcribe what a text extraction cannot show, in this order:
 1. Charts and graphs: for each one, its title and unit, then a Markdown table with one row per category (x-axis label, slice or step) and one column per series, named as in the legend. Copy the value printed on or next to each bar, point or slice. If no value is printed, estimate it from the axis and write it with ~ in front (for example ~48). Keep minus signs. For a waterfall (bridge) chart, list the start, every step with its sign and label, and the end.
 2. Tables drawn as a picture: copy them as Markdown tables, cell by cell, with the numbers exactly as printed.
 3. Equations: each in LaTeX on its own line between $$ and $$, in reading order. Copy the symbols exactly; do not simplify or complete anything. Do not write a LaTeX document: no \\documentclass, \\usepackage or \\begin{{document}}.
 4. Other figures and diagrams: one or two sentences each with the labels written on them; keep every number with the label it belongs to, as "label: value".
 Write only what is on the page. If the page has none of these, write [none]."""
 
-CHART_PROMPT = """This image is page {n} of a document and it holds one or more charts.
+CHART_PROMPT = """This image is a page of a document and it holds one or more charts.
 For each chart write its title and unit, then a Markdown table with one row per category (x-axis label, slice or step) and one column per series, named as in the legend, with the value printed on or next to each bar, point or slice. If no value is printed, estimate it from the axis and write it with ~ in front. Keep minus signs and percentages as printed."""
 
 # Page readings are cached per document; the version changes when these prompts change.
 _PROMPT_VERSION = hashlib.md5((VISUAL_PROMPT + CHART_PROMPT).encode()).hexdigest()[:8]
 
-CAPTION_PROMPT = """This image is page {n} of a document; the page has no text apart from what is in the picture.
+CAPTION_PROMPT = """This image is a page of a document; the page has no text apart from what is in the picture.
 In at most three sentences, say what the page shows and copy the important words, names, labels and numbers written on it. Write only what is on the page."""
 
 

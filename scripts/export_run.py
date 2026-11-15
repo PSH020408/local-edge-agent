@@ -9,6 +9,9 @@ Usage:
         --grades evals/documents/runs/run42_grades.toml --out evals/documents/runs/run42.md
 
 The grades file holds one line per case:  TA1 = ["✅", "reason"]
+
+--withhold D04,GC2 keeps the grade and reason of those cases but not the answer text: answers on
+course material (lecture slides and notes) are not published.
 """
 
 from __future__ import annotations
@@ -47,7 +50,9 @@ def main() -> None:
     parser.add_argument("--grades", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--title", default="")
+    parser.add_argument("--withhold", default="", help="comma-separated case ids whose answer is not printed")
     args = parser.parse_args()
+    withheld = {c.strip() for c in args.withhold.split(",") if c.strip()}
 
     header, cases = parse_report(Path(args.report).read_text(encoding="utf-8"))
     grades = tomllib.loads(Path(args.grades).read_text(encoding="utf-8"))
@@ -72,6 +77,9 @@ def main() -> None:
         grade, reason = grades[ident]
         lines += ["", f"## {ident} — {grade}", "", f"**File:** {case['file']}  ", f"**Question:** {case['question']}  ",
                   f"**Expected:** {case['expected']}  ", f"**Grade:** {grade} {reason}", "", "**Answer:**", ""]
+        if ident in withheld:
+            lines.append("> (Not published: the answer quotes course material.)")
+            continue
         lines += ["> " + line if line.strip() else ">" for line in case["answer"].splitlines()]
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text("\n".join(lines) + "\n", encoding="utf-8")

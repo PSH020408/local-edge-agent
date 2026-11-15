@@ -143,3 +143,69 @@ it stays.
 Gate for Run 44, written before it: ✅ 19 or more of 23; "not in the document" checks 3/3 (TH2 run
 three more times if it fails, before it counts); no computed value flagged as not in the document;
 no case that was ✅ in Run 43 drops to ❌ without repeats confirming it.
+
+## Run 44 — after the Run 43 fixes (2026-11-15)
+
+Code f1f50cb (committed before the run). 26 cases in 57.6 minutes; the page readings were made once
+and cached. Answers and grades: `runs/run44.md`.
+
+| # | Run 43 | Run 44 | Notes |
+|---|---|---|---|
+| TA1-TA5 | ✅ 5 | ✅ 5 | TA4 took 286 s: a note page of the annual report counts as a chart page and was read |
+| TB1 | ⚠️ | ⚠️ | 19.48% (true 19.50%), flagged with 18,274: the operands are in the prose, the result two LaTeX blocks later, in two steps; the explanation looked only in the result's own paragraph |
+| TB2-TB4 | ✅ 3 | ✅ 3 | TB4's total now printed once |
+| TC1-TC4 | ✅ 4 | ✅ 4 | TC3's written 28.95 corrected to 28.94 by code |
+| TD1 | ✅ | ✅ | |
+| TD2 | ❌ | ✅ | The waterfall page is now a chart page and is read for any question: FX +1,283 |
+| TD3 | ❌ | ❌ | Read now, but the wholesale bar was given as 21,823천대 (true 921); the change −11.3% is right |
+| TD4 | ✅ | ✅ | |
+| SC1, SC2, SC5, SC6 | ✅ 4 | ✅ 4 | |
+| SC3 | ❌ | ❌ | The 1,890 total label taken for the Devices segment again |
+| SC4 | ⚠️ | ⚠️ | Unchanged: revenue 1,900 (true 1,890), 266 not called approximate |
+| TH1-TH3 | 2/3 | 3/3 | TH2 says HBM revenue is not given |
+
+**✅ 19, ⚠️ 2, ❌ 2 of 23 (83%, from 78% and 48%); "not in the document" checks 3/3.**
+
+Gate: ✅ 19 or more (met); "not in the document" 3/3 (met); no computed value flagged (not met:
+TB1); no drop from ✅ to ❌ (met). **Gate not passed**, on TB1 alone.
+
+Both remaining ❌ are readings of the vision model (a page with sixteen bar groups; a stacked bar
+whose total label sits above the top segment). The vision model also wrote about the page number it
+was given ("the page number is 11, not 12"): the prompt said "page n" with the PDF page index, which
+is not the number printed on the page.
+
+### Fixes after Run 44
+
+| Problem | Fix | Kind |
+|---|---|---|
+| Operands of written arithmetic in an earlier paragraph, results in two steps (TB1) | The explanation looks for the two operands in the number's paragraph and the four before it, nearest first; an explained result is a known number for the next step (18,274, then 18,274 / 93,736 × 100). A result off by more than the shown precision is corrected only when it is written as a result ("= 19.48") and is within one unit of the last digit or 0.1% of the correct value; a number given as a fact is never changed | Code |
+| The page index given to the vision model | The page reading prompts no longer give a page number; the cached readings are renewed | Prompt |
+
+Backtest of the new explanation on the 15 answers of Runs 33-44 that had numbers flagged: TB1
+corrected in Runs 43 and 44 (19.49 and 19.48 → 19.50) and in Run 42 (19.48 → 19.50), TC3 in Run 42
+(28.95 → 28.94, as before), 13.07, 75.3, 104.7, 266, 1,260 and 510 explained; 1,475 (SC5, invented
+in Run 42), the invented 10,000 (PA8) and the ECG paper's decimal-comma figures unchanged.
+
+### Run 45 plan: tables set and full regression, one command
+
+The prompt change renews every page reading, and the picture-page, chart-page and reading-prompt
+changes of Stage 6 touch the earlier sets, which have not been run since Stage 5. All eight sets run
+in one command. Gates, written before the run:
+
+| Set | Last result | Gate |
+|---|---|---|
+| Tables (23 + 3) | ✅ 19, ⚠️ 2, ❌ 2 (Run 44) | ✅ 19 or more; TB1 ✅ with no flag; no computed value flagged |
+| Development (16 + 3) | ✅ 15, ⚠️ 1 (Run 38) | ✅ 15 or more, no ❌ |
+| First holdout, lectures (21 + 3) | ✅ 19, ⚠️ 2 (Run 38) | ✅ 18 or more, no ❌ |
+| Second holdout, papers (21 + 3) | ✅ 19, ⚠️ 1, ❌ 1 (Run 38) | ✅ 18 or more |
+| Third holdout, long papers (24 + 3) | ✅ 19, ⚠️ 3, ❌ 2 (Run 38) | ✅ 18 or more, SA8 and RA11 ✅ |
+| Fourth holdout, papers with equations (19 + 2) | ✅ 16, ⚠️ 2, ❌ 1 (Run 38) | ✅ 16 or more |
+| Equations (18) | ✅ 16, ⚠️ 1, ❌ 1 (Run 39); UN1 and UN2 fixed (Run 40) | ✅ 16 or more |
+| Fifth holdout, RISC-V paper (16 + 3) | ✅ 11, ⚠️ 5, ❌ 0 (Run 41) | ✅ 11 or more, no ❌ |
+
+Every "not in the document" check must pass. A case that drops from ✅ to ❌ is run three more times
+before it counts.
+
+Predictions: TB1 ✅; TD3 and SC3 stay ❌ (vision readings, not touched); lecture decks unchanged, as
+the chart-page test marks none of their pages; the paper sets unchanged, as chart pages are read only
+in documents that are not papers.

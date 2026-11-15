@@ -675,3 +675,17 @@ One unseen two-column paper with 13 numbered equations, questions written from t
 The share of fully correct answers stays in the same range, but this is the first holdout without a wrong answer: the misses were details in the answer step (an equation's symbol taken from the page description instead of the confirmed reading, a missing phrase about what a vector is). Stage 5 is closed; per-case results are in `evals/documents/cases.md`.
 
 251 offline tests pass.
+
+## Runs 42-44 — Tables, financial statements and charts (2026-11-15)
+
+Stage 6 test set (`evals/documents/tables.toml`): 23 questions and 3 "not in the document" checks on pages cut from a Korean annual report, a US 10-K, two Korean quarterly results decks and a synthetic set of charts and tables with known values. Every run is published with its answers and grades in `evals/documents/runs/`.
+
+| Run | Code | Fully correct | Mostly | Wrong | "Not in the document" | Minutes |
+|---|---|---|---|---|---|---|
+| 42, baseline | `7f75361` (Stage 5) | 11 (48%) | 3 | 9 | 3/3 | 35.6 |
+| 43 | picture pages, charts as tables, code arithmetic and totals | 18 (78%) | 2 | 3 | 2/3 | 50.8 |
+| 44 | `f1f50cb`: chart pages, second chart prompt, reading cache | 19 (83%) | 2 | 2 | 3/3 | 57.6 |
+
+The two wrong answers left in Run 44 are chart readings of the vision model (a page with sixteen bar groups; a stacked bar whose total label was taken for a segment). Per-case results are in `evals/documents/tables.md`.
+
+270 offline tests pass.

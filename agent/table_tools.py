@@ -275,58 +275,88 @@ def _combinations(a: float, b: float) -> list[tuple[str, float]]:
     return out
 
 
+_WINDOW = 4  # paragraphs before the one holding the number
+_RESULT = r"(?:=|≈|≒|\\approx)\s*\$?\s*"  # a number written as the result of arithmetic
+
+
 def explain_numbers(answer: str, unknown: list[str], known: set[str]) -> tuple[str, list[tuple[str, str, str]], list[str]]:
     """Numbers in the answer that are not in the document, explained as one step of arithmetic on
-    two numbers from the same paragraph that are in the document (a + b, a − b, a × b, a / b,
-    a / b × 100, (a − b) / b × 100, a × b / 100).
+    two known numbers (a + b, a − b, a × b, a / b, a / b × 100, (a − b) / b × 100, a × b / 100)
+    from the same paragraph or the few paragraphs before it.
 
     Run 43: the prompt asks for [calc: ...], but answers written with LaTeX did the arithmetic in
     their own words: TB1 wrote 19.49% for (112,010 − 93,736) / 93,736 × 100 = 19.495, and the
     computed values were flagged as invented. A result that matches at the precision shown is a
-    computed value; one that is off only in its last digit is corrected. Returns the answer, the
-    corrections (expression, written, correct) and the numbers explained."""
+    computed value.
+
+    Run 44: TB1 wrote the operands in one paragraph and the result in later LaTeX blocks, in two
+    steps (112,010 − 93,736 = 18,274, then 18,274 / 93,736 × 100 = 19.48). The operands are now
+    looked for in the paragraphs before as well, and an explained result is a known number for the
+    next step. A result off by more than the shown precision is corrected only when the answer
+    writes it as a result ("= 19.48") and it is within one unit of the last digit or 0.1% of the
+    correct value; a number given as a fact (Run 42, SC5: "1,475억") is never changed.
+    Returns the answer, the corrections (expression, written, correct) and the numbers explained."""
     fixes: list[tuple[str, str, str]] = []
     explained: list[str] = []
-    paragraphs = re.split(r"\n\s*\n", answer)
-    for number in unknown:
-        written = number
-        shown = parse_number(written)
-        if shown is None:
-            continue
-        decimals = len(written.split(".")[1]) if "." in written else 0
-        unit = 10 ** -decimals
-        for paragraph in paragraphs:
-            if number not in paragraph.replace(",", ""):
+    known = set(known)
+    pending = list(dict.fromkeys(unknown))
+    progress = True
+    while pending and progress:
+        progress = False
+        paragraphs = re.split(r"\n\s*\n", answer)
+        for number in list(pending):
+            match = _explain(number, paragraphs, known)
+            if match is None:
                 continue
-            operands = []
-            for m in _ANSWER_NUMBER.finditer(paragraph):
+            kind, expression, value, written, decimals = match
+            pending.remove(number)
+            progress = True
+            explained.append(number)
+            if kind == "near":
+                correct = format_number(value, decimals)
+                if "," not in written:
+                    correct = correct.replace(",", "")
+                fixes.append((expression, written, correct))
+                answer = re.sub(rf"(?<![\d.,]){re.escape(written)}(?![\d])", correct, answer)
+                known.add(correct.replace(",", ""))
+                explained.append(correct.replace(",", ""))
+            else:
+                known.add(number)
+    return answer, fixes, explained
+
+
+def _explain(number: str, paragraphs: list[str], known: set[str]):
+    shown = parse_number(number)
+    if shown is None:
+        return None
+    decimals = len(number.split(".")[1]) if "." in number else 0
+    unit = 10 ** -decimals
+    for index, paragraph in enumerate(paragraphs):
+        written = next((m.group(0) for m in _ANSWER_NUMBER.finditer(paragraph)
+                        if m.group(0).replace(",", "") == number), None)
+        if written is None:
+            continue
+        as_result = re.search(_RESULT + re.escape(written) + r"(?![\d])", paragraph) is not None
+        operands: list[float] = []
+        for text in reversed(paragraphs[max(0, index - _WINDOW):index + 1]):  # nearest first
+            for m in _ANSWER_NUMBER.finditer(text):
                 clean = m.group(0).replace(",", "")
                 if clean in known and clean != number:
                     value = parse_number(clean)
                     if value is not None and value not in operands:
                         operands.append(value)
-            match = None
-            for a in operands[:12]:
-                for b in operands[:12]:
-                    if a == b:
-                        continue
-                    for form, value in _combinations(a, b):
-                        if abs(round(value, decimals) - shown) < unit / 2 + 1e-9:
-                            match = ("exact", form.format(a=format_number(a), b=format_number(b)), value)
-                            break
-                        if match is None and abs(value - shown) <= unit * 1.01 and abs(value) >= 1:
-                            match = ("near", form.format(a=format_number(a), b=format_number(b)), value)
-                    if match and match[0] == "exact":
-                        break
-                if match and match[0] == "exact":
-                    break
-            if match:
-                kind, expression, value = match
-                if kind == "near":
-                    correct = format_number(value, decimals).replace(",", "") if "," not in written else format_number(value, decimals)
-                    fixes.append((expression, written, correct))
-                    answer = re.sub(rf"(?<![\d.]){re.escape(written)}(?![\d])", correct, answer)
-                    explained.append(correct.replace(",", ""))
-                explained.append(number)
-                break
-    return answer, fixes, explained
+        near = None
+        for a in operands[:12]:
+            for b in operands[:12]:
+                if a == b:
+                    continue
+                for form, value in _combinations(a, b):
+                    expression = form.format(a=format_number(a), b=format_number(b))
+                    if abs(round(value, decimals) - shown) < unit / 2 + 1e-9:
+                        return "exact", expression, value, written, decimals
+                    if (near is None and as_result and abs(value) >= 1
+                            and abs(value - shown) <= max(unit * 1.01, abs(value) * 0.001)):
+                        near = ("near", expression, value, written, decimals)
+        if near:
+            return near
+    return None

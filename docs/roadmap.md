@@ -8,7 +8,7 @@ Goal: a local agent that helps with graduate-school preparation, exam preparatio
 
 ## How every stage is verified
 
-1. Questions come from case files and run with one command (`scripts/run_eval_set.py`). Every answer is read and graded against the page images and the expected answer written before the run; the grade and its reason are recorded per case. From Stage 6 on, each run is also published with its answers (`scripts/export_run.py` → `evals/documents/runs/`), so every grade can be checked.
+1. Questions come from case files and run with one command (`scripts/run_eval_set.py`). Every answer is read and graded against the page images and the expected answer written before the run; the grade and its reason are recorded per case. From Stage 6 on, each run is also published with its answers (`scripts/export_run.py` → `evals/documents/runs/`), so every grade can be checked; the earlier runs on public papers and the formula runs are published the same way (`evals/documents/runs/`, `evals/formulas/runs/`).
 2. Every observed failure gets a fix and an offline regression test (`python -m unittest discover -s tests`).
    A drop of one case is counted only when repeated runs confirm it (answers vary between runs).
 3. Holdout questions are never used for tuning; fixes are measured on new, unseen questions.

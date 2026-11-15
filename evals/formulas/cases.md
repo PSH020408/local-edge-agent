@@ -8,6 +8,8 @@ Two methods:
 - **page**: the whole page goes to the vision model once, asked for equation (n). This is how Stage 4 read equations.
 - **crop2**: the equation is located by its number in the text layer, read from two crops of different size, and the two readings are compared by code (confirmed / close / disagree).
 
+The full reports, with every reading next to the expected equation, are in `runs/` (`run34.md`, `run35.md`, `run36.md`).
+
 ## Run 34 — first run (2026-11-08)
 
 `python scripts/run_formula_set.py`, 56 readings in 8.2 minutes.

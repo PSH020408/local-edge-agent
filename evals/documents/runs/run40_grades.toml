@@ -1,0 +1,5 @@
+# Grades of Run 40 (check of the Run 39 fixes), one per case: ["grade", "reason"]. See evals/documents/cases.md.
+UN1 = ["✅", "PolyLoss on p.11 read first and confirmed; no warning"]
+UN2 = ["✅", "The p.22 formula found, confirmed and copied exactly"]
+UN3 = ["✅", "Correct"]
+BS3 = ["✅", "Copied as printed"]

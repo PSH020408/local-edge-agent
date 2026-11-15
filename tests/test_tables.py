@@ -165,6 +165,32 @@ class ExplainTests(unittest.TestCase):
         _, fixes, explained = tt.explain_numbers("It was 1,475억 원 [p.8].", ["1475"], {"24.9", "12.9"})
         self.assertEqual((fixes, explained), ([], []))
 
+    def test_operands_in_earlier_paragraphs_and_two_steps(self):
+        # Run 44, TB1: operands in the prose, the result two LaTeX blocks later, in two steps.
+        answer = ("The net income for fiscal 2024 was $93,736 million and $112,010 million in 2025 [p.32].\n\n"
+                  "$$\nG = \\left( \\frac{112,010 - 93,736}{93,736} \\right) \\times 100\n$$\n\n"
+                  "$$\nG = \\left( \\frac{18,274}{93,736} \\right) \\times 100\n$$\n\n"
+                  "$$\nG = 19.48\\%\n$$\n\n"
+                  "Therefore, the net income grew by approximately 19.48% from 2024 to 2025.")
+        fixed, fixes, explained = tt.explain_numbers(answer, ["18274", "19.48"], {"112010", "93736"})
+        self.assertIn("18274", explained)
+        self.assertEqual(fixes[0][1:], ("19.48", "19.50"))
+        self.assertNotIn("19.48", fixed)
+        self.assertIn("approximately 19.50%", fixed)
+
+    def test_a_number_given_as_a_fact_is_never_changed(self):
+        # Close to 1,288 / 1,000 × 1,000 = 1,288, but stated as a fact, not as a result.
+        answer = "Revenue was 1,288 in 2024 and 1,000 in 2023 [p.3].\n\nThe segment had 1,289 stores [p.4]."
+        fixed, fixes, explained = tt.explain_numbers(answer, ["1289"], {"1288", "1000"})
+        self.assertEqual((fixes, explained), ([], []))
+        self.assertIn("1,289 stores", fixed)
+
+    def test_operands_far_away_are_not_used(self):
+        far = "A was 400 and B was 100 [p.1].\n\n" + "Filler.\n\n" * 5 + "The total is = 500."
+        self.assertEqual(tt.explain_numbers(far, ["500"], {"400", "100"})[2], [])
+        near = "A was 400 and B was 100 [p.1].\n\n" + "Filler.\n\n" * 3 + "The total is = 500."
+        self.assertEqual(tt.explain_numbers(near, ["500"], {"400", "100"})[2], ["500"])
+
     def test_sums_keep_the_operands_decimals(self):
         self.assertEqual(tt.fill_calculations("[calc: 89.3 + 15.4]")[0], "89.3 + 15.4 = 104.7")
 

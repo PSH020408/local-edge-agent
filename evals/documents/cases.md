@@ -21,6 +21,11 @@ Scoring, by reading each answer in the report:
 - ❌ wrong, invented content, or a claim the document does not make
 - Hallucination checks: the answer must say the document does not cover it
 
+Published answers: the runs on public research papers and the equation runs are in `runs/` with
+every answer, the expected answer and the grade (`runs/run29.md`, `run31.md`, `run33.md`,
+`run37.md`, `run39.md`, `run40.md`, `run41.md`). Runs on the course materials and lecture slides are
+recorded here with grades and reasons only; their answers quote the materials and are not published.
+
 ## Run 25 — first run (2026-11-06)
 
 `run_eval_set.py --set documents --fast` (8B main model, 14B planner and answers, `qwen3-vl:8b-instruct` for pages). 19 cases in 19.2 minutes.
