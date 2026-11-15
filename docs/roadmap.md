@@ -24,63 +24,43 @@ Goal: a local agent that helps with graduate-school preparation, exam preparatio
 | 2 Math | Engineering calculator (numpy, scipy, sympy), unit-aware calculation (pint), loop guards | 6-10 | 44f5c99 |
 | 3 Vision | Separate vision model as a tool, zoom, two-reading verification, image question planner, one-command test set | 11-24 | b4c74bc |
 | 4 Documents | PDF and PowerPoint reading, page and passage search, vision for equations and figures, cited answers with code checks, four holdouts | 25-33 | c20fa03 |
+| 5 Formulas | Numbered and unnumbered equations located, cropped, read twice and checked against the image; equations given first in document answers; Greek letters and equation numbers searched; answers that change an equation flagged; a fifth holdout | 34-41 | ea2a9b2 |
 
 ## Latest stage
 
-### Stage 4 — Documents (PDF, handouts, papers), complete
+### Stage 5 — Formulas, complete
 
-Built: `agent/document_tools.py` (PDF and PowerPoint text, tables, notes, superscripts, template removal, garbled-equation, vector-figure and numbered-equation detection, passages), `agent/document_planner.py` (page selection for slides, passage search for papers, captions for picture-only pages, vision for equation and figure pages, cited answers, a second search before "not in the document", checks of citations, numbers, acronym expansions and citation pages, whole-document summaries and practice questions merged to fit the context), `read_document` tool, four case files in `evals/documents/`.
+Built: `agent/formula_tools.py` (an equation located by its number in the text layer, or a displayed equation without a number found from its layout; two crops at different margins, two readings by the vision model compared after normalising the LaTeX, the more complete reading kept, a third call that checks the result against the image, a structure check), its use in `agent/document_planner.py` (equations named in a question, or found by rare words for a formula question, are read and given first with the passages next to them; the answer states each reading's status; an answer that changes an equation is flagged; Greek letters and equation numbers are search keywords), `scripts/run_formula_set.py` and 28 hand-made LaTeX transcriptions in `evals/formulas/`, and an equation question set in `evals/documents/equations.toml`.
 
-- [x] First run of the document set (Run 25: ✅ 13, ⚠️ 3, ❌ 0, hallucination checks 3/3; fixes recorded in evals/documents/cases.md)
-- [x] Rerun after the Run 25 fixes (Run 26: ✅ 14, ⚠️ 4, ❌ 0, 3/3, 11 minutes)
-- [x] Holdout: three new lectures, run once (Run 27: ✅ 16, ⚠️ 2, ❌ 3, hallucination checks 3/3)
-- [x] Fix the failure types the holdout found: picture-only pages captioned for the index, superscripts marked from character positions, figure values kept with their labels (see evals/documents/cases.md)
-- [x] Check run of the fixes on the development set and the seen holdout (Run 28: development ✅ 14, ⚠️ 2; seen holdout ✅ 18, ⚠️ 3, ❌ 0)
-- [x] A new holdout after those fixes: two research papers (Run 29: ✅ 8, ⚠️ 2, ❌ 11, 38%; hallucination checks 3/3). Page selection and the context budget fail on dense paper pages
-- [x] Retrieval for papers: search passages (headings, table and figure captions, paragraphs) instead of whole pages; give the model passages, not cut pages
-- [x] Before accepting "not in the document", search the whole text for the question's terms and retry
-- [x] Flag vector figures and numbered equations in PDFs (papers only)
-- [x] Regression check (Run 30): development ✅ 16, first holdout ✅ 19, papers ✅ 19 of 21; the lecture sets did not drop
-- [x] A third holdout (new papers), run once (Run 31: ✅ 15, ⚠️ 5, ❌ 4, 62.5%; hallucination checks 3/3)
-- [x] Fix from Run 31: passages dropped by the budget must not count as checked; index lines that show what a long passage contains; expansions and terms not in the document flagged; faster whole-document tasks for long papers
-- [x] Regression check on all four sets (Run 32): lecture holdout and short papers held; development ✅ 14, one below the gate, traced to run-to-run variation by three repeats of D04 and D06
-- [x] Fourth holdout: two one-column papers with equations, tables and figures, run once (Run 33: ✅ 14, ⚠️ 2, ❌ 3, 74%; hallucination checks 2/2)
+- [x] Formula reader: locate, crop twice, read twice, compare by code; structure check (sympy's LaTeX parser was tried and not used: it drops parts of paper formulas silently)
+- [x] Development set of 28 numbered equations graded by code (Runs 34-36: whole-page reading exact 17-19 of 28, two crops 20 → 23 → 26 of 28)
+- [x] Third call that checks the chosen reading against the image; the more complete of two readings kept (Run 36)
+- [x] Formula reader in document answers (Run 37: equation set ✅ 12 of 14, the four earlier equation failures fixed; Run 38: all five document sets passed their gates)
+- [x] Unnumbered displayed equations, lists of equation numbers, rare-word ranking (Runs 39-40: equation set ✅ 16 of 18, then the two misses fixed)
+- [x] Fifth holdout, one two-column paper, run once (Run 41: ✅ 11, ⚠️ 5, ❌ 0; "not in the document" 3/3; ten confirmed readings, all exact)
+- [ ] Symbol table per document: not built. In every test the symbols were explained correctly from the text next to the equation once the equation and that text were given together; it stays an option if a later test needs it
+- [ ] Dimension checks of formulas: not built (no test needed them)
 
 Holdouts, each run once on unseen documents:
 
-| Run | Documents | Correct | "Not in the document" checks |
-|---|---|---|---|
-| 27 | Three lecture decks | 76% | 3/3 |
-| 29 | Two short papers, before passage search | 38% | 3/3 |
-| 31 | Two long papers | 62.5% | 3/3 |
-| 33 | Two one-column papers with equations, tables and figures | 74% | 2/2 |
+| Run | Documents | Fully correct | Wrong | "Not in the document" checks |
+|---|---|---|---|---|
+| 27 | Three lecture decks | 76% | 3 | 3/3 |
+| 29 | Two short papers, before passage search | 38% | 11 | 3/3 |
+| 31 | Two long papers | 62.5% | 4 | 3/3 |
+| 33 | Two one-column papers with equations, tables and figures | 74% | 3 | 2/2 |
+| 41 | One two-column paper with 13 numbered equations | 69% | 0 | 3/3 |
 
-Done when: answers cite the right pages and no content is invented in the test documents. Met for the "not in the document" checks in every run; the remaining wrong answers are misreadings of the pages, listed below, and the code flags most of them (unread equations, numbers, expansions, citation pages).
+Formula reading: a reading confirmed by two crops was exact 46 times of 47 on the development formulas (Runs 35-36) and 10 times of 10 on the unseen paper (Run 41).
+
+Done when: transcriptions match the known LaTeX or are marked uncertain. Met: every confirmed reading but one matched; the readings that did not were marked "close", "disagree" or "check failed", and the answers said so.
 
 Carried over:
 - Stage 3: redesign the accurate profile from the Run 24 findings; a vision holdout on new images
-- Stage 4: keyword search ignores Greek letters and equation numbers (a question about φ, α in equation (3) found nothing); explanations of equation-heavy passages are misread (operators swapped, a count of 5 read as 3); the vision model can miss a chart when asked for "equations and figures"; an unnumbered formula was rebuilt from the text layer's scattered characters instead of read from the page (BS3; first recorded as a lost exponent, corrected in Run 39). These go to Stage 5.
+- Stage 5: the page description offers its own transcription of an equation that was read, and the answer sometimes takes it (RV1, EQ4); braces that mark a count are read as exponents (RV4); inline formulas come from the text layer (RV8); the third check call raises false alarms and its catches are unmeasured; the model's passage selection sometimes fails to parse
+- Stage 4 items closed by Stage 5: Greek letters and equation numbers are searched, equation-heavy explanations are given with the equation (MR2, MR4 fixed), unnumbered formulas are read from the page (BS3). Still open: the vision model can miss a chart when asked for "equations and figures" (BS9)
 
 ## Next
-
-### Stage 5 — Formulas
-- Vision transcribes a formula to LaTeX, read twice and compared
-- sympy checks that the LaTeX parses; symbols and dimensions are checked where possible
-- The main model explains; any calculation goes to the math tools
-- From Stage 4: search by symbols and equation numbers; a formula in an answer is always read from the page image, never from the text layer; a symbol table per document (what each symbol stands for, with its page)
-
-Verify: formulas from papers with known LaTeX, including the equations in the document test sets.
-Done when: transcriptions match the known LaTeX or are marked uncertain.
-
-- [x] `agent/formula_tools.py`: locate a numbered equation from the text layer, crop it, read it twice, compare by code; structure check (sympy's LaTeX parser was tried and not used: it drops parts of paper formulas silently)
-- [x] Development set of 28 numbered equations with hand-made LaTeX, graded by code: `evals/formulas/`, `scripts/run_formula_set.py`
-- [x] First run, page reading against two crops (Run 34; crop errors and grading fixes recorded in evals/formulas/cases.md)
-- [x] Rerun after the crop fixes (Run 35: crop2 exact 23 of 28, page 19; a confirmed reading was exact 23 times of 24)
-- [x] Third call that checks the chosen reading against the image; the more complete of two readings is kept (Run 36: exact 26 of 28, no wrong reading; the check's catches still unmeasured)
-- [x] Use the formula reader in document answers: a question naming an equation gets it read twice and checked, given first with the passages around it; Greek letters and equation numbers are search keywords; an answer that changes the equation is flagged (Run 37: equation set ✅ 12 of 14, the 4 earlier failures fixed; Run 38: all five document sets passed their gates)
-- [ ] Unnumbered formulas in answers still come from the text layer or the page description (BS3); read them from a crop as well
-- [ ] Symbol table per document (what each symbol stands for, with its page)
-- [ ] Holdout: new papers, run once
 
 ### Stage 6 — Tables, financial statements and graphs
 - Table → CSV; code checks totals and subtotals (for example assets = liabilities + equity)

@@ -71,7 +71,7 @@ pip install -r requirements.txt
 | Math (`agent/math_tools.py`) | `calculator` (engineering functions, lists, sequences, decibels, complex numbers, number bases, physical constants), `convert_units`, `calculate_with_units` (formulas with units) |
 | Vision (`agent/vision_tools.py`) | `describe_image`: a separate vision model answers a question about an image; with a focus, the part is located, cropped and enlarged first. `read_text_in_image`: one piece of text is located and read twice at two zoom levels, and code compares the readings (confirmed / uncertain). Images are converted (GIF, WebP, transparent PNG, rotated phone photos) and fitted to a pixel budget |
 | Documents (`agent/document_tools.py`, `agent/document_planner.py`) | `read_document`: PDF and PowerPoint text page by page, with tables and speaker notes, headers and footers removed. Questions that name a document go to the document planner, which answers with page citations |
-| Formulas (`agent/formula_tools.py`) | `read_equation`, used by the document planner: a numbered equation is located from the text layer, cropped twice, read twice by the vision model, compared by code after normalising the LaTeX, and checked against the image by a third call (confirmed / close / disagree / check failed) |
+| Formulas (`agent/formula_tools.py`) | `read_equation`, used by the document planner: a numbered equation is located from the text layer (a displayed equation without a number from its layout and the words around it), cropped twice, read twice by the vision model, compared by code after normalising the LaTeX, and checked against the image by a third call (confirmed / close / disagree / check failed) |
 | Files (`agent/builtin_tools.py`) | `list_files`, `read_file` |
 
 ## Usage

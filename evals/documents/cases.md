@@ -582,3 +582,74 @@ p.22 formula, UN3, UN4 and BS3 read the same formulas as in Run 39. No question 
 reaches this code except VA4 and SA1, whose papers have no unnumbered displayed equation.
 Gate for the check run (UN1, UN2, UN3, BS3, written before it): UN1 without a false warning, UN2
 copies the p.22 formula, UN3 and BS3 stay ✅.
+
+## Run 40 — check of the Run 39 fixes (2026-11-15)
+
+UN1, UN2, UN3 and BS3, code ea2a9b2 (committed before the run), 14.1 minutes.
+
+| Case | Run 39 | Run 40 | Notes |
+|---|---|---|---|
+| UN1 PolyLoss | ✅ with a false warning | ✅ | PolyLoss on p.11 read first and confirmed; no warning |
+| UN2 k-space error | ❌ | ✅ | The p.22 formula found, confirmed and copied exactly |
+| UN3 CWT | ✅ | ✅ | |
+| BS3 Ricker wavelet | ✅ | ✅ | Copied as printed |
+
+Gate passed (UN1 without a false warning, UN2 copies the p.22 formula, UN3 and BS3 ✅).
+
+## Run 41 — fifth holdout: the final check of Stage 5 (2026-11-15)
+
+One two-column paper never used during development (a RISC-V vector extension for wireless
+baseband processing), 16 questions and 3 "not in the document" checks written from the page images
+before the run (`evals/documents/holdout5.toml`). Code frozen and committed at ea2a9b2, run once,
+51.8 minutes. Nothing was changed because of these results.
+
+| # | Question | Result | Notes |
+|---|---|---|---|
+| RV1 | Equation (12) and its symbols | ⚠️ | Reading confirmed and exact (VL_i = ⌊AVL/N_lane⌋ + N_tail,i), but the answer wrote V_{L_i} from the page description instead of the reading; the code flagged it. Symbols explained correctly |
+| RV2 | Equation (13), when N_tail,i is 0 or 1 | ✅ | Confirmed, copied exactly as printed |
+| RV3 | Equations (2) and (3) | ✅ | Both read; scatter/longer and gather/shorter |
+| RV4 | Equation (7), ⊙, a_i, b_i | ⚠️ | Read as "close": the overbrace part right, but a ^n after the bracket where the page has a brace marking n rows; the answer copied it. Hadamard product and vectors right |
+| RV5 | Equations (10) and (11) | ⚠️ | Both confirmed and exact, elements right; does not say that they are the column and row vectors of Π_A and Π_B |
+| RV6 | Equations (4), (5) and (6) | ✅ | Two read (the limit is two), the third from the text; all right |
+| RV7 | Equation (1) (assembly), how AVL is given | ⚠️ | Readings disagree ("uwp_add" in one); the answer stays vague and does not say that a scalar register holding the AVL is named in the instruction |
+| RV8 | Register configurations in RVV and UVP | ⚠️ | 2^(N−1) right; the RVV sum's upper limit 3 written as "P" (the text layer turns ∑³ into "P^3") |
+| RV9 | Fixed-point quotient format | ✅ | (a + d + 1)Q(b + c) and (a + d + 1 − s)Q(b + c + s) |
+| RV10 | 16-lane area and efficiency | ✅ | 40 nm, 0.94 mm², 21.2 GOPS/mm² |
+| RV11 | Table III values | ✅ | 400 MHz, 1.1 V, 250.5 GOPS/W |
+| RV12 | Speedups and lane matching | ✅ | 3.0x, 2.1x, L-lane Ara against 4L-lane UVP |
+| RV13 | Instruction count of fft2048 | ✅ | 38%, 1.6x, configuration, spilling |
+| RV14 | Why the frequency is lower | ✅ | Found by the second search |
+| RV15 | EXE state machine | ✅ | |
+| RV16 | Hazard detection numbers | ✅ | 8 and 2N, found by the second search |
+| RH1-RH3 | Not in the document | 3/3 | 7 nm power, FPGA LUTs, compile speed: all "not in the document" |
+
+**✅ 11, ⚠️ 5, ❌ 0 (69% fully correct, no wrong answer); "not in the document" checks 3/3.**
+
+Numbered equations read: 12. Ten were confirmed and all ten were exact as printed; (7) was "close"
+and wrong in one place, (1) "disagree". On the development formulas a confirmed reading was exact 46
+times of 47 (Runs 35-36); on this unseen paper 10 of 10.
+
+Predictions written before the run:
+- (7), (9), (13) cropped at full width: (13) was confirmed and exact anyway; (7) was "close" as
+  predicted (the brace was the problem). Partly wrong, in the reader's favour.
+- (1) as code: the readings disagreed, as predicted.
+- RV6, three equations: two read, the answer still right. As predicted.
+- RV8, inline superscripts: 2^(N−1) survived, the sum's limit did not. Partly right.
+- RV11, a table row: answered correctly. Wrong, in the reader's favour.
+
+Compared with the earlier holdouts (76%, 38%, 62.5%, 74% fully correct), the share of fully correct
+answers is in the same range on one paper of 16 questions, but this is the first holdout with no
+wrong answer: every miss was a detail (a symbol's spelling, a bracket, a missing phrase), and the
+code flagged the one that changed an equation. The misses that remain are in the answer step, not in
+reading: the answer took the page description's form of an equation over a confirmed reading (RV1),
+and left out what a symbol is (RV5, RV7).
+
+Carried over (not fixed, Stage 5 is closed):
+- When an equation has been read, the page description also offers its own transcription, and the
+  answer sometimes takes that one (RV1; EQ4 in Run 37). The page description should leave out
+  equations that were read.
+- Braces that mark a count (RV4) are read as exponents.
+- Inline formulas still come from the text layer (RV8).
+- The third check call raises false alarms on correct readings (BS3, SA8); what it catches is still
+  unmeasured.
+- Passage selection by the model still fails to parse now and then; the keyword fallback covers it.

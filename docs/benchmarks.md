@@ -655,3 +655,23 @@ The formula reader is connected to document questions: an equation named by its 
 "Not in the document" checks 14/14. One drop to ❌ (Layer 0 in the RIS tutorial) was ⚠️ in three repeats and is counted as ⚠️. 74.7 minutes for 115 questions. These sets were all used during development, so the scores are upper bounds; a holdout on new papers is the next check.
 
 245 offline tests pass.
+
+## Runs 39-40 — Unnumbered equations (2026-11-15)
+
+Displayed equations without a number are found from their layout and read like numbered ones. Equation set of 18 questions (Run 39): ✅ 16, ⚠️ 1, ❌ 1. The miss (a formula on a page no chosen passage was on) and a false warning were fixed, and a four-question check passed (Run 40). Run 39 took 64 minutes because every model call was 3-5 times slower than usual on the same code path; its times are not comparable.
+
+## Run 41 — Fifth holdout: Stage 5 final check (2026-11-15)
+
+One unseen two-column paper with 13 numbered equations, questions written from the page images before the run, code frozen at `ea2a9b2`, run once: 19 cases in 51.8 minutes. Main questions ✅ 11, ⚠️ 5, ❌ 0 (69% fully correct); "not in the document" checks 3/3. Twelve numbered equations were read: ten confirmed, all exact as printed; one "close" with a brace read as an exponent; one "disagree" (assembly code).
+
+| Holdout | Documents | Fully correct | Wrong |
+|---|---|---|---|
+| Run 27 | Lecture decks | 76% | 3 |
+| Run 29 | Short papers, before passage search | 38% | 11 |
+| Run 31 | Long papers | 62.5% | 4 |
+| Run 33 | Papers with equations, tables and figures | 74% | 3 |
+| Run 41 | Two-column paper with numbered equations | 69% | 0 |
+
+The share of fully correct answers stays in the same range, but this is the first holdout without a wrong answer: the misses were details in the answer step (an equation's symbol taken from the page description instead of the confirmed reading, a missing phrase about what a vector is). Stage 5 is closed; per-case results are in `evals/documents/cases.md`.
+
+251 offline tests pass.
