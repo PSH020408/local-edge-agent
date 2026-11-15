@@ -2,7 +2,7 @@
 #
 # expect: key facts that a correct answer contains. One entry may list alternatives separated by " | ".
 # avoid:  text that signals a hallucination or a wrong claim.
-# The key-fact count is only a quick indicator; every answer is still read and scored by hand.
+# The key-fact count is only a quick indicator; every answer is still read and graded.
 
 [[case]]
 id = "01"

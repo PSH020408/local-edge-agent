@@ -4,7 +4,7 @@ Two methods are compared on the same numbered equations:
     page   the whole page goes to the vision model once, asked for equation (n) (the Stage 4 way)
     crop2  the equation is located by its number, read from two crops, and the readings compared
 
-Each final reading is graded against the hand-made transcription in evals/formulas/cases.toml:
+Each final reading is graded against the reference transcription in evals/formulas/cases.toml:
 exact (equal after normalisation), close (token similarity >= 0.9) or wrong. For crop2 the report
 also shows whether the agreement status (confirmed / close / disagree) predicted the grade.
 

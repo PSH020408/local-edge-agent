@@ -1,5 +1,5 @@
 # Formula reading set (Stage 5, development). Numbered equations from the papers in
-# evals/documents/files, transcribed by hand from the page images.
+# evals/documents/files, transcribed from the page images (not by the vision model).
 #     python scripts/run_formula_set.py            (both methods)
 # expected: the equation as printed, in LaTeX. Graded by code after normalisation (fonts, sizes,
 #   spacing and the equation number removed): exact, close (token similarity >= 0.9) or wrong.

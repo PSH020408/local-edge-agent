@@ -624,7 +624,7 @@ Finding pages is no longer the main problem: the failures are misread equation-h
 
 ## Run 34 — Formula reading, first run (2026-11-08)
 
-Stage 5 starts with 28 numbered equations from six papers, transcribed by hand and graded by code (`scripts/run_formula_set.py`). Whole-page reading (the Stage 4 way): exact 17, close 7, wrong 4, 5.5 s per formula. Two crops located by the equation number and compared: exact 20, close 3, wrong 5, 11.9 s. Three of the "wrong" grades were grading artifacts (`\max` against `max`, `...` against `\dots`); the real crop errors came from a column test that took a one-column page for two columns and from bands too short for equations of two or three lines. Two readings that agree were wrong twice, both times because both came from the same bad crop: agreement checks the reading, not the crop. Fixes and per-case notes are in `evals/formulas/cases.md`.
+Stage 5 starts with 28 numbered equations from six papers, transcribed from the page images and graded by code (`scripts/run_formula_set.py`). Whole-page reading (the Stage 4 way): exact 17, close 7, wrong 4, 5.5 s per formula. Two crops located by the equation number and compared: exact 20, close 3, wrong 5, 11.9 s. Three of the "wrong" grades were grading artifacts (`\max` against `max`, `...` against `\dots`); the real crop errors came from a column test that took a one-column page for two columns and from bands too short for equations of two or three lines. Two readings that agree were wrong twice, both times because both came from the same bad crop: agreement checks the reading, not the crop. Fixes and per-case notes are in `evals/formulas/cases.md`.
 
 233 offline tests pass.
 

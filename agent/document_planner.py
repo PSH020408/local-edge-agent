@@ -24,6 +24,7 @@ pages cut to fit the context lose what is at the bottom of each page.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -31,6 +32,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Callable
 
+from .table_tools import check_arithmetic, describe_checks, explain_numbers, fill_calculations, statement_checks
 from .formula_tools import FormulaReading, compare_latex, display_formulas, is_part_of, read_equation, read_spot
 from .document_tools import (
     DOCUMENT_EXTENSIONS,
@@ -40,6 +42,7 @@ from .document_tools import (
     page_image,
     page_references,
     _tokens,
+    is_chart_page,
     rank_pages,
     rank_passages,
     split_passages,
@@ -79,7 +82,9 @@ _CITATION = re.compile(
     r"\[p\.?\s*(\d{1,4})(?:\s*[,–-]\s*(?:p\.?\s*)?(\d{1,4}))*(?:,\s*(?:read by|picture described by) the vision model)?\]",
     re.IGNORECASE,
 )
-_NUMBER = re.compile(r"(?<![0-9A-Za-z_.])\d+(?:[.,]\d+)?(?![0-9A-Za-z_])")  # Korean counters (102개) may follow
+# Korean counters (102개) and units (백만원) may follow. Run 42: "37,792,969" has two thousands
+# separators and was split into 37792 and 969.
+_NUMBER = re.compile(r"(?<![0-9A-Za-z_.])(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?)(?![0-9A-Za-z_])")
 _CONTEXT_CHARS = 10000   # page text given to the model for one answer
 _CHUNK_CHARS = 6000      # page text per chunk for whole-document tasks
 _PAPER_CHUNK_CHARS = 12000  # papers: fewer, larger parts (Run 31: 26 parts took 15 minutes)
@@ -178,7 +183,11 @@ Rules:
 - When an equation is given as read from the page image, copy it exactly as given, and say that it is uncertain if the block says so. Take the meaning of its symbols from the text next to it ("where ... is ...").
 - Keep the document's technical terms as they are, and answer in {language}.
 - Do not spell out an abbreviation unless the pages spell it out; otherwise keep the abbreviation as it is.
-- Do not add facts, numbers or examples that are not in the pages."""
+- Do not add facts, numbers or examples that are not in the pages.
+- Do not do arithmetic yourself. For every sum, difference, ratio, percentage or growth rate, write the calculation as [calc: expression] with the numbers from the pages, for example [calc: (112010 - 93736) / 93736 * 100]%; it is computed by code and the result is put in its place.
+- Values written with ~ were estimated from a chart's axis: give them as approximate.
+- Give a number only for the exact item asked. If the pages give a figure only for a larger group that contains it (a whole division when one product in it is asked) or for a different series of the same chart, say that the asked figure is not given, and do not present the other figure as it.
+- Lines marked "checked by code" are exact checks of the page's totals; use them, and say so when a total does not match."""
 
 MAP_PROMPT = """Below are some pages of a document. List at most 8 key points of these pages: definitions, steps, results, and important equations or numbers, one short line each, in the language of the pages.
 Cite the page as [p.N] after every point. Use only these pages."""
@@ -197,11 +206,21 @@ EXAM_TASK = (
     "and the page it comes from as [p.N]. Mix definitions, explanations and, where the points allow, calculations."
 )
 
-VISUAL_PROMPT = """This image is page {n} of a document.
-1. Transcribe every equation on it in LaTeX, each on its own line between $$ and $$, in reading order. Copy the symbols exactly; do not simplify or complete anything. Do not write a LaTeX document: no \\documentclass, \\usepackage or \\begin{{document}}.
-2. Describe each figure, diagram, table or chart in one or two sentences: what it shows and the labels written on it.
-3. When a figure shows numbers, vectors or values, copy each one together with the label it belongs to, as "label: value" (for example "Q3 revenue: 4.2"). Never list values without their labels.
-Write only what is on the page. If there are no equations and no figures, write [none]."""
+# Run 42: asked for "equations and figures", the vision model answered [none] for chart pages of
+# results decks, and charts lost the pairing of numbers and bars. Charts and pictured tables are now
+# asked for as tables, with values read from an axis marked "~".
+VISUAL_PROMPT = """This image is page {n} of a document. Transcribe what a text extraction cannot show, in this order:
+1. Charts and graphs: for each one, its title and unit, then a Markdown table with one row per category (x-axis label, slice or step) and one column per series, named as in the legend. Copy the value printed on or next to each bar, point or slice. If no value is printed, estimate it from the axis and write it with ~ in front (for example ~48). Keep minus signs. For a waterfall (bridge) chart, list the start, every step with its sign and label, and the end.
+2. Tables drawn as a picture: copy them as Markdown tables, cell by cell, with the numbers exactly as printed.
+3. Equations: each in LaTeX on its own line between $$ and $$, in reading order. Copy the symbols exactly; do not simplify or complete anything. Do not write a LaTeX document: no \\documentclass, \\usepackage or \\begin{{document}}.
+4. Other figures and diagrams: one or two sentences each with the labels written on them; keep every number with the label it belongs to, as "label: value".
+Write only what is on the page. If the page has none of these, write [none]."""
+
+CHART_PROMPT = """This image is page {n} of a document and it holds one or more charts.
+For each chart write its title and unit, then a Markdown table with one row per category (x-axis label, slice or step) and one column per series, named as in the legend, with the value printed on or next to each bar, point or slice. If no value is printed, estimate it from the axis and write it with ~ in front. Keep minus signs and percentages as printed."""
+
+# Page readings are cached per document; the version changes when these prompts change.
+_PROMPT_VERSION = hashlib.md5((VISUAL_PROMPT + CHART_PROMPT).encode()).hexdigest()[:8]
 
 CAPTION_PROMPT = """This image is page {n} of a document; the page has no text apart from what is in the picture.
 In at most three sentences, say what the page shows and copy the important words, names, labels and numbers written on it. Write only what is on the page."""
@@ -602,6 +621,12 @@ class DocumentQuestionPlanner:
         text (D01 spent 20 s on p.7 for a list of synchronization types). Equations are now
         read only when the question asks about an equation or a figure; a figure-only page
         (almost no text) is always read.
+
+        Run 43 (TD2): a question about a waterfall chart that did not say "chart" left the page
+        unread, and the answer took the wrong bar. In slides and reports (not papers) a figure page
+        whose text is mostly numbers is a chart page and is read for any question. Readings are
+        cached per page, and a chart page read as [none] is asked once more for its charts only
+        (TD3: a page of sixteen bar groups came back as [none]).
         """
         if self.vision is None:
             return {}
@@ -610,21 +635,60 @@ class DocumentQuestionPlanner:
         for n in numbers:
             page = document.page(n)
             figure_only = page.images > 0 and len(page.text) < 400
-            if figure_only or (visual and (page.math or page.images or page.drawings)):
+            chart = not document.dense and is_chart_page(page)
+            if figure_only or chart or (visual and (page.math or page.images or page.drawings)):
                 wanted.append(n)
         wanted = wanted[:MAX_PAPER_VISUAL_PAGES if document.dense else MAX_VISUAL_PAGES]
+        stored, cache, signature = self._load_notes(document)
         notes = {}
         for number in wanted:
+            if str(number) in stored:
+                if stored[str(number)]:
+                    notes[number] = stored[str(number)]
+                continue
             image = page_image(document, number, self.cache_dir)
             if image is None:
                 continue
             relative = str(image.resolve().relative_to(self.workspace))
             result = self.vision.describe(relative, VISUAL_PROMPT.format(n=number))
             self.on_tool_call("describe_image", {"path": relative, "question": f"equations and figures on p.{number}"}, result["text"])
-            answer = clean_transcription(result.get("answer", ""))
-            if result.get("status") == "ok" and answer and answer != "[none]":
+            answer = clean_transcription(result.get("answer", "")) if result.get("status") == "ok" else ""
+            page = document.page(number)
+            if answer in ("", "[none]") and (is_chart_page(page) or (page.images > 0 and len(page.text) < 400)):
+                result = self.vision.describe(relative, CHART_PROMPT.format(n=number))
+                self.on_tool_call("describe_image", {"path": relative, "question": f"charts on p.{number}"}, result["text"])
+                answer = clean_transcription(result.get("answer", "")) if result.get("status") == "ok" else ""
+            if result.get("status") == "ok":
+                stored[str(number)] = answer if answer != "[none]" else ""
+            if answer and answer != "[none]":
                 notes[number] = answer
+        self._save_notes(cache, signature, stored)
         return notes
+
+    def _load_notes(self, document: Document) -> tuple[dict[str, str], Path, str]:
+        try:
+            stat = document.path.stat()
+            signature = f"{stat.st_size}:{int(stat.st_mtime)}:{_PROMPT_VERSION}"
+        except OSError:
+            signature = ""
+        cache = self.cache_dir / f"{document.path.stem}_notes.json"
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            if signature and data.get("signature") == signature:
+                return dict(data.get("pages", {})), cache, signature
+        except (OSError, ValueError, AttributeError):
+            pass
+        return {}, cache, signature
+
+    @staticmethod
+    def _save_notes(cache: Path, signature: str, stored: dict[str, str]) -> None:
+        if not signature or not stored:
+            return
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(json.dumps({"signature": signature, "pages": stored}, ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError:
+            pass
 
     def _context(self, document: Document, numbers: list[int], notes: dict[int, str], budget: int) -> str:
         per_page = max(800, budget // max(1, len(numbers)))
@@ -642,8 +706,33 @@ class DocumentQuestionPlanner:
                 block += f"\n[p.{number}, read by the vision model]\n{notes[number]}"
             elif number in self.captions:
                 block += f"\n[p.{number}, picture described by the vision model]\n{self.captions[number]}"
+            elif len(page.text.strip()) < 20:
+                # Run 42, SC5: a picture page that was not read gave the model nothing, and it
+                # answered with a business unit and a number it made up.
+                block += "\n(This page has no text, and its picture was not read. Nothing on it can be used.)"
             blocks.append(block)
         return "\n\n".join(blocks)
+
+    def _add_checks(self, document: Document, context: str, pages: list[int], notes: dict[int, str]) -> str:
+        """Totals of the statements on the given pages, recomputed by code (agent/table_tools.py).
+
+        Each page is checked alone, and each pair of consecutive pages together, since a balance
+        sheet often runs over two pages (assets on one, liabilities and equity on the next)."""
+        lines: list[str] = []
+        seen: set[tuple[str, int]] = set()
+        groups = [[n] for n in pages] + [[n, n + 1] for n in pages if n + 1 in pages]
+        for group in groups:
+            text = "\n".join(document.page(n).text + "\n" + notes.get(n, "") for n in group if document.page(n))
+            checks = [c for c in statement_checks(text) if (c.name, c.column) not in seen]
+            for check in checks:
+                seen.add((check.name, check.column))
+            if checks:
+                lines.append(describe_checks(checks, group[-1] if len(group) == 1 else None))
+        if lines:
+            self.on_event(f"totals checked by code: {sum(l.count(chr(10)) + 1 for l in lines)}, "
+                          f"{sum(l.count('DOES NOT MATCH') for l in lines)} not matching")
+            return context + "\n\n" + "\n".join(lines)
+        return context
 
     def _ask(self, system: str, user: str) -> str:
         response = self.llm.chat([{"role": "system", "content": system}, {"role": "user", "content": user}])
@@ -679,7 +768,7 @@ class DocumentQuestionPlanner:
         else:
             self.on_event("pages: " + ", ".join(f"p.{n}" for n in numbers))
             notes = self._look(document, numbers, user_question)
-            context = self._context(document, numbers, notes, _CONTEXT_CHARS)
+            context = self._add_checks(document, self._context(document, numbers, notes, _CONTEXT_CHARS), numbers, notes)
             answer = self._answer(context, user_question, language)
             given, sources = numbers, self._with_formulas(context)
             if self._needs_search(answer) and not page_references(user_question, document):
@@ -689,7 +778,7 @@ class DocumentQuestionPlanner:
                     more_notes = self._look(document, more, user_question)
                     notes.update(more_notes)
                     given = more + numbers
-                    context = self._context(document, given, notes, _CONTEXT_CHARS)
+                    context = self._add_checks(document, self._context(document, given, notes, _CONTEXT_CHARS), given, notes)
                     answer = self._answer(context, user_question, language)
                     sources = self._with_formulas(context)
         return self._finish(document, answer, given, sources, user_question, korean, start, notes)
@@ -827,6 +916,7 @@ class DocumentQuestionPlanner:
         )
         notes = self._look(document, pages, question)
         context, given, kept = self._passage_context(by_id, chosen + extra, notes, document, _CONTEXT_CHARS)
+        context = self._add_checks(document, context, given, notes)
         dropped = [i for i in chosen + extra if i not in kept]
         if dropped:
             self.on_event(f"{len(dropped)} passage(s) did not fit and were left out")
@@ -845,6 +935,7 @@ class DocumentQuestionPlanner:
                 new_pages = [n for n in dict.fromkeys(by_id[i].page for i in more) if n not in notes]
                 notes.update(self._look(document, new_pages, question))
                 context, given, kept = self._passage_context(by_id, more + kept, notes, document, _CONTEXT_CHARS)
+                context = self._add_checks(document, context, given, notes)
                 answer = self._answer(context, question, language)
         return self._finish(document, answer, given, self._with_formulas(context), question, korean, start, notes)
 
@@ -890,9 +981,20 @@ class DocumentQuestionPlanner:
             read[reading.page] = read.get(reading.page, "") + "\n" + formula_block(reading)
         answer, repeated = drop_repeated_paragraphs(answer)
         answer, corrected, expansions = repair_expansions(answer, "\n".join(p.text for p in document.pages))
+        # Run 42: arithmetic done by the answer model was off in the last digit, and every computed
+        # value was then flagged as not in the document. Results computed or checked by code count
+        # as known numbers.
+        answer, computed = fill_calculations(answer)
+        answer, arithmetic_fixes, checked_results = check_arithmetic(answer)
         cited = cited_pages(answer)
         wrong = [n for n in cited if n not in given]
-        numbers = unsupported_numbers(answer, sources, question)
+        known_text = sources + "\n" + " ".join(computed + checked_results + ["100", "1000"])
+        numbers = unsupported_numbers(answer, known_text, question)
+        if numbers:
+            known = {n.replace(",", "") for n in _NUMBER.findall(known_text + " " + question)}
+            answer, more_fixes, explained = explain_numbers(answer, numbers, known)
+            arithmetic_fixes += more_fixes
+            numbers = [n for n in numbers if n not in explained]
         page_texts = {n: document.page(n).text + "\n" + read.get(n, "") for n in given if document.page(n)}
         misplaced = misplaced_citations(answer, page_texts)
         not_covered = not cited and bool(_NOT_COVERED.search(answer))
@@ -938,6 +1040,10 @@ class DocumentQuestionPlanner:
             notes.append(t["misplaced"].format(pairs=", ".join(t["pair"].format(cited=a, found=b) for a, b in misplaced)))
         if expansions:
             notes.append(t["expansions"].format(items=", ".join(expansions)))
+        if arithmetic_fixes:
+            notes.append(t["arithmetic_fixed"].format(items=", ".join(f"{e} = {w} → {c}" for e, w, c in arithmetic_fixes)))
+        if computed:
+            notes.append(t["computed"].format(count=len(computed)))
         if corrected:
             notes.append(t["expansions_fixed"].format(items=", ".join(
                 f"{a}: {old} → {new or t['removed']}" for a, old, new in corrected)))
@@ -977,6 +1083,8 @@ _TEXT = {
         "pair": "p.{cited}로 표시한 문장이 p.{found}에 있습니다",
         "expansions": "⚠ 문서에 없는 약어 풀이가 있습니다: {items}. 모델이 덧붙인 것이라 틀릴 수 있습니다.",
         "expansions_fixed": "약어 풀이를 문서의 표현으로 고쳤습니다: {items}.",
+        "arithmetic_fixed": "답에 있던 계산 결과를 코드로 다시 계산해 고쳤습니다: {items}.",
+        "computed": "계산 {count}개는 코드로 했습니다.",
         "removed": "(삭제, 문서에 정의 없음)",
     },
     "en": {
@@ -998,6 +1106,8 @@ _TEXT = {
         "pair": "a sentence cited to p.{cited} is on p.{found}",
         "expansions": "⚠ Abbreviations spelled out in a way the document never uses: {items}. The model added these and they may be wrong.",
         "expansions_fixed": "Abbreviations spelled out in a way the document never uses were corrected to the document's: {items}.",
+        "arithmetic_fixed": "A calculation in the answer was redone by code and corrected: {items}.",
+        "computed": "{count} calculation(s) were done by code.",
         "removed": "(removed; the document gives no definition)",
     },
 }

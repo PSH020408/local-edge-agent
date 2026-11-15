@@ -8,7 +8,7 @@ Goal: a local agent that helps with graduate-school preparation, exam preparatio
 
 ## How every stage is verified
 
-1. Questions come from case files and run with one command (`scripts/run_eval_set.py`); every answer is read and graded by hand.
+1. Questions come from case files and run with one command (`scripts/run_eval_set.py`). Every answer is read and graded against the page images and the expected answer written before the run; the grade and its reason are recorded per case. From Stage 6 on, each run is also published with its answers (`scripts/export_run.py` → `evals/documents/runs/`), so every grade can be checked.
 2. Every observed failure gets a fix and an offline regression test (`python -m unittest discover -s tests`).
    A drop of one case is counted only when repeated runs confirm it (answers vary between runs).
 3. Holdout questions are never used for tuning; fixes are measured on new, unseen questions.
@@ -30,7 +30,7 @@ Goal: a local agent that helps with graduate-school preparation, exam preparatio
 
 ### Stage 5 — Formulas, complete
 
-Built: `agent/formula_tools.py` (an equation located by its number in the text layer, or a displayed equation without a number found from its layout; two crops at different margins, two readings by the vision model compared after normalising the LaTeX, the more complete reading kept, a third call that checks the result against the image, a structure check), its use in `agent/document_planner.py` (equations named in a question, or found by rare words for a formula question, are read and given first with the passages next to them; the answer states each reading's status; an answer that changes an equation is flagged; Greek letters and equation numbers are search keywords), `scripts/run_formula_set.py` and 28 hand-made LaTeX transcriptions in `evals/formulas/`, and an equation question set in `evals/documents/equations.toml`.
+Built: `agent/formula_tools.py` (an equation located by its number in the text layer, or a displayed equation without a number found from its layout; two crops at different margins, two readings by the vision model compared after normalising the LaTeX, the more complete reading kept, a third call that checks the result against the image, a structure check), its use in `agent/document_planner.py` (equations named in a question, or found by rare words for a formula question, are read and given first with the passages next to them; the answer states each reading's status; an answer that changes an equation is flagged; Greek letters and equation numbers are search keywords), `scripts/run_formula_set.py` and 28 reference LaTeX transcriptions written from the page images in `evals/formulas/`, and an equation question set in `evals/documents/equations.toml`.
 
 - [x] Formula reader: locate, crop twice, read twice, compare by code; structure check (sympy's LaTeX parser was tried and not used: it drops parts of paper formulas silently)
 - [x] Development set of 28 numbered equations graded by code (Runs 34-36: whole-page reading exact 17-19 of 28, two crops 20 → 23 → 26 of 28)
@@ -70,6 +70,15 @@ Carried over:
 Verify: a public financial statement with known figures, a chart with known data.
 Done when: extracted figures pass the code checks and chart values are never presented as exact.
 
+- [x] Development set: 24 pages of a Korean annual report, a US 10-K, two Korean results decks, and synthetic charts and tables with known values (`evals/documents/tables.toml`, `scripts/make_chart_set.py`)
+- [x] Baseline on the Stage 5 code (Run 42: ✅ 11, ⚠️ 3, ❌ 9 of 23, 48%; "not in the document" 3/3)
+- [x] Fixes for the four causes: picture pages always read; charts and pictured tables transcribed as tables, with values read from an axis marked ~; statement totals checked by code (`agent/table_tools.py`); calculations done by code ([calc: ...]) and written arithmetic recomputed; numbers with several thousands separators kept whole
+- [x] Rerun of the development set (Run 43: ✅ 18, ⚠️ 2, ❌ 3 of 23, 78%; one "not in the document" check failed; gate not passed)
+- [x] Fixes from Run 43: computed numbers explained and rounding slips corrected in any format; chart pages read for any question; charts read as [none] asked again; page readings cached; a related figure no longer given for the asked item
+- [ ] Rerun of the development set (Run 44)
+- [ ] Regression check of the earlier document sets
+- [ ] Holdout, run once: a Korean half-year report, a second 10-K, two more results decks, a paper with tables
+
 ### Stage 7 — Visual reasoning experiment
 - Thinking variant of the vision model (`qwen3-vl:8b`) vs the instruct variant on counting, charts, sheet music and fine details (cases 02, 06, 08, 11)
 - Thinking turned on for the planner
@@ -84,7 +93,7 @@ Done when: both modes are measured and the defaults are chosen from the numbers.
 - Memory management: language and vision models are unloaded while painting and loaded again afterwards
 - Speed and memory measured per model and size
 
-Verify: speed and peak memory per model; prompt adherence checked by hand.
+Verify: speed and peak memory per model; prompt adherence checked by reading the outputs.
 Done when: both modes work from the agent and the speed table is recorded.
 
 ### Stage 9 — See, paint, check

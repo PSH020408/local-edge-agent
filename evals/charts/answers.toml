@@ -1,0 +1,82 @@
+# True values of the synthetic chart and table set, written by scripts/make_chart_set.py.
+# Page n of charts_vector.pdf and charts_raster.pdf is item n below (C01-C08, then T01-T02).
+
+[[item]]
+page = 1
+id = "C01"
+kind = "bar, values labelled"
+title = "Northwind revenue by quarter (USD million)"
+x = ["Q1 '25", "Q2 '25", "Q3 '25", "Q4 '25", "Q1 '26", "Q2 '26"]
+y = [412.0, 438.5, 401.2, 476.9, 455.3, 503.8]
+
+[[item]]
+page = 2
+id = "C02"
+kind = "bar, no value labels"
+title = "Northwind operating income by quarter (USD million)"
+x = ["Q1 '25", "Q2 '25", "Q3 '25", "Q4 '25", "Q1 '26", "Q2 '26"]
+y = [62.0, 71.0, 48.0, 88.0, 79.0, 95.0]
+
+[[item]]
+page = 3
+id = "C03"
+kind = "line, no value labels"
+title = "Units shipped per month, 2025 (thousand units)"
+x = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+y = [120, 135, 128, 150, 162, 158, 171, 180, 176, 195, 210, 232]
+
+[[item]]
+page = 4
+id = "C04"
+kind = "grouped bar, values labelled"
+title = "Revenue by region (USD million)"
+x = ["Americas", "Europe", "Asia", "Other"]
+series = { "2024" = [820, 540, 610, 95], "2025" = [905, 515, 702, 110] }
+
+[[item]]
+page = 5
+id = "C05"
+kind = "stacked bar, totals labelled only"
+title = "Revenue by segment (USD million)"
+x = ["2022", "2023", "2024", "2025"]
+series = { "Devices" = [900, 950, 1010, 1060], "Cloud" = [300, 420, 560, 720], "Licensing" = [150, 140, 125, 110] }
+
+[[item]]
+page = 6
+id = "C06"
+kind = "pie, percentages labelled"
+title = "2025 revenue mix"
+labels = ["Devices", "Cloud", "Licensing", "Services"]
+y = [45.5, 30.9, 4.7, 18.9]
+
+[[item]]
+page = 7
+id = "C07"
+kind = "bars on the left axis, line on the right axis"
+title = "Revenue (bars, USD million) and operating margin (line, %)"
+x = ["2021", "2022", "2023", "2024", "2025"]
+y = [1210, 1350, 1510, 1695, 1890]
+y2 = [8.5, 10.2, 9.1, 12.4, 14.0]
+
+[[item]]
+page = 8
+id = "C08"
+kind = "bar with negative values, Korean, values labelled"
+title = "사업부별 영업이익 (단위: 조원)"
+x = ["반도체", "모바일", "디스플레이", "가전", "전장"]
+y = [24.9, 12.9, 4.1, -0.6, 1.5]
+
+[[item]]
+page = 9
+id = "T01"
+title = "Northwind Inc. — Statement of operations (USD million)"
+columns = ["", "2024", "2025"]
+rows = [["Revenue", "1,695", "1,890"], ["Cost of revenue", "(1,120)", "(1,230)"], ["Gross profit", "575", "660"], ["Operating expenses", "(365)", "(395)"], ["Operating income", "210", "265"], ["Interest expense", "(18)", "(15)"], ["Income before taxes", "192", "250"], ["Income taxes", "(38)", "(52)"], ["Net income", "154", "198"]]
+
+[[item]]
+page = 10
+id = "T02"
+title = "Contoso Ltd. — Statement of operations (USD million)"
+columns = ["", "2024", "2025"]
+rows = [["Revenue", "2,040", "2,310"], ["Cost of revenue", "(930)", "(1,050)"], ["Gross profit", "1,110", "1,360"], ["Operating expenses", "(780)", "(850)"], ["Operating income", "330", "410"]]
+error = "Gross profit 2025 is printed as 1,360, but 2,310 − 1,050 = 1,260; operating income 410 matches 1,260 − 850."

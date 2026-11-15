@@ -199,7 +199,7 @@ class PlannerTests(unittest.TestCase):
         llm = FakeLLM(json.dumps({"scope": "pages", "pages": [3]}), "The desired term is (N-τ)/N X [p.3].")
         self.planner(llm, vision).run("lecture.pdf Write the desired signal term in LaTeX.")
         self.assertEqual(len(vision.calls), 1)
-        self.assertIn("Transcribe every equation on it in LaTeX", vision.calls[0][1])
+        self.assertIn("Equations: each in LaTeX", vision.calls[0][1])
         prompt = llm.calls[1]["messages"][1]["content"]
         self.assertIn("[p.3, read by the vision model]\nY = \\frac{N-\\tau}{N} X_{n,p}", prompt)
 

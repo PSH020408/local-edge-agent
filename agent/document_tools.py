@@ -32,7 +32,7 @@ class Page:
     images: int = 0
     math: bool = False
     label: str = ""  # page number printed on the page, when it differs from the position
-    drawings: int = 0  # figures drawn as vector graphics (papers only, see _mark_paper_pages)
+    drawings: int = 0  # figures drawn as vector graphics (see _mark_paper_pages)
 
     @property
     def needs_vision(self) -> bool:
@@ -70,6 +70,7 @@ class Document:
 
 DENSE_PAGE_CHARS = 1500   # median characters per page from which a PDF is read as a paper
 _VECTOR_PATHS = 50        # drawn lines and shapes on a page from which it holds a vector figure
+_PICTURE_PAGE_TEXT = 80   # a page with a picture and less text than this is a picture page
 _FIGURE_CAPTION = re.compile(r"^(?:Figure|FIGURE|Fig\.)\s*\d+\s*[:.]")
 _EQUATION_NUMBER = re.compile(r"(?:^|\s)\((\d{1,2})\)$")
 
@@ -96,6 +97,12 @@ def _mark_paper_pages(document: "Document", paths: list[int]) -> None:
     figure or an equation reached the vision model. Slides keep the old rules: these are
     applied only to dense documents.
     """
+    # Run 42: a results deck draws its bar and waterfall charts as vector paths (the revenue bridge
+    # on p.13 of a quarterly deck), so slides are flagged for many paths too; captions and equation
+    # numbers stay rules for papers.
+    for page, count in zip(document.pages, paths):
+        if count >= _VECTOR_PATHS:
+            page.drawings = max(page.drawings, 1)
     if not document.dense:
         return
     for page, count in zip(document.pages, paths):
@@ -105,6 +112,27 @@ def _mark_paper_pages(document: "Document", paths: list[int]) -> None:
             page.drawings = max(1, captions)
         if _numbered_equation(lines):
             page.math = True
+
+
+def is_chart_page(page: "Page") -> bool:
+    """A page with a picture or a vector figure whose text is mostly numbers: the labels of a chart.
+
+    Run 43 (TD2): the revenue bridge of a results deck (46,721 / -3,435 / +658 ...) was read only
+    when the question said "chart"."""
+    if not (page.images or page.drawings):
+        return False
+    text = re.sub(r"\s+", "", page.text)
+    if len(text) < 40:
+        return False
+    digits = sum(ch.isdigit() for ch in text)
+    if digits / len(text) < 0.3:
+        return False
+    # A table in the text layer ("매출액 46,721 49,215 45,110 -3.4%") is already readable: rows of a
+    # label and several numbers. Chart labels come out as numbers on lines of their own.
+    lines = [line for line in page.text.splitlines() if line.strip()]
+    rows = sum(1 for line in lines
+               if re.match(r"\s*[^\d\s(△−-]", line) and len(re.findall(r"\d[\d,.]*", line)) >= 2)
+    return rows < 0.4 * len(lines)
 
 
 def looks_like_math(text: str) -> bool:
@@ -202,6 +230,11 @@ def load_pdf(path: Path) -> Document:
     counts = Counter(box for boxes in images for box in set(boxes))
     template = {box for box, n in counts.items() if len(images) >= 4 and n >= max(3, 0.4 * len(images))}
     figures = [sum(1 for box in boxes if box not in template) for boxes in images]
+    # Run 42: a PDF made of page images (a scan, or charts saved as pictures) has the same full-page
+    # picture box on every page, so every picture was taken for the template and the pages were
+    # never read. A page with a picture and almost no text is a picture page, template or not.
+    figures = [max(f, 1) if boxes and sum(len(line) for line in lines) < _PICTURE_PAGE_TEXT else f
+               for f, boxes, lines in zip(figures, images, raw_pages)]
     cleaned = _remove_repeated_lines(raw_pages)
     document = Document(path, "pdf", [_finish(lines, i + 1, figures[i]) for i, lines in enumerate(cleaned)])
     _mark_paper_pages(document, paths)

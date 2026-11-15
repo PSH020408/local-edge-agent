@@ -2,7 +2,7 @@
 
 Author: PARK, SEHO
 
-28 numbered equations from six papers in `evals/documents/files`, transcribed by hand from the page images (`cases.toml`). Each reading is graded by code against that transcription after normalisation: **exact**, **close** (token similarity ≥ 0.9) or **wrong**.
+28 numbered equations from six papers in `evals/documents/files`, transcribed from the page images (not by the vision model) (`cases.toml`). Each reading is graded by code against that transcription after normalisation: **exact**, **close** (token similarity ≥ 0.9) or **wrong**.
 
 Two methods:
 - **page**: the whole page goes to the vision model once, asked for equation (n). This is how Stage 4 read equations.
