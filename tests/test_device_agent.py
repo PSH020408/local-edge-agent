@@ -200,6 +200,24 @@ class RunD5FixTests(unittest.TestCase):
         self.assertTrue(result.text.startswith(writer.TEMPLATE_LEAD_KO.strip()))
 
 
+class ChargeHoldTests(unittest.TestCase):
+    def test_the_charge_hold_bit_explains_the_small_discharge(self):
+        # The recorded fixture and the live check of 2026-11-16 both show NotChargingReason 0x1000000 at the limit.
+        agent = DeviceAgent(FixtureShell(FIXTURES, overrides=SCENARIOS["adapter_headroom"]), sleep=NO_SLEEP, battery_seconds=1)
+        report = agent.diagnose("충전기 꽂았는데 배터리가 줄어").report
+        assist = next(x for x in report.findings if x.code == "battery_assist")
+        self.assertIn("holds the charge", assist.title)
+        self.assertEqual(report.facts["charging held by macOS"], "yes, at 90% (charger status 0x1000000)")
+
+    def test_no_hold_without_the_bit(self):
+        from evals.device.scenarios import _battery
+        shell = FixtureShell(FIXTURES, overrides={"battery_ioreg": _battery(Amperage=-240, SystemPowerIn=72000).replace(
+            "<integer>16777216</integer>", "<integer>0</integer>")})
+        report = DeviceAgent(shell, sleep=NO_SLEEP, battery_seconds=1).diagnose("배터리 어때?").report
+        self.assertNotIn("charging held by macOS", report.facts)
+        self.assertIn("below its limit", next(x for x in report.findings if x.code == "battery_assist").title)
+
+
 class AnswerTests(unittest.TestCase):
     REPORT = Report("battery", {"charge": "90%", "charge cycles": "286 of 1,000 rated"},
                     [Finding("battery_ok", "info", "Battery health is good", {"charge cycles": "286 of 1,000 rated"}, "No action needed.")])

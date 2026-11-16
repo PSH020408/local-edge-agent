@@ -24,6 +24,7 @@ HEAVY_GPU = 50.0            # %
 BUSY_CPU = 85.0
 CELL_SPREAD = 0.05          # V between the highest and the lowest cell
 ADAPTER_LIMIT = 0.85        # share of the adapter rating above which the adapter counts as at its limit
+HELD_BIT = 0x01000000        # ChargerData NotChargingReason while macOS holds the charge (seen at the 90% limit)
 ASSIST_SMALL = 5.0          # W from the battery on the adapter that is not yet a problem (Run D3, L01-L02)
 GPU_BUSY = 80.0             # % active
 GPU_HELD = 0.45             # frequency below this share of the maximum while busy
@@ -174,6 +175,12 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
         f["time left (macOS estimate)"] = minutes(_num(view, "power.macos_time_remaining"))
     if _num(view, "power.macos_time_to_full") is not None:
         f["time to full (macOS estimate)"] = minutes(_num(view, "power.macos_time_to_full"))
+    # The charger reports why it is not charging as a bit field, like a status register. On this Mac the value
+    # was 0x1000000 (bit 24) both times charging was held at the 90% limit set in System Settings.
+    reason = view.value("battery.not_charging_reason")
+    held = not on_battery and isinstance(reason, int) and bool(reason & HELD_BIT) and view.value("battery.is_charging") != 1
+    if held:
+        f["charging held by macOS"] = f"yes, at {f.get('charge', '?')} (charger status 0x{reason:X})"
     charging_current = _num(view, "battery.charging_current")
     if not on_battery and view.value("battery.is_charging") == 1 and charging_current and full and present is not None:
         f["time to full at the present charging current"] = minutes(60 * (full - present) / (1000 * charging_current))
@@ -228,6 +235,12 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
                                         "The Mac runs on its battery although macOS still reports the adapter as connected", evidence,
                                         "If the adapter was just unplugged, macOS will catch up in a moment; otherwise reconnect it, "
                                         "check the cable and try another port. The battery is draining."))
+            elif assist_only and held:
+                # Run D3-D5: limit on, 3.0-3.4 W from the battery with 72-78 W in; limit off, 85 W in and charging.
+                evidence["charging held by macOS"] = f["charging held by macOS"]
+                findings.append(Finding("battery_assist", "info",
+                                        "The battery adds a little power while macOS holds the charge", evidence,
+                                        "Normal while the charge is held (charge limit or optimised charging); no action needed."))
             elif assist_only:
                 findings.append(Finding("battery_assist", "info",
                                         "The battery adds a little power while the adapter is below its limit", evidence,
@@ -247,7 +260,8 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
                                     "Nothing to change: heavy work can run at full speed."))
         if view.value("battery.is_charging") == 0 and charge is not None and charge < 100 and view.value("battery.fully_charged") != 1 \
                 and (current is None or current >= -0.2):
-            findings.append(Finding("charging_paused", "info", "Charging is paused by macOS", {"charge": f["charge"]},
+            findings.append(Finding("charging_paused", "info", "Charging is paused by macOS",
+                                    {k: f[k] for k in ("charge", "charging held by macOS") if k in f},
                                     "Normal: macOS holds the charge below full to protect the battery."))
     profile_high = profile.get("power.profile_ac_high_power_mode")
     mode_ac = _num(view, "power.mode_ac")
