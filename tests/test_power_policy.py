@@ -1,5 +1,6 @@
 """Battery-aware power policy (agent/device/power_policy.py), against a fake Mac that keeps its energy mode."""
 
+import plistlib
 import unittest
 from pathlib import Path
 
@@ -95,27 +96,74 @@ class BatteryModeTests(unittest.TestCase):
         self.assertEqual(mac.commands, [])
 
 
+class FakeGauge(FakeMac):
+    """A battery registry that publishes every 60 s the power controller's running sum of a 1 Hz load."""
+
+    def __init__(self, idle=10.0, busy=40.0, **kwargs):
+        super().__init__(**kwargs)
+        self.t, self.watts, self.idle, self.busy = 5.0, idle, idle, busy
+        self.energy_mj, self.samples = 0, 0
+        self.published = (0, 0, 0)  # (update time, running sum in mW*s, samples)
+
+    def clock(self):
+        return self.t
+
+    def advance(self, seconds):
+        for _ in range(int(round(seconds))):
+            self.t += 1
+            self.energy_mj += int(self.watts * 1000)
+            self.samples += 1
+            if int(self.t) % 60 == 0:
+                self.published = (int(self.t), self.energy_mj, self.samples)
+
+    def run(self, name, command=None):
+        if name == "battery_ioreg":
+            data = plistlib.loads(self.battery.encode())
+            update, total, count = self.published
+            data[0]["UpdateTime"] = update
+            data[0]["PowerTelemetryData"].update(AccumulatedSystemLoad=total, SystemLoadAccumulatorCount=count)
+            return Output(name, plistlib.dumps(data).decode(), True, 0.0)
+        return super().run(name, command)
+
+    def job(self, seconds):
+        def run():
+            self.watts = self.busy
+            self.advance(seconds)
+            self.watts = self.idle
+            return "done"
+        return run
+
+
 class EnergyTests(unittest.TestCase):
     def test_trapezoids(self):
         self.assertAlmostEqual(pp.integrate([(0, 10.0), (360, 10.0)]), 1.0)
         self.assertAlmostEqual(pp.integrate([(0, 0.0), (3600, 20.0)]), 10.0)
 
+    def test_energy_from_the_running_sum(self):
+        # 40 W for 90 s on a 10 W machine: 3,600 J = 1.0 Wh, although the registry publishes only every 60 s.
+        gauge = FakeGauge()
+        result, energy = pp.measure(gauge, gauge.job(90), sleep=gauge.advance, clock=gauge.clock)
+        self.assertEqual(result, "done")
+        self.assertAlmostEqual(energy.wh, 1.0, delta=0.02)
+        self.assertAlmostEqual(energy.mean_watts, 40.0, delta=1.0)
+        self.assertAlmostEqual(energy.idle_watts, 10.0)
+        self.assertEqual(energy.check, "ok")
+
+    def test_a_short_job_is_still_measured(self):
+        gauge = FakeGauge()
+        _, energy = pp.measure(gauge, gauge.job(20), sleep=gauge.advance, clock=gauge.clock)
+        self.assertAlmostEqual(energy.wh, 40 * 20 / 3600, delta=0.01)
+
     def test_run_with_policy_on_battery(self):
-        mac = FakeMac(mode=0, charge=70)
-        clock = iter(range(0, 1000, 30))
-        meter_clock = lambda: next(clock)  # noqa: E731
-        original = pp.EnergyMeter.__init__
-
-        def fast(self, shell, period=1.0, clock=None):
-            original(self, shell, period=0.001, clock=meter_clock)
-
-        pp.EnergyMeter.__init__ = fast
+        gauge = FakeGauge(charge=70)
+        original = pp.measure
+        pp.measure = lambda shell, job: original(shell, job, sleep=gauge.advance, clock=gauge.clock)
         try:
-            record = pp.run_with_policy(mac, "heavy", lambda: "done")
+            record = pp.run_with_policy(gauge, "light", gauge.job(30), measure_energy=True)
         finally:
-            pp.EnergyMeter.__init__ = original
-        self.assertEqual((record.decision.mode, record.result), (pp.AUTOMATIC, "done"))
-        self.assertGreater(record.energy.wh_integrated, 0)  # 1 A from about 12.3 V: about 12 W
+            pp.measure = original
+        self.assertEqual((record.decision.mode, record.result, gauge.mode), (pp.LOW, "done", 0))
+        self.assertAlmostEqual(record.energy.wh, 40 * 30 / 3600, delta=0.01)
 
     def test_deferred_at_low_charge(self):
         mac = FakeMac(charge=15)
@@ -125,22 +173,16 @@ class EnergyTests(unittest.TestCase):
 
     def test_on_the_adapter_nothing_is_switched(self):
         mac = FakeMac(on_battery=False)
-        record = pp.run_with_policy(mac, "heavy", lambda: "done")
+        record = pp.run_with_policy(mac, "heavy", lambda: "done", measure_energy=True)
         self.assertEqual((record.ran, record.energy, mac.commands), (True, None, []))
 
     def test_an_unplugged_adapter_still_reported_counts_as_battery(self):
         # Run D2: "AC attached" with 0 W in and the battery discharging.
-        mac = FakeMac(on_battery=False)
+        mac = FakeMac(on_battery=False, mode=2)
         mac.battery = _battery(Amperage=-6316, SystemPowerIn=0)
-        clock = iter(range(0, 1000, 30))
-        original = pp.EnergyMeter.__init__
-        pp.EnergyMeter.__init__ = lambda self, shell, period=1.0, clock_=None: original(self, shell, 0.001, lambda: next(clock))
-        try:
-            record = pp.run_with_policy(mac, "heavy", lambda: "done")
-        finally:
-            pp.EnergyMeter.__init__ = original
-        self.assertEqual(record.decision.mode, pp.AUTOMATIC)
-        self.assertIsNotNone(record.energy)
+        record = pp.run_with_policy(mac, "light", lambda: "done")
+        self.assertEqual(record.decision.mode, pp.LOW)
+        self.assertEqual(mac.commands, [pp.SET_COMMANDS[1], pp.SET_COMMANDS[2]])
 
 
 if __name__ == "__main__":

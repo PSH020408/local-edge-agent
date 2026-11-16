@@ -6,9 +6,9 @@ The three parts:
 2. BatteryMode   save -> switch -> run -> restore, like saving a register before an interrupt handler and
                  restoring it after. The restore runs even when the job fails, and is skipped when the user
                  changed the mode during the job (the user's choice wins).
-3. EnergyMeter   the energy the job took from the battery, measured two ways: the battery's voltage x current
-                 integrated over time, and the drop in the charge left in the battery. Two independent
-                 measurements of one quantity check each other.
+3. measure()     the energy of the job from the power controller's own running sum of the system load
+                 (sampled every second in hardware, published every 60 s). The first version integrated
+                 V x I itself and failed its own cross-check (energy run E1).
 
 Only the battery setting is changed (`pmset -b`); the adapter setting stays as the user set it. The sudoers
 rule allows exactly the three commands in SET_COMMANDS and nothing else, and this module runs no other
@@ -17,7 +17,6 @@ command with sudo.
 
 from __future__ import annotations
 
-import threading
 import time
 from dataclasses import dataclass, field
 
@@ -115,11 +114,12 @@ class BatteryMode:
 
 @dataclass
 class Energy:
-    seconds: float
-    wh_integrated: float | None   # sum of V x I over time (trapezoids)
-    wh_from_charge: float | None  # drop of the charge left (mAh) x mean voltage
-    mean_watts: float | None
-    samples: int
+    seconds: float            # the job's own run time
+    wh: float | None          # energy of the job: the window's energy minus the idle power over the parts outside the job
+    mean_watts: float | None  # mean system load while the job ran
+    idle_watts: float | None  # mean system load in the minute before the job
+    window_seconds: float     # from the publication before the job to the one after it
+    check: str                # "ok", or why the result should not be used
 
 
 def integrate(samples: list[tuple[float, float]]) -> float:
@@ -133,60 +133,64 @@ def _battery_state(shell) -> dict:
     return {r.name: r.value for r in battery.parse_registry(out.text if out.ok else "")}
 
 
-class EnergyMeter:
-    """Samples the battery while a job runs (a background thread) and reports the energy the job used.
+def wait_for_publication(shell, after, sleep=time.sleep, clock=time.monotonic, timeout: float = 90.0):
+    """Polls once per second until the registry publishes new values (UpdateTime changes); returns (state, time)."""
+    started = clock()
+    while True:
+        state = _battery_state(shell)
+        if state.get("battery.update_time") != after:
+            return state, clock()
+        if clock() - started > timeout:
+            raise TimeoutError("the battery registry did not publish new values")
+        sleep(1.0)
 
-    Watts are counted positive while the battery discharges. The battery gauge refreshes its readings every
-    few seconds (Run D3: two questions 5 s apart showed the same values), so a job should run for at least
-    a minute for a usable result; the two methods agreeing is the check.
+
+def measure(shell, job, sleep=time.sleep, clock=time.monotonic) -> tuple[object, Energy]:
+    """Runs `job` between two publications of the power controller's running sum of the system load.
+
+    First version (energy run E1) integrated V x I sampled every second, but the registry publishes new
+    values only every 60 s, so a 30-60 s job was mostly measured in the state before it. The controller
+    itself samples the load every second and adds it up; the difference of that sum between two
+    publications is the exact energy in between. The job starts right after one publication; after the job,
+    the next publication closes the window, and the idle power measured in the minute before the job is
+    subtracted for the part of the window after the job (and the second or so before it).
     """
+    first, _ = wait_for_publication(shell, None, sleep, clock)
+    first, _ = wait_for_publication(shell, first.get("battery.update_time"), sleep, clock)  # a fresh one
+    start, t_start_pub = wait_for_publication(shell, first.get("battery.update_time"), sleep, clock)
+    idle = _mean_watts(first, start)
+    t0 = clock()
+    result = job()
+    t1 = clock()
+    seen = _battery_state(shell).get("battery.update_time")
+    end, t_end_pub = wait_for_publication(shell, seen, sleep, clock)
+    window = t_end_pub - t_start_pub
+    total = _joules(start, end)
+    outside = (t0 - t_start_pub) + (t_end_pub - t1)
+    check = "ok"
+    samples = _samples(start, end)
+    if total is None or idle is None:
+        check = "the running sum was not readable"
+    elif samples is None or abs(samples - window) > max(3.0, 0.05 * window):
+        check = f"{samples} load samples in a {window:.0f} s window: a publication was missed"
+    joules = None if total is None or idle is None else total - idle * outside
+    mean = None if joules is None or t1 <= t0 else joules / (t1 - t0)
+    return result, Energy(t1 - t0, None if joules is None else joules / 3600, mean, idle, window, check)
 
-    def __init__(self, shell, period: float = 1.0, clock=time.monotonic) -> None:
-        self.shell, self.period, self.clock = shell, period, clock
-        self.samples: list[tuple[float, float]] = []
-        self.voltages: list[float] = []
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-        self.start_state: dict = {}
-        self.end_state: dict = {}
 
-    def sample(self) -> None:
-        state = _battery_state(self.shell)
-        volts, amps = state.get("battery.voltage"), state.get("battery.current")
-        if volts is not None and amps is not None:
-            self.samples.append((self.clock(), -volts * amps))
-            self.voltages.append(volts)
+def _joules(a: dict, b: dict) -> float | None:
+    x, y = a.get("power.system_energy_sum"), b.get("power.system_energy_sum")
+    return None if x is None or y is None else y - x
 
-    def _loop(self) -> None:
-        while not self._stop.wait(self.period):
-            self.sample()
 
-    def __enter__(self) -> "EnergyMeter":
-        self.start_state = _battery_state(self.shell)
-        self.started = self.clock()
-        self.sample()
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-        return self
+def _samples(a: dict, b: dict) -> float | None:
+    x, y = a.get("power.system_load_samples"), b.get("power.system_load_samples")
+    return None if x is None or y is None else y - x
 
-    def __exit__(self, *exc) -> bool:
-        self._stop.set()
-        if self._thread:
-            self._thread.join()
-        self.sample()
-        self.end_state = _battery_state(self.shell)
-        self.result = self._result()
-        return False
 
-    def _result(self) -> Energy:
-        seconds = self.clock() - self.started
-        integrated = integrate(self.samples) if len(self.samples) >= 2 else None
-        before, after = self.start_state.get("battery.present_capacity"), self.end_state.get("battery.present_capacity")
-        from_charge = None
-        if before is not None and after is not None and self.voltages:
-            from_charge = (before - after) / 1000 * (sum(self.voltages) / len(self.voltages))
-        mean = integrated * 3600 / seconds if integrated is not None and seconds > 0 else None
-        return Energy(seconds, integrated, from_charge, mean, len(self.samples))
+def _mean_watts(a: dict, b: dict) -> float | None:
+    joules, samples = _joules(a, b), _samples(a, b)
+    return None if joules is None or not samples else joules / samples
 
 
 @dataclass
@@ -199,8 +203,12 @@ class PolicyRun:
     ran: bool = False
 
 
-def run_with_policy(shell, job_class: str, job, meter_period: float = 1.0) -> PolicyRun:
-    """Chooses the mode for the job, runs it in that mode with the energy meter on, and restores the mode."""
+def run_with_policy(shell, job_class: str, job, measure_energy: bool = False) -> PolicyRun:
+    """Chooses the mode for the job, runs it in that mode, and restores the mode.
+
+    With `measure_energy` the job's energy is measured as well; that waits for up to three publications of
+    the battery registry (one per minute), so it is for experiments, not for every job.
+    """
     state = _battery_state(shell)
     # Run D2: macOS kept reporting the adapter as connected after it was unplugged; the input power is checked too.
     unplugged = state.get("power.system_input") == 0 and (state.get("battery.current") or 0) < 0
@@ -211,10 +219,8 @@ def run_with_policy(shell, job_class: str, job, meter_period: float = 1.0) -> Po
         record.notes.append("Deferred: connect the adapter first.")
         return record
     with BatteryMode(shell, decision.mode) as switch:
-        if on_battery:
-            with EnergyMeter(shell, meter_period) as meter:
-                record.result = job()
-            record.energy = meter.result
+        if on_battery and measure_energy:
+            record.result, record.energy = measure(shell, job)
         else:
             record.result = job()
         record.ran = True

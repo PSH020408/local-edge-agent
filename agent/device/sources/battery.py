@@ -81,6 +81,13 @@ def parse_registry(text: str, time: str | None = None) -> list[Reading]:
         ("power.system_input_voltage", _scaled(telemetry.get("SystemVoltageIn"), 1000) if external else None, "V"),
         ("power.system_input_current", _scaled(telemetry.get("SystemCurrentIn"), 1000) if external else None, "A"),
         ("power.adapter_loss", _scaled(telemetry.get("AdapterEfficiencyLoss"), 1000) if external else None, "W"),
+        # The power controller samples the whole-system load once per second and keeps a running sum; the
+        # registry publishes both every 60 s (scripts/gauge_rate.py, 2026-11-16). On battery the load equalled
+        # V x I of the battery (9.29 W both). The sum gives exact energy between two publications.
+        ("power.system_load", _scaled(telemetry.get("SystemLoad"), 1000), "W"),
+        ("power.system_energy_sum", _scaled(telemetry.get("AccumulatedSystemLoad"), 1000), "J"),
+        ("power.system_load_samples", telemetry.get("SystemLoadAccumulatorCount"), "count"),
+        ("battery.update_time", battery.get("UpdateTime"), "s"),
     ]
     readings = [reading(name, value, unit, time) for name, value, unit in values]
     readings += [reading(f"battery.cell{i}_voltage", _scaled(v, 1000), "V", time) for i, v in enumerate(cells, start=1)]

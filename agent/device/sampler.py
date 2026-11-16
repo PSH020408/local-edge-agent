@@ -1,7 +1,9 @@
 """Background sampler: reads the fast sources every period and stores them, and measures its own cost.
 
-Fast sources (about 0.1-0.2 s per round): battery, power, thermal, load, memory. Storage space and
-health are read every `slow_period`. The sampler is meant to run at background priority
+Fast sources (about 0.1-0.2 s per round): power, thermal, load, memory. The battery registry is read
+every `battery_period` (60 s): it publishes new values only once a minute (scripts/gauge_rate.py), so
+reading it every 10 s stored the same values six times. Storage space and health are read every
+`slow_period`. The sampler is meant to run at background priority
 (`taskpolicy -b python scripts/run_sampler.py`), which macOS schedules on the efficiency cores.
 
 Its own cost is part of every round: the CPU time of the sampler process and of the commands it
@@ -18,7 +20,8 @@ from dataclasses import dataclass, field
 from .readings import Reading, reading
 from .sources import battery, load, memory, power, storage, thermal
 
-FAST_READERS = (battery.read, power.read, thermal.read, load.read, memory.read)
+FAST_READERS = (power.read, thermal.read, load.read, memory.read)
+BATTERY_READERS = (battery.read,)
 SLOW_READERS = (storage.read,)
 
 
@@ -41,9 +44,11 @@ class Sampler:
     store: object | None = None
     period: float = 10.0
     slow_period: float = 600.0
+    battery_period: float = 60.0
     rounds: int = 0
     totals: dict = field(default_factory=lambda: {"cpu_seconds": 0.0, "wall_seconds": 0.0})
     _last_slow: float = float("-inf")
+    _last_battery: float = float("-inf")
 
     def sample_once(self, clock: float | None = None) -> RoundResult:
         clock = time.monotonic() if clock is None else clock
@@ -51,6 +56,10 @@ class Sampler:
         readings: list[Reading] = []
         for read in FAST_READERS:
             readings += read(self.shell)
+        if clock - self._last_battery >= self.battery_period:
+            for read in BATTERY_READERS:
+                readings += read(self.shell)
+            self._last_battery = clock
         if clock - self._last_slow >= self.slow_period:
             for read in SLOW_READERS:
                 readings += read(self.shell)

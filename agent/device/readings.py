@@ -15,7 +15,7 @@ from datetime import datetime
 # Units used across the device layer. Readers convert to these (macOS reports mV, mA and
 # hundredths of a degree).
 UNITS = {
-    "V", "A", "W", "Wh", "mAh", "%", "°C", "MHz", "bytes", "bytes/s", "count", "min", "s",
+    "V", "A", "W", "Wh", "J", "mAh", "%", "°C", "MHz", "bytes", "bytes/s", "count", "min", "s",
     "flag",   # 1 or 0
     "level",  # an ordered state, such as thermal pressure 0-4
     "code",   # a status code reported by the hardware, kept as it is
