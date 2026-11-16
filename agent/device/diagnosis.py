@@ -37,12 +37,13 @@ STORAGE_CRITICAL = 5.0
 GB = 1024 ** 3
 
 # Memory a job needs (measured model sizes: qwen3:14b 9.2 GB, vision model 5.7 GB, small models 1-3 GB)
-JOBS = {
-    "document": ("a document question with the 14B model", 10.0),
-    "vision": ("an image question with the vision model", 6.5),
-    "long_run": ("a long test run with the 14B and vision models", 16.0),
-    "light": ("a light job with the small models", 3.0),
+JOBS = {  # job: (description, memory needed with its models loaded from scratch, the models it uses)
+    "document": ("a document question with the 14B model", 10.0, ("qwen3:14b",)),
+    "vision": ("an image question with the vision model", 6.5, ("qwen3-vl:8b-instruct",)),
+    "long_run": ("a long test run with the 14B and vision models", 16.0, ("qwen3:14b", "qwen3-vl:8b-instruct")),
+    "light": ("a light job with the small models", 3.0, ("qwen3:4b-instruct", "qwen3:1.7b")),
 }
+WORKING_MEMORY = 1.0        # GB a job needs beyond its model's weights (context, buffers)
 
 
 @dataclass
@@ -178,6 +179,15 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
         assist_only = bool(supplied) and not at_limit and power < ASSIST_SMALL
         if present is not None and power > 0.5 and not assist_only:
             f["time left at the present power (own estimate)"] = minutes(60 * present * voltage / 1000 / power)
+    # Run D6, L02: "how long will the battery last?" on the adapter got a health report. The battery is not
+    # in use, so the answer is the time it would last once unplugged, at this user's usual power on battery.
+    asks_time = bool(re.search(r"버텨|버틸|남은 시간|얼마나 (더|오래)|time left|how long|last", question, re.I))
+    if not battery_side and asks_time and present is not None and voltage is not None:
+        energy = present * voltage / 1000
+        f["energy left in the battery"] = f"{energy:.1f} Wh"
+        if baseline_power:
+            f["usual power on battery"] = f"{baseline_power:.1f} W"
+            f["time on battery at the usual power (own estimate)"] = minutes(60 * energy / baseline_power)
     if _num(view, "power.macos_time_remaining") is not None:
         f["time left (macOS estimate)"] = minutes(_num(view, "power.macos_time_remaining"))
     if _num(view, "power.macos_time_to_full") is not None:
@@ -259,6 +269,10 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
                 findings.append(Finding("adapter_short", "warning",
                                         "The battery discharges although the adapter is below its rating", evidence,
                                         "Try another cable or port; a cable rated for less power can limit the adapter."))
+        if "energy left in the battery" in f and not discharging_on_adapter:
+            evidence = {k: f[k] for k in ("energy left in the battery", "time on battery at the usual power (own estimate)") if k in f}
+            findings.append(Finding("on_adapter_time", "info", "On the adapter the battery is not in use", evidence,
+                                    "The time applies once the adapter is unplugged."))
         if asks_mode:
             findings.append(Finding("mode_not_needed", "info", "On the adapter the energy mode does not change the speed of model jobs",
                                     {"measured (qwen3:14b)": "25.3 tokens/s in Automatic and in High Power (runs E1-E3)"},
@@ -281,7 +295,8 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
     return report
 
 
-def performance_report(view, storage: dict | None = None, top: list | None = None, job: str | None = None) -> Report:
+def performance_report(view, storage: dict | None = None, top: list | None = None, job: str | None = None,
+                       loaded: dict | None = None) -> Report:
     """view: a Capture with chip samples; storage: readings from storage.read(); top: [(name, energy impact)]."""
     storage = storage or {}
     report = Report("performance")
@@ -326,6 +341,8 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
     # contradiction, and the model wrote "12.2 GB, 88% of 24 GB" in three runs. The reading is still stored.
     if _num(view, "memory.compressed") is not None:
         f["compressed memory"] = gb(_num(view, "memory.compressed"))
+    loaded = loaded or {}
+    held_text = "; ".join(f"{name} {size / 1e9:.1f} GB" for name, size in loaded.items())  # given only where it matters
     if swap_used is not None:
         f["swap used"] = gb(swap_used) + (f" of {gb(swap_total)}" if swap_total else "")
     if busiest and busiest_cpu is not None:
@@ -363,12 +380,17 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
                                 "Wait for the running work to finish or quit what is not needed."))
     swap_fast = swapouts is not None and swapouts.slope_per_minute is not None and swapouts.slope_per_minute >= SWAPOUT_FAST
     if (available is not None and available < MEMORY_LOW) or swap_fast:
-        evidence = {k: f[k] for k in ("memory available", "compressed memory", "swap used") if k in f}
+        if held_text:
+            f["models held in memory by Ollama"] = held_text
+        evidence = {k: f[k] for k in ("memory available", "compressed memory", "swap used", "models held in memory by Ollama") if k in f}
         if swap_fast:
             evidence["swap-outs"] = f"{swapouts.slope_per_minute:.0f} pages per minute"
         severity = "problem" if (available is not None and available < MEMORY_CRITICAL) or swap_fast else "warning"
-        findings.append(Finding("memory_short", severity, "Memory is short and macOS is swapping to the SSD", evidence,
-                                "Quit large apps or browser tabs; run one large model at a time."))
+        held = sum(loaded.values()) / 1e9
+        advice = ("Quit large apps or browser tabs; run one large model at a time." if held < 2 else
+                  f"Ollama holds {held:.1f} GB of models: `ollama stop <model>` frees them at once (idle models unload "
+                  "after 5 minutes by themselves). Otherwise quit large apps or browser tabs.")
+        findings.append(Finding("memory_short", severity, "Memory is short and macOS is swapping to the SSD", evidence, advice))
     if free is not None and total:
         share = 100 * free / total
         if share < STORAGE_LOW:
@@ -379,9 +401,14 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
                                 {"storage health (SMART)": f["storage health (SMART)"]}, "Back up now and have the Mac checked."))
 
     if job:
-        description, need = JOBS[job]
+        description, need, job_models = JOBS[job]
         available_gb = available / 100 * total_memory / GB if available is not None and total_memory else None
         f["job asked about"] = description
+        # A model that is already loaded is reused, not loaded again (Run D6, L04).
+        reused = [m for m in job_models if m in loaded]
+        if reused:
+            need = max(WORKING_MEMORY, need - sum(loaded[m] for m in reused) / 1e9)
+            f["models of the job already loaded"] = ", ".join(reused)
         f["memory the job needs"] = f"{need:.1f} GB"
         if available_gb is not None:
             f["memory available now"] = f"{available_gb:.1f} GB"
@@ -391,11 +418,11 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
                                     {"problem": blocking[0].title}, "Fix the problem first, then start the job."))
         elif available_gb is not None and available_gb < need:
             findings.append(Finding("admit_smaller", "warning", "Not enough free memory for the job as it is",
-                                    {"memory available now": f["memory available now"], "memory the job needs": f["memory the job needs"]},
+                                    {k: f[k] for k in ("memory available now", "memory the job needs", "models of the job already loaded") if k in f},
                                     "Quit large apps first, or run it with a smaller model."))
         else:
             findings.append(Finding("admit_run", "info", "The Mac can take the job now",
-                                    {k: f[k] for k in ("memory available now", "memory the job needs", "thermal pressure") if k in f},
+                                    {k: f[k] for k in ("memory available now", "memory the job needs", "models of the job already loaded", "thermal pressure") if k in f},
                                     "Start it."))
     if not any(x.severity in ("warning", "problem") for x in findings):
         findings.append(Finding("no_problem", "info", "No performance problem found in the measurements",

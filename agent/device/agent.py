@@ -18,7 +18,7 @@ from .capture import Capture, capture
 from .diagnosis import Report, battery_report, job_from_question, performance_report
 from .readings import by_name
 from .router import Route, route
-from .sources import battery, load, storage
+from .sources import battery, load, models, storage
 
 
 @dataclass
@@ -65,7 +65,8 @@ class DeviceAgent:
         else:
             view = capture(self.shell, seconds=self.capture_seconds, with_chip=True, sleep=self.sleep)
             disk = {r.name: r.value for r in storage.read(self.shell) if r.ok}
-            result.report = performance_report(view, disk, self._top(), job_from_question(question))
+            _, held = models.read(self.shell)
+            result.report = performance_report(view, disk, self._top(), job_from_question(question), held)
             extra = disk
         result.timings["measure"] = round(time.perf_counter() - measure_started, 3)
         result.readings = self._snapshot(view, extra)

@@ -273,3 +273,36 @@ Gate for Run D6, written before it: route 40 of 40, findings 30 of 30, no ❌, n
 adapter questions other than B12 and B13, ⚠️ at most 10 (Run D5: 10). Prediction: the mode remarks of B08,
 B10, B11 and B12 disappear, so ⚠️ falls to about 6-7; the meaning mix-ups of P04 and the fan guesses stay.
 
+## Run D6 — battery report by power source (2026-11-17)
+
+Commit `c8dc6e8`. Speed check before the run: 25.9 tokens/s, 103% of normal. Route 40 of 40, findings 30 of 30,
+36 of 36 answers by the model (one rewritten), live battery 4.7 s, live performance 14.7 s.
+
+Hand grading: **✅ 29, ⚠️ 7, ❌ 0** (Run D5: ✅ 26, ⚠️ 10). **Gate passed**; the prediction (⚠️ 6-7, mode remarks
+gone) held. No answer on the adapter mentions the energy mode except B12 and B13, which ask about it and now
+answer "no need; it does not change the speed" with the measured figures.
+
+| ⚠️ | Why |
+|---|---|
+| B03 | "Replacement needed", then "using it this way is no problem" about the charge hold: reads as a contradiction |
+| B16 | Calls the state "charging" and the adapter's 0.0 W "consumption" |
+| B17 | "The battery is not going down", then "a little power is normal": contradicts itself |
+| P02, P03 | The fans guessed at from "fan speed is not measured" (every run since D2) |
+| P04 | "One core at 560%" (still) |
+| L02 | "How long will it last?" on the adapter answered with a health report: no time at all |
+
+**Live state worth a note.** The live performance cases found memory short (16% available, 228,663 pages
+swapped out per minute in L06), and the diagnosis was right about the state. The cause was the agent itself:
+the speed check had just loaded qwen3:14b (about 10 GB), with the 4B writer and the 1.7B router next to it.
+The diagnosis could not see that and advised quitting "large apps"; the admission check (L04) asked for 10 GB
+for a 14B question although the 14B was already loaded. The scenario cases also used the live store for the
+usual battery power (15.0 W in B06, B07), now that the sampler has logged battery sessions.
+
+### Fixes after Run D6
+
+| Problem | Fix | Kind |
+|---|---|---|
+| Models held by Ollama invisible to the memory diagnosis | Read from `/api/ps`; named in a memory shortage with `ollama stop` as advice (only there, not in every report) | Code |
+| A loaded model counted again by the admission check | The job's models that are loaded are reused: their size is taken off the need, down to 1 GB of working memory | Code |
+| Time left asked on the adapter (L02) | The energy left, and the time it would last unplugged at the user's usual power on battery (from the store) | Code |
+

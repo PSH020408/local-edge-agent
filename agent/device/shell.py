@@ -35,6 +35,7 @@ COMMANDS: dict[str, list[str]] = {
     "iostat": ["iostat", "-d", "-c", "2", "-w", "1"],
     "buses": ["system_profiler", "SPThunderboltDataType", "SPUSBDataType", "SPNVMeDataType", "-json"],
     "hardware": ["system_profiler", "SPHardwareDataType", "-json"],
+    "ollama_ps": ["curl", "-s", "-m", "2", "http://localhost:11434/api/ps"],  # models held in memory
     "powermetrics": ["sudo", "-n", "/usr/bin/powermetrics", "-n", "1", "-i", "1000",
                      "-s", "cpu_power,gpu_power,ane_power,thermal"],
 }

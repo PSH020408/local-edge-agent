@@ -1,0 +1,1 @@
+{"models":[{"name":"qwen3:14b","model":"qwen3:14b","size":10737418240,"size_vram":10737418240},{"name":"qwen3:4b-instruct","model":"qwen3:4b-instruct","size":3221225472,"size_vram":3221225472}]}

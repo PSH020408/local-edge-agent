@@ -218,6 +218,33 @@ class ChargeHoldTests(unittest.TestCase):
         self.assertIn("below its limit", next(x for x in report.findings if x.code == "battery_assist").title)
 
 
+class RunD6FixTests(unittest.TestCase):
+    def test_models_held_by_ollama_are_named_in_a_memory_shortage(self):
+        # Run D6, L03-L06: memory short while the agent's own models (14B from the speed check) were loaded.
+        from evals.device.scenarios import _memory_short
+        agent = DeviceAgent(FixtureShell(FIXTURES, overrides=_memory_short()), sleep=NO_SLEEP, capture_seconds=1)
+        report = agent.diagnose("메모리 충분해?").report
+        short = next(x for x in report.findings if x.code == "memory_short")
+        self.assertIn("qwen3:14b 10.7 GB", short.evidence["models held in memory by Ollama"])
+        self.assertIn("ollama stop", short.advice)
+
+    def test_a_loaded_model_is_not_counted_twice(self):
+        # Run D6, L04: 3.7 GB available, 10 GB "needed" for a 14B question although the 14B was loaded.
+        from evals.device.scenarios import _memory_short
+        agent = DeviceAgent(FixtureShell(FIXTURES, overrides=_memory_short()), sleep=NO_SLEEP, capture_seconds=1)
+        report = agent.diagnose("지금 문서 질문 돌려도 돼?").report
+        self.assertEqual(report.facts["memory the job needs"], "1.0 GB")
+        self.assertEqual(report.facts["models of the job already loaded"], "qwen3:14b")
+
+    def test_time_on_battery_asked_on_the_adapter(self):
+        # Run D6, L02: "how long will it last?" on the adapter.
+        agent = DeviceAgent(FixtureShell(FIXTURES), sleep=NO_SLEEP, battery_seconds=1)
+        report = agent.diagnose("배터리 얼마나 버텨?").report
+        self.assertIn("on_adapter_time", report.codes())
+        self.assertIn("energy left in the battery", report.facts)
+        self.assertNotIn("on_adapter_time", agent.diagnose("배터리 상태 어때?").report.codes())
+
+
 class AnswerTests(unittest.TestCase):
     REPORT = Report("battery", {"charge": "90%", "charge cycles": "286 of 1,000 rated"},
                     [Finding("battery_ok", "info", "Battery health is good", {"charge cycles": "286 of 1,000 rated"}, "No action needed.")])
