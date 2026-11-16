@@ -689,3 +689,22 @@ Stage 6 test set (`evals/documents/tables.toml`): 23 questions and 3 "not in the
 The two wrong answers left in Run 44 are chart readings of the vision model (a page with sixteen bar groups; a stacked bar whose total label was taken for a segment). Per-case results are in `evals/documents/tables.md`.
 
 270 offline tests pass.
+
+## Run 45 — Tables set and full regression (2026-11-16)
+
+All eight document sets in one command (178 questions), code `745310e`; one regression fixed and checked on `251e890`. Counted after the check and repeats:
+
+| Set | Fully correct | Mostly | Wrong |
+|---|---|---|---|
+| Tables, statements and charts | 20 of 23 (87%) | 1 | 2 |
+| Development | 15 of 16 | 1 | 0 |
+| Lectures (first holdout, seen) | 20 of 21 | 1 | 0 |
+| Short papers (second holdout, seen) | 20 of 21 | 1 | 0 |
+| Long papers (third holdout, seen) | 20 of 24 | 3 | 1 |
+| Papers with equations (fourth holdout, seen) | 18 of 19 | 0 | 1 |
+| Equations | 17 of 18 | 1 | 0 |
+| RISC-V paper (fifth holdout, seen) | 11 of 16 | 5 | 0 |
+
+"Not in the document" checks 20/20. The first half of the run had the GPU held at its lowest clocks (5.5 tokens/s for `qwen3:14b`, 25.4 after a shutdown); see `docs/devlog.md`. At normal speed the equation set took 13.3 minutes and the RISC-V set 11.8 (64 and 51.8 in Runs 39 and 41, which had the same slowdown).
+
+272 offline tests pass.

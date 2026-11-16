@@ -8,7 +8,7 @@ Dated entries: what was built, what was decided and why, and progress against th
 
 | Stage | Planned | Started | Finished | State |
 |---|---|---|---|---|
-| 6 close | 11-16 | 11-15 | | Run 45 running |
+| 6 close | 11-16 | 11-15 | | Regression passed (Run 45 and check); holdout pending |
 | 7 Device layer and battery agent | 11-17 to 11-19 | | | |
 | 8 Wi-Fi and network agent | 11-20 to 11-22 | | | |
 | 9 Coverage planning | 11-23 to 11-25 | | | |
@@ -75,3 +75,9 @@ Run 45 ran at about a third of its usual speed: `qwen3:14b` generated 5.5 tokens
 Power adapter (100 W) and power mode (High Power) were normal, and a CPU load ran at full clocks after the restart. The state did not match real heat: thermal pressure stayed at Moderate while the GPU drew 2-3 W, which points to the thermal management state rather than temperature; a shutdown cleared it. The same three- to five-fold slowdown was seen in Run 39 and probably in Runs 43-44.
 
 Lessons for the device agents: (1) a long run should start with a short speed check, like a power-on self test, and stop with a warning when the machine is far below its measured normal; (2) the performance agent can detect this state from readings alone: GPU busy at its lowest clocks, low power, thermal pressure above Nominal, fans not responding → recommend a restart.
+
+## 2026-11-16 — Stage 6: Run 45 and the check
+
+Run 45 ran all eight document sets (178 questions). One real regression: a slide whose formulas exist only as a picture was read as [none], and the retry asked for charts (GC2, in two sets). A figure page that is not a chart page is now asked again with a prompt that names every kind of content; the check read both formulas. Three one-case drops (D06, TC2, PA10) were run three times each: D06 and TC2 were right 3 of 3 (run-to-run variation), PA10 stayed ⚠️ as in earlier runs. Every gate is met; the tables set went from 48% to 87% over Stage 6. Remaining: one short holdout on unseen financial documents, run once on this code.
+
+Profile of the normal-speed part of Run 45: `qwen3:14b` took 76% of the model time and two thirds of that was reading the prompt; model loading was under 1%. Shorter contexts are the first target for Stage 10.

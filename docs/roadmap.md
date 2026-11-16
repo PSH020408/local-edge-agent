@@ -55,7 +55,7 @@ Progress is checked against this table every day in `docs/devlog.md`. If a stage
 - [x] Picture pages read, charts transcribed as tables, statement totals and calculations checked by code (Run 43: ✅ 18)
 - [x] Chart pages, cached page readings, a related figure no longer given for the asked item (Run 44: ✅ 19, 83%, "not in the document" 3/3)
 - [x] Arithmetic explained across paragraphs; page index no longer given to the vision model
-- [ ] Run 45: tables set and regression of every earlier document set, gates in `evals/documents/tables.md`
+- [x] Run 45: tables set and regression of every earlier document set; one regression (formula slides read as [none]) fixed and checked; every gate met; tables 87%
 - [ ] Short holdout on unseen financial documents, run once
 
 Done when: extracted figures pass the code checks and chart values are never presented as exact.

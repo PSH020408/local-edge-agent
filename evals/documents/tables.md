@@ -262,3 +262,22 @@ Run 41) on the same kind of code path: Runs 39 and 41 had the same slowdown as t
 
 Check before closing the stage: GC2 in both sets once (the cause is systematic), D06, TC2 and PA10
 three times each (one-case drops are counted only when repeats confirm them).
+
+### Check after the fix (2026-11-16)
+
+Code 251e890. GC2 once in each set, D06, TC2 and PA10 three times each.
+
+| Case | Run 45 | Check | Counted |
+|---|---|---|---|
+| GC2 (lectures) | ❌ | ✅ both positional-encoding formulas, read from the picture by the new retry prompt | ✅ |
+| GC2 (equations) | ❌ | ✅ the same reading, from the cache | ✅ |
+| D06 | ⚠️ | ✅ 3 of 3: PSS, SSS, PBCH and the information carried | ✅ |
+| TC2 | ⚠️ | ✅ 3 of 3: 2Q '26 −0.7 and 3Q '26 −0.6 | ✅ |
+| PA10 | ⚠️ | ⚠️ 3 of 3: other points from the Discussion, not the stated limitations | ⚠️ |
+
+Counted results after the check: tables ✅ 20, ⚠️ 1, ❌ 2 (87%); development ✅ 15, ⚠️ 1; lectures
+✅ 20, ⚠️ 1; equations ✅ 17, ⚠️ 1; the other sets as in the Run 45 table. **Every gate is met.**
+
+Stage 6 result on the development set: 48% (Run 42) → 87%, with no wrong "not in the document"
+answer. The two remaining wrong answers are chart readings of the vision model (TD3, SC3). The short
+holdout on unseen financial documents is run once on this code and recorded below.

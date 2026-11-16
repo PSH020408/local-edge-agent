@@ -23,7 +23,7 @@ A theme from the first stages carries over: a rule only holds reliably when code
 |---|---|
 | Agent core: tool calling, time and engineering math tools, traces | Done (Stages 0-2) |
 | Vision: images, text in images, two-reading verification | Done (Stage 3) |
-| Documents: PDF and PowerPoint reading with cited, code-checked answers; equations read from the page image; tables, statements and charts | Done (Stages 4-5); Stage 6 closing |
+| Documents: PDF and PowerPoint reading with cited, code-checked answers; equations read from the page image; tables, statements and charts | Done (Stages 4-6); tables set 87%, one holdout pending |
 | Device layer and battery agent | Planned, Stage 7 |
 | Wi-Fi and network agent | Planned, Stage 8 |
 | Coverage planning on a floor plan | Planned, Stage 9 |
