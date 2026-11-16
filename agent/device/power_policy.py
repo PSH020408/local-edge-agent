@@ -118,8 +118,9 @@ class Energy:
     wh: float | None          # energy of the job: the window's energy minus the idle power over the parts outside the job
     mean_watts: float | None  # mean system load while the job ran
     idle_watts: float | None  # mean system load in the minute before the job
-    window_seconds: float     # from the publication before the job to the one after it
+    window_seconds: float     # from the publication before the job to the last one counted
     check: str                # "ok", or why the result should not be used
+    windows: int = 1          # publications after the job until the counter was back near idle
 
 
 def integrate(samples: list[tuple[float, float]]) -> float:
@@ -164,6 +165,18 @@ def measure(shell, job, sleep=time.sleep, clock=time.monotonic) -> tuple[object,
     t1 = clock()
     seen = _battery_state(shell).get("battery.update_time")
     end, t_end_pub = wait_for_publication(shell, seen, sleep, clock)
+    # Integrate until the counter has settled back to idle. On the adapter the counter followed the load
+    # within the same minute (step test, 2026-11-16); on battery it read far too low for short jobs (energy
+    # run E2), as if its source were filtered or late. Energy that arrives late still arrives, so the window
+    # is extended, one publication at a time, until a window of at least 20 s is back near idle.
+    previous, windows = start, 1
+    while windows < 5:
+        recent = _mean_watts(previous, end)
+        if idle is None or recent is None or (recent <= 1.2 * idle + 1.0 and _samples(previous, end) >= 20):
+            break
+        previous = end
+        end, t_end_pub = wait_for_publication(shell, end.get("battery.update_time"), sleep, clock)
+        windows += 1
     window = t_end_pub - t_start_pub
     total = _joules(start, end)
     outside = (t0 - t_start_pub) + (t_end_pub - t1)
@@ -178,7 +191,9 @@ def measure(shell, job, sleep=time.sleep, clock=time.monotonic) -> tuple[object,
     # Energy run E2: a 14B generation came out at 4.1 W, below the 5.1 W idle, with the sample check passed.
     if check == "ok" and mean is not None and idle is not None and mean < idle:
         check = f"the job's mean ({mean:.1f} W) is below the idle power ({idle:.1f} W): the window missed the job"
-    return result, Energy(t1 - t0, None if joules is None else joules / 3600, mean, idle, window, check)
+    if check == "ok" and windows == 5:
+        check = "the counter had not settled back to idle after five publications"
+    return result, Energy(t1 - t0, None if joules is None else joules / 3600, mean, idle, window, check, windows)
 
 
 def _joules(a: dict, b: dict) -> float | None:

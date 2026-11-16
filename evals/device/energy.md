@@ -85,3 +85,26 @@ than the one measured. The sample-count check cannot see a lag. Added: a check t
 is above the idle power, and `scripts/gauge_step.py`, a step-response test (idle, one minute of load,
 idle, with powermetrics as an independent reference) that measures the lag before the counter is used again.
 
+## Step test on the adapter (`scripts/gauge_step.py`, 2026-11-16 23:49)
+
+Idle, one minute of qwen3:14b generation (151-210 s), idle. Publications came every 60 s with extra ones in
+between (25-42 s after some), and the sample count always matched the elapsed time.
+
+| Window (s) | Counter mean W | Chip W (powermetrics), same window | Chip W, window before |
+|---|---|---|---|
+| 86-111 | 6.4 | 0.1 | 0.1 |
+| 111-171 (job from 151) | 26.4 | 10.7 | 0.1 |
+| 171-231 (job to 210) | 54.5 | 15.9 | 10.9 |
+| 231-273 | 6.7 | 0.1 | 11.1 |
+
+**No lag on the adapter**: the counter rose in the same windows as the chip and fell back right after. With
+6.5 W idle for the rest of each window, the system drew about 66-80 W during generation (a publication at
+171 s showed 73 W), while the chip itself (CPU + GPU + Neural Engine) drew about 25-32 W. More than half the
+power of a 14B generation is outside the CPU and GPU: memory, which a bandwidth-bound job keeps busy, the
+display, the SSD and conversion losses. powermetrics alone would understate the job's energy by half.
+
+So the low E2 results are a battery-side effect: on battery the load comes from the battery gauge, whose
+current reading is averaged, so a short burst arrives late or smeared. `power_policy.measure` now keeps the
+window open, one publication at a time, until the counter is back near idle; energy that arrives late is
+still counted. To confirm: the same step test on battery.
+

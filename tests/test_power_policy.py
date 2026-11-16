@@ -99,9 +99,10 @@ class BatteryModeTests(unittest.TestCase):
 class FakeGauge(FakeMac):
     """A battery registry that publishes every 60 s the power controller's running sum of a 1 Hz load."""
 
-    def __init__(self, idle=10.0, busy=40.0, **kwargs):
+    def __init__(self, idle=10.0, busy=40.0, lag=0, **kwargs):
         super().__init__(**kwargs)
         self.t, self.watts, self.idle, self.busy = 5.0, idle, idle, busy
+        self.queue = [idle] * lag  # the counter adds the load of `lag` seconds ago
         self.energy_mj, self.samples = 0, 0
         self.published = (0, 0, 0)  # (update time, running sum in mW*s, samples)
 
@@ -111,7 +112,8 @@ class FakeGauge(FakeMac):
     def advance(self, seconds):
         for _ in range(int(round(seconds))):
             self.t += 1
-            self.energy_mj += int(self.watts * 1000)
+            self.queue.append(self.watts)
+            self.energy_mj += int(self.queue.pop(0) * 1000)
             self.samples += 1
             if int(self.t) % 60 == 0:
                 self.published = (int(self.t), self.energy_mj, self.samples)
@@ -147,6 +149,14 @@ class EnergyTests(unittest.TestCase):
         self.assertAlmostEqual(energy.wh, 1.0, delta=0.02)
         self.assertAlmostEqual(energy.mean_watts, 40.0, delta=1.0)
         self.assertAlmostEqual(energy.idle_watts, 10.0)
+        self.assertEqual(energy.check, "ok")
+
+    def test_energy_that_arrives_late_is_still_counted(self):
+        # A counter that adds the load 45 s late: the window is extended until it is back near idle.
+        gauge = FakeGauge(lag=45)
+        _, energy = pp.measure(gauge, gauge.job(30), sleep=gauge.advance, clock=gauge.clock)
+        self.assertAlmostEqual(energy.wh, 40 * 30 / 3600, delta=0.01)
+        self.assertGreater(energy.windows, 1)
         self.assertEqual(energy.check, "ok")
 
     def test_a_short_job_is_still_measured(self):

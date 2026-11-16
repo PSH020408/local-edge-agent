@@ -1,6 +1,6 @@
 """Step response of the battery registry's energy counter: when does a load show up in it, and how much?
 
-    python scripts/gauge_step.py                 # about 7 minutes; the adapter may stay connected
+    python scripts/gauge_step.py                 # about 7 minutes; run once on the adapter, once on battery
 
 Idle for 150 s, one minute of qwen3:14b generation, idle for 210 s. Meanwhile:
 - the battery registry is read every second, and each publication of the power controller's running sum
@@ -40,7 +40,8 @@ def registry() -> dict:
     battery = plistlib.loads(text)[0]
     telemetry = battery.get("PowerTelemetryData") or {}
     return {"update": battery.get("UpdateTime"), "sum_mj": telemetry.get("AccumulatedSystemLoad"),
-            "count": telemetry.get("SystemLoadAccumulatorCount"), "load_mw": telemetry.get("SystemLoad")}
+            "count": telemetry.get("SystemLoadAccumulatorCount"), "load_mw": telemetry.get("SystemLoad"),
+            "external": battery.get("ExternalConnected")}
 
 
 def generate(seconds_target: int = 60) -> None:
@@ -65,6 +66,7 @@ def main() -> None:
         out = subprocess.run(chip.command(samples=total), capture_output=True, text=True)
         meter["samples"] = [{r.name: r.value for r in sample} for sample in chip.parse(out.stdout)]
 
+    source = "adapter" if registry()["external"] else "battery"
     t0 = time.monotonic()
     pm = threading.Thread(target=run_powermetrics)
     pm.start()
@@ -102,7 +104,7 @@ def main() -> None:
 
     fmt = lambda v: "-" if v is None else f"{v:.1f}"  # noqa: E731
     lines = [f"# Step response of the energy counter, {datetime.now():%Y-%m-%d %H:%M}", "",
-             f"Generation from {job.get('on', 0):.0f} s to {job.get('off', 0):.0f} s.", "",
+             f"On the {source}. Generation from {job.get('on', 0):.0f} s to {job.get('off', 0):.0f} s.", "",
              "| Window (s) | Counter mean W | Chip W, same window | Chip W, window before |", "|---|---|---|---|"]
     lines += [f"| {ta:.0f}-{tb:.0f} | {counter:.1f} | {fmt(same)} | {fmt(before)} |" for ta, tb, counter, same, before in rows]
     report = "\n".join(lines) + "\n"
