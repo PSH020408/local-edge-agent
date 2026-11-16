@@ -104,7 +104,8 @@ Diagnosis and agents:
 - [x] Question router: rules first, `qwen3:1.7b` when the rules do not decide (device set Runs D1-D5: 40 of 40 in D5)
 - [x] Admission control for heavy jobs
 - [x] Battery-aware energy mode switching with restore; job energy from hardware counters (`evals/device/energy.md`)
-- [ ] Policy table settled by the energy of each mode (run E3 with the corrected meter)
+- [x] Energy modes for LLM jobs settled by speed (E1-E3: High Power = Automatic; the gauge cannot resolve one job's energy)
+- [ ] Workload set W: modes across everyday work (tiers 0-5, on the adapter and on battery)
 - [x] Speed check before long runs (`scripts/speed_check.py`; test-set runs stop when the Mac is under 60% of its normal speed)
 - [ ] Thermal/power feedback control of long runs, with a recorded step test
 
