@@ -59,3 +59,29 @@ Changes made from this:
   High Power may help. Each run uses a different first line, because Ollama reuses a cached prompt and would
   skip the reading.
 
+## E2 — qwen3:14b, generation and a long prompt, one run per mode (2026-11-16, 91% charge)
+
+| Job | Mode | Time (s) | Read (tokens/s) | Written (tokens/s) | Counter mean W | Idle W | Wh |
+|---|---|---|---|---|---|---|---|
+| Generation, 800 tokens | Low Power | 57.1 | 147 | 14.1 | 25.0 | 4.2 | 0.397 |
+| | Automatic | 31.8 | 185 | 25.4 | 4.1 | 5.1 | 0.037 |
+| | High Power | 31.9 | 187 | 25.4 | 6.0 | 4.8 | 0.054 |
+| Long prompt, 7,684 tokens read | Low Power | 60.1 | 137 | 12.5 | 27.3 | 3.9 | 0.456 |
+| | Automatic | 38.6 | 213 | 22.7 | 13.4 | 4.8 | 0.143 |
+| | High Power | 38.6 | 213 | 22.7 | 12.8 | 5.1 | 0.138 |
+
+Predictions: generation the same in Automatic and High Power (**yes**, 25.4 both, as in E1); the long prompt
+faster in High Power (**no**: 213 tokens/s in both). Low Power was 35-45% slower in every job.
+
+**High Power gave no speed on battery for either kind of work.** Reading a prompt is compute-bound, yet it was
+no faster. Apple describes High Power Mode as letting the fans run faster so that intensive work can be
+sustained: it matters when the chip would otherwise be slowed down by heat, which a 30-40 s job does not
+reach. High Power is therefore a question for long jobs (many minutes), not for single questions.
+
+**Energy: still not usable, although every check said "ok".** A 14B generation cannot draw 4.1 W, less than
+the machine at idle. Low Power runs (25-27 W) look plausible, Automatic and High Power runs do not. One
+explanation fits all six: the counter's publications lag, so the energy of a job lands in a later window
+than the one measured. The sample-count check cannot see a lag. Added: a check that the job's mean power
+is above the idle power, and `scripts/gauge_step.py`, a step-response test (idle, one minute of load,
+idle, with powermetrics as an independent reference) that measures the lag before the counter is used again.
+

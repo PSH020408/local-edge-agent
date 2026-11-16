@@ -154,6 +154,13 @@ class EnergyTests(unittest.TestCase):
         _, energy = pp.measure(gauge, gauge.job(20), sleep=gauge.advance, clock=gauge.clock)
         self.assertAlmostEqual(energy.wh, 40 * 20 / 3600, delta=0.01)
 
+    def test_a_window_that_missed_the_job_is_flagged(self):
+        # Energy run E2: the counter showed less power during a 14B generation than at idle.
+        gauge = FakeGauge(busy=10.0)
+        gauge.busy = 2.0
+        _, energy = pp.measure(gauge, gauge.job(30), sleep=gauge.advance, clock=gauge.clock)
+        self.assertIn("missed the job", energy.check)
+
     def test_run_with_policy_on_battery(self):
         gauge = FakeGauge(charge=70)
         original = pp.measure

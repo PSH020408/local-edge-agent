@@ -175,6 +175,9 @@ def measure(shell, job, sleep=time.sleep, clock=time.monotonic) -> tuple[object,
         check = f"{samples} load samples in a {window:.0f} s window: a publication was missed"
     joules = None if total is None or idle is None else total - idle * outside
     mean = None if joules is None or t1 <= t0 else joules / (t1 - t0)
+    # Energy run E2: a 14B generation came out at 4.1 W, below the 5.1 W idle, with the sample check passed.
+    if check == "ok" and mean is not None and idle is not None and mean < idle:
+        check = f"the job's mean ({mean:.1f} W) is below the idle power ({idle:.1f} W): the window missed the job"
     return result, Energy(t1 - t0, None if joules is None else joules / 3600, mean, idle, window, check)
 
 
