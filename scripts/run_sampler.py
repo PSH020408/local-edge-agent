@@ -34,7 +34,8 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = tomllib.loads((ROOT / "config.toml").read_text(encoding="utf-8"))
-    store = Store(ROOT / cfg.get("device", {}).get("store", "logs/device.db"))
+    device = cfg.get("device", {})
+    store = Store(ROOT / device.get("store", "logs/device.db"), keep_days=device.get("keep_days", 7))
     sampler = Sampler(LiveShell(), store, period=args.period)
     cpu, wall = [], []
 

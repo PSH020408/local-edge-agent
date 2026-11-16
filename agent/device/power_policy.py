@@ -27,7 +27,6 @@ AUTOMATIC, LOW, HIGH = 0, 1, 2
 NAMES = {AUTOMATIC: "Automatic", LOW: "Low Power", HIGH: "High Power"}
 SET_COMMANDS = {mode: ["sudo", "-n", "/usr/bin/pmset", "-b", "powermode", str(mode)] for mode in NAMES}
 
-HIGH_MIN_CHARGE = 50.0   # % below which a heavy job does not get High Power on battery
 LOW_CHARGE = 20.0        # % below which every job runs in Low Power and heavy jobs wait
 
 # Job classes. The jobs of the admission check (diagnosis.JOBS) map onto them.
@@ -54,10 +53,10 @@ def choose(job_class: str, charge: float | None, on_battery: bool) -> Decision:
     if job_class == "medium":
         return Decision(AUTOMATIC, "A medium job: Automatic.")
     if job_class == "heavy":
-        if charge >= HIGH_MIN_CHARGE:
-            return Decision(HIGH, f"A heavy job with the charge at {charge:g}%: High Power.")
-        return Decision(AUTOMATIC, f"A heavy job with the charge below {HIGH_MIN_CHARGE:g}%: Automatic; "
-                                   "connect the adapter for a faster run.")
+        # Energy run E1 (evals/device/energy.md): qwen3:14b generated 25.3 tokens/s in both Automatic and High
+        # Power, 14.1 in Low Power. Generation is bound by memory bandwidth, so High Power cannot speed it up.
+        return Decision(AUTOMATIC, "A heavy job: Automatic. Model generation is limited by memory bandwidth, so "
+                                   "High Power would not make it faster (energy run E1).")
     raise ValueError(f"unknown job class {job_class!r}")
 
 

@@ -21,6 +21,7 @@ answer_model = "qwen3:4b-instruct"  # writes the answer from the diagnosis; the 
 router_model = "qwen3:1.7b"  # only when the routing rules match no topic or several
 capture_seconds = 10      # per-second capture for performance questions
 store = "logs/device.db"  # readings of the background sampler (scripts/run_sampler.py)
+keep_days = 21            # the battery sessions logged from 11-16 must last until the battery-time model (Stage 9, 11-27)
 
 [vision]
 model = "qwen3-vl:8b-instruct"  # instruct variant answers directly; the default qwen3-vl:8b is the thinking variant

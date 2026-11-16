@@ -38,8 +38,8 @@ class ChooseTests(unittest.TestCase):
         self.assertIsNone(pp.choose("heavy", 80, on_battery=False).mode)
         self.assertEqual(pp.choose("light", 80, True).mode, pp.LOW)
         self.assertEqual(pp.choose("medium", 80, True).mode, pp.AUTOMATIC)
-        self.assertEqual(pp.choose("heavy", 80, True).mode, pp.HIGH)
-        self.assertEqual(pp.choose("heavy", 40, True).mode, pp.AUTOMATIC)
+        # Energy run E1: High Power gave the same speed as Automatic for qwen3:14b.
+        self.assertEqual(pp.choose("heavy", 80, True).mode, pp.AUTOMATIC)
         low = pp.choose("heavy", 15, True)
         self.assertEqual((low.mode, low.defer), (pp.LOW, True))
         self.assertFalse(pp.choose("light", 15, True).defer)
@@ -114,7 +114,7 @@ class EnergyTests(unittest.TestCase):
             record = pp.run_with_policy(mac, "heavy", lambda: "done")
         finally:
             pp.EnergyMeter.__init__ = original
-        self.assertEqual((record.decision.mode, record.result, mac.mode), (pp.HIGH, "done", 0))
+        self.assertEqual((record.decision.mode, record.result), (pp.AUTOMATIC, "done"))
         self.assertGreater(record.energy.wh_integrated, 0)  # 1 A from about 12.3 V: about 12 W
 
     def test_deferred_at_low_charge(self):
@@ -139,7 +139,7 @@ class EnergyTests(unittest.TestCase):
             record = pp.run_with_policy(mac, "heavy", lambda: "done")
         finally:
             pp.EnergyMeter.__init__ = original
-        self.assertEqual(record.decision.mode, pp.HIGH)
+        self.assertEqual(record.decision.mode, pp.AUTOMATIC)
         self.assertIsNotNone(record.energy)
 
 
