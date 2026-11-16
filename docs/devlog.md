@@ -9,7 +9,7 @@ Dated entries: what was built, what was decided and why, and progress against th
 | Stage | Planned | Started | Finished | State |
 |---|---|---|---|---|
 | 6 close | 11-16 | 11-15 | | Regression passed (Run 45 and check); holdout pending |
-| 7 Hardware diagnosis, chip-aware from the start | 11-16 to 11-21 | 11-16 | | Design done; probe passed (21 of 21 sources) |
+| 7 Hardware diagnosis, chip-aware from the start | 11-16 to 11-21 | 11-16 | | Core built and tested (Runs D1-D5, no wrong answer in D5); power policy, speed check, feedback control, fan reading and the logging of battery sessions to do |
 | 8 Wireless: Wi-Fi, coverage, Bluetooth | 11-22 to 11-26 | | | |
 | 9 iPhone client and battery-time model | 11-27 to 11-28 | | | |
 | 10 Portfolio | 11-29 to 11-30 | | | |
