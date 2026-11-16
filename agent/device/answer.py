@@ -25,14 +25,24 @@ Rules:
 - No headings, no lists, no closing offers."""
 
 # Run D3: qwen3:4b-instruct translated terms freely ("High Power Mode" as "high capacity mode", vents as
-# "valves", fans as "pump") and mixed available with used memory. The Korean terms are given, not left to it.
-KOREAN_TERMS = """Use these Korean terms:
-High Power Mode = 고성능 모드; Low Power Mode = 저전력 모드; Automatic = 자동
-memory available = 사용 가능한 메모리 (not 사용량); memory used by apps = 앱이 사용 중인 메모리
-storage free = 남은 저장 공간; maximum capacity (macOS) = 최대 용량(macOS); full-charge capacity / design capacity = 설계 용량 대비 완충 용량
-charge = 충전량; charge cycles = 충전 횟수; cell voltages = 셀 전압; spread = 편차
-vents = 통풍구; fans = 팬; thermal pressure = 열 압력; power drawn = 소비 전력
-"X% of one core" means X% of a single core's time (200% = two cores fully busy)."""
+# "valves", fans as "pump") and mixed available with used memory, so the Korean terms are given.
+# Run D4: given all at once, the terms primed the model: it named High Power Mode on battery reports in
+# Automatic mode and mentioned energy modes in performance answers. Only the terms in the report are given.
+KOREAN_TERMS = (
+    ("High Power", "고성능 모드"), ("Low Power", "저전력 모드"), ("Automatic", "자동"),
+    ("memory available", "사용 가능한 메모리 (not 사용량)"), ("memory used by apps", "앱이 사용 중인 메모리"),
+    ("storage free", "남은 저장 공간"), ("maximum capacity (macOS)", "최대 용량(macOS)"),
+    ("full-charge capacity / design capacity", "설계 용량 대비 완충 용량"),
+    ("charge cycles", "충전 횟수"), ("cell voltages", "셀 전압"), ("spread", "편차"),
+    ("vents", "통풍구"), ("fans", "팬"), ("thermal pressure", "열 압력"), ("power drawn", "소비 전력"),
+    ("of one core", "한 코어의 시간 기준 (200% = 코어 두 개가 꽉 참)"),
+)
+
+
+def korean_terms(report_text_: str) -> str:
+    lines = [f"{en} = {ko}" for en, ko in KOREAN_TERMS if en.lower() in report_text_.lower()]
+    return "Use these Korean terms:\n" + "\n".join(lines) if lines else ""
+
 
 _NUMBER = re.compile(r"(?<![\w.])-?\d[\d,]*(?:\.\d+)?")
 
@@ -136,7 +146,9 @@ def write(report: Report, question: str, llm=None) -> Written:
         return Written(template(report), "template-no-model", [], time.perf_counter() - started)
     # Run D2: English questions were answered in Korean; the language is stated by code, not left to the model.
     korean = bool(re.search(r"[가-힣]", question))
-    content = f"Question: {question}\n\n{report_text(report)}\n\n" + (KOREAN_TERMS + "\n\nAnswer in Korean." if korean else "Answer in English.")
+    text = report_text(report)
+    terms = korean_terms(text) if korean else ""
+    content = f"Question: {question}\n\n{text}\n\n" + (terms + "\n\n" if terms else "") + f"Answer in {'Korean' if korean else 'English'}."
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": content}]
     try:
         first = clean(llm.chat(messages)["message"]["content"])

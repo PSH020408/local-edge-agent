@@ -161,3 +161,59 @@ with no unsupported number or stray word, live times as before; by hand: no ❌,
 mixed and wrong terms (9 and 5 in Run D3). Predictions: the terms fix most of the wrong-term cases; the
 meaning mix-ups drop but do not disappear, since a 4B model still writes "X 중 Y%" across two facts.
 
+## Run D4 — after the Run D3 fixes, with the charge limit off (2026-11-16)
+
+Commit `166b505`. Same models, 40 cases (B17 added). The 90% charge limit was turned off for this run, so the
+live battery cases also test whether the limit explains L01-L02 of Run D3 (below).
+
+| Check | Run D3 | Run D4 |
+|---|---|---|
+| Route right | 39 of 39 | **40 of 40** |
+| Findings as expected | 29 of 29 | **30 of 30** |
+| Answers by the model, no unsupported number or stray word | 35 of 35 | **36 of 36** (one rewritten) |
+| Live battery questions | 4.6 s | 4.9 s (median) |
+| Live performance questions | 13.6 s | 14.5 s (median) |
+
+Hand grading, as strict as Run D3: **✅ 18, ⚠️ 18, ❌ 0** (Run D3: ✅ 13, ⚠️ 19, ❌ 3). **Gate passed**: no ❌,
+meanings mixed down from 9 to 3, wrong terms down from 5 to 1. Both predictions held.
+
+| ⚠️ kind | Run D3 | Run D4 | Cases in Run D4 |
+|---|---|---|---|
+| Meanings mixed | 9 | 3 | P01, P04, P06 (used memory against the total) |
+| Wrong term | 5 | 1 | L06 (storage total called "최대 용량(macOS)") |
+| Added cause or advice | 3 | 7 | B04, B08, B10, B11, B12, B17, P05, most about the energy mode |
+| Wrong energy mode stated | 0 | 2 | B06, B07: "High Power Mode" on battery in Automatic mode |
+| Terms not in the report mentioned | 0 | 2 | P08, L02: "cell spread is not given" in an SSD or battery-time answer |
+| Contradiction or fan inference | 2 | 3 | B13; P02, P03 |
+
+**The term list fixed the terms and caused a new error.** Every Korean question got the whole list, which
+starts with the three energy modes. The model then brought the modes into answers that were not about them:
+"High Power Mode" on battery reports in Automatic mode (B06, B07), "turn High Power Mode off" as advice
+(B08, B11), "no energy mode setting is needed" in performance answers, and terms with no fact behind them
+(P08, L02, L06). Fix: only the terms that appear in the report are given.
+
+### The charge limit and the battery discharge on the adapter (L01, L02)
+
+| | Run D3, limit at 90% | Run D4, no limit |
+|---|---|---|
+| Charge, state | 90%, not charging | 90%, charging (14 min to full at the present current) |
+| Power from the adapter | 72.0 W of 100 W | **85.0 W** of 100 W |
+| Battery | −0.24 A, 3.0 W out | charging |
+| Load | CPU 17-24%, GPU 44-77% | CPU 18%, GPU 40-47% |
+
+Prediction written before the run: if the limit causes the discharge, the adapter supplies more than 72 W and
+the battery charges without it. **Both happened.** The adapter could give more than 72 W, so it was not at
+its limit in Run D3; with charging held at 90%, the battery covered a small part of the load. This supports
+the limit as the cause, but does not prove it: one reading per run, and the load was not the same. The
+diagnosis already reports this state as information (`battery_assist`, Run D3 fixes). It will name the limit
+as the cause only once the agent can read the limit setting.
+
+### Fixes after Run D4
+
+| Problem | Fix | Kind |
+|---|---|---|
+| The term list primed the energy modes and terms with no fact | Only the terms that appear in the report are given | Code |
+
+Gate for Run D5, written before it: route and findings all right, no ❌, no energy mode named that is not in
+the facts, no mention of the energy mode in performance answers, ⚠️ at most 12 of 36.
+

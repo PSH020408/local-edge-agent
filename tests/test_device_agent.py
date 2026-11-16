@@ -180,7 +180,11 @@ class RunD3FixTests(unittest.TestCase):
     def test_korean_terms_are_given_for_korean_questions(self):
         llm = FakeLLM("배터리 상태는 양호합니다.")
         writer.write(AnswerTests.REPORT, "배터리 어때?", llm)
-        self.assertIn("High Power Mode = 고성능 모드", llm.calls[0][1]["content"])
+        content = llm.calls[0][1]["content"]
+        self.assertIn("charge cycles = 충전 횟수", content)
+        # Run D4: terms not in the report primed the model (High Power named on an Automatic report).
+        self.assertNotIn("High Power", content)
+        self.assertNotIn("memory available", content)
 
 
 class AnswerTests(unittest.TestCase):
