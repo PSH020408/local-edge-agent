@@ -187,6 +187,19 @@ class RunD3FixTests(unittest.TestCase):
         self.assertNotIn("memory available", content)
 
 
+class RunD5FixTests(unittest.TestCase):
+    def test_used_memory_is_not_given_next_to_available_memory(self):
+        agent = DeviceAgent(FixtureShell(FIXTURES), sleep=NO_SLEEP, capture_seconds=1)
+        facts = agent.diagnose("맥이 왜 이렇게 느려?").report.facts
+        self.assertIn("memory available", facts)
+        self.assertNotIn("memory used by apps", facts)
+
+    def test_the_template_says_why_it_is_in_english_for_a_korean_question(self):
+        result = writer.write(AnswerTests.REPORT, "배터리 어때?", FakeLLM("충전 횟수 268회.", "충전 횟수 268회."))
+        self.assertEqual(result.method, "template")
+        self.assertTrue(result.text.startswith(writer.TEMPLATE_LEAD_KO.strip()))
+
+
 class AnswerTests(unittest.TestCase):
     REPORT = Report("battery", {"charge": "90%", "charge cycles": "286 of 1,000 rated"},
                     [Finding("battery_ok", "info", "Battery health is good", {"charge cycles": "286 of 1,000 rated"}, "No action needed.")])

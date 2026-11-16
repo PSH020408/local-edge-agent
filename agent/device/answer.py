@@ -30,7 +30,7 @@ Rules:
 # Automatic mode and mentioned energy modes in performance answers. Only the terms in the report are given.
 KOREAN_TERMS = (
     ("High Power", "고성능 모드"), ("Low Power", "저전력 모드"), ("Automatic", "자동"),
-    ("memory available", "사용 가능한 메모리 (not 사용량)"), ("memory used by apps", "앱이 사용 중인 메모리"),
+    ("memory available", "사용 가능한 메모리 (not 사용량)"),
     ("storage free", "남은 저장 공간"), ("maximum capacity (macOS)", "최대 용량(macOS)"),
     ("full-charge capacity / design capacity", "설계 용량 대비 완충 용량"),
     ("charge cycles", "충전 횟수"), ("cell voltages", "셀 전압"), ("spread", "편차"),
@@ -108,9 +108,13 @@ def looks_like_reasoning(text: str) -> bool:
     return bool(_REASONING.search(text[:300]))
 
 
-def template(report: Report) -> str:
+# Run D5, L05: the template answered a Korean question in English without saying why.
+TEMPLATE_LEAD_KO = "답변 문장을 만들지 못해 진단 결과를 그대로 보여 드립니다: "
+
+
+def template(report: Report, korean: bool = False) -> str:
     order = {"problem": 0, "warning": 1, "info": 2}
-    parts = []
+    parts = [TEMPLATE_LEAD_KO.strip()] if korean else []
     for item in sorted(report.findings, key=lambda x: order.get(x.severity, 3))[:3]:
         evidence = ", ".join(f"{k} {v}" for k, v in list(item.evidence.items())[:3])
         parts.append(f"{item.title}" + (f" ({evidence})" if evidence else "") + f". {item.advice}")
@@ -153,7 +157,7 @@ def write(report: Report, question: str, llm=None) -> Written:
     try:
         first = clean(llm.chat(messages)["message"]["content"])
     except Exception as exc:  # noqa: BLE001
-        return Written(template(report), "template", [], time.perf_counter() - started, reason=f"model failed: {exc}")
+        return Written(template(report, korean), "template", [], time.perf_counter() - started, reason=f"model failed: {exc}")
     problem, bad = _problem(first, report, question)
     if not problem:
         return Written(first, "model", [], time.perf_counter() - started)
@@ -167,4 +171,4 @@ def write(report: Report, question: str, llm=None) -> Written:
     problem_again, bad_again = _problem(second, report, question) if second else (problem, bad)
     if second and not problem_again:
         return Written(second, "model-retry", bad, time.perf_counter() - started, first=first, reason=problem)
-    return Written(template(report), "template", bad_again, time.perf_counter() - started, first=first, reason=problem)
+    return Written(template(report, korean), "template", bad_again, time.perf_counter() - started, first=first, reason=problem)

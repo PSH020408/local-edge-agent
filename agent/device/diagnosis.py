@@ -299,8 +299,9 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
         f["thermal pressure"] = PRESSURE_NAMES.get(level, str(level))
     if available is not None:
         f["memory available"] = f"{available:.0f}%" + (f" of {gb(total_memory)}" if total_memory else "")
-    if _num(view, "memory.app") is not None:
-        f["memory used by apps"] = gb(_num(view, "memory.app"))
+    # Run D5: "memory used by apps" (anonymous pages, vm_stat) is counted differently from "memory available"
+    # (memory_pressure: free, inactive and purgeable). 12.2 GB used with 88% of 24 GB available looks like a
+    # contradiction, and the model wrote "12.2 GB, 88% of 24 GB" in three runs. The reading is still stored.
     if _num(view, "memory.compressed") is not None:
         f["compressed memory"] = gb(_num(view, "memory.compressed"))
     if swap_used is not None:

@@ -217,3 +217,47 @@ as the cause only once the agent can read the limit setting.
 Gate for Run D5, written before it: route and findings all right, no ❌, no energy mode named that is not in
 the facts, no mention of the energy mode in performance answers, ⚠️ at most 12 of 36.
 
+## Run D5 — after the Run D4 fixes, charge limit back on (2026-11-16)
+
+Commit `85deb2c`. Same models and 40 cases. The 90% charge limit (set in System Settings > Battery, no other
+app) was on again.
+
+| Check | Run D4 | Run D5 |
+|---|---|---|
+| Route right | 40 of 40 | **40 of 40** |
+| Findings as expected | 30 of 30 | **30 of 30** |
+| Answers by the model | 36 of 36 | 35 of 36 (one by the template) |
+| Live battery / performance questions | 4.9 s / 14.5 s | 4.8 s / 14.1 s (median) |
+
+Hand grading: **✅ 26, ⚠️ 10, ❌ 0** (Run D4: ✅ 18, ⚠️ 18). **Gate passed**: no ❌, no energy mode named that is
+not in the facts (B06 and B07 now say nothing about the mode; B15 says "자동"), no energy mode in the
+performance answers, ⚠️ 10 of at most 12.
+
+| ⚠️ kind | Run D4 | Run D5 | Cases in Run D5 |
+|---|---|---|---|
+| Added cause or advice | 7 | 4 | B08, B10, B11, B12: High Power Mode named as a cause or "turn it off" as advice, where the facts say it is on |
+| Meanings mixed | 3 | 3 | P01, P04, P06: "memory used by apps 12.2 GB" set against the total or called low |
+| Fan inference | 2 | 2 | P02, P03: the fans are guessed at from "fan speed is not measured" |
+| Template in English for a Korean question | 0 | 1 | L05: both model answers computed 60% of 24.0 GB = 14.4 GB, so the template answered |
+| Wrong mode, terms not in the report, wrong term | 5 | 0 | - |
+
+One test-set flaw found: in P05 the model read the cause from the process name ("process-stuck"). The
+scenario names a process by what it does, which a real process would not.
+
+**Third reading of the charge limit.** With the limit back on, L01-L02 again show the battery giving a little
+power on the adapter: 78.4 W from the adapter (78% of its rating) and 3.4 W from the battery. Limit on: 72.0 W
+and 78.4 W in, the battery discharging; limit off: 85.0 W in, the battery charging. The diagnosis reported it
+as `battery_assist` (information), as intended after Run D3.
+
+### Fixes after Run D5, and where the answers stop
+
+| Problem | Fix | Kind |
+|---|---|---|
+| "Memory used by apps" next to "memory available" (P01, P04, P06 in three runs) | Not given to the writer. The two figures come from different counts (vm_stat anonymous pages; memory_pressure free, inactive and purgeable), so 12.2 GB used with 88% of 24 GB available looks like a contradiction even to a person. The reading is still stored | Code |
+| Template in English without a reason (L05) | For a Korean question the template starts with a Korean line saying the answer could not be written | Code |
+
+Not fixed by the writer, on purpose: the fan guesses (P02, P03) need a fan reading, not a prompt rule (the
+SMC fan reading of the Stage 7 plan); the mode named as a cause (B08, B10-B12) is a limit of the 4B model
+seen in every run. From Run D1 to Run D5 the hand grade went from no usable answer to ✅ 26 of 36 with no ❌.
+The answer writer is left here; the next device-set run comes with the next Stage 7 feature.
+
