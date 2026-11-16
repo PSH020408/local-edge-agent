@@ -209,3 +209,56 @@ before it counts.
 Predictions: TB1 ✅; TD3 and SC3 stay ❌ (vision readings, not touched); lecture decks unchanged, as
 the chart-page test marks none of their pages; the paper sets unchanged, as chart pages are read only
 in documents that are not papers.
+
+## Run 45 — tables set and full regression (2026-11-16)
+
+Code 745310e. All eight document sets in one command: 178 questions. The first four sets ran with
+the GPU held at its lowest clocks (see `docs/devlog.md`); the machine was shut down, and the last four
+ran at normal speed. Model call profile of the last four sets (64 minutes of model time): `qwen3:14b`
+76% of the time, of which two thirds was reading the prompt; the vision model 24%; model loading
+under 1%. Tables answers and grades: `runs/run45.md`.
+
+| Set | Last result | Run 45 | Gate |
+|---|---|---|---|
+| Tables (23 + 3) | ✅ 19, ⚠️ 2, ❌ 2 (Run 44) | ✅ 19, ⚠️ 2, ❌ 2; 3/3 | ✅ 19 or more, TB1 ✅ with no flag, no computed value flagged: **passed** |
+| Development (16 + 3) | ✅ 15, ⚠️ 1 (Run 38) | ✅ 14, ⚠️ 2, ❌ 0; 3/3 | ✅ 15 or more, no ❌: not met (D06) |
+| First holdout, lectures (21 + 3) | ✅ 19, ⚠️ 2 (Run 38) | ✅ 19, ⚠️ 1, ❌ 1; 3/3 | ✅ 18 or more, no ❌: not met (GC2) |
+| Second holdout, papers (21 + 3) | ✅ 20, ❌ 1 (Run 38, after repeats) | ✅ 20, ⚠️ 1, ❌ 0; 3/3 | ✅ 18 or more: passed |
+| Third holdout, long papers (24 + 3) | ✅ 19, ⚠️ 4, ❌ 1 (Run 38, after repeats) | ✅ 20, ⚠️ 3, ❌ 1; 3/3 | ✅ 18 or more, SA8 and RA11 ✅: passed |
+| Fourth holdout, papers with equations (19 + 2) | ✅ 17, ⚠️ 1, ❌ 1 (Run 38, BS3 regraded) | ✅ 18, ⚠️ 0, ❌ 1; 2/2 | ✅ 16 or more: passed |
+| Equations (18) | ✅ 17, ⚠️ 1 (Runs 39-40) | ✅ 16, ⚠️ 1, ❌ 1 | ✅ 16 or more: passed |
+| Fifth holdout, RISC-V paper (16 + 3) | ✅ 11, ⚠️ 5 (Run 41) | ✅ 11, ⚠️ 5, ❌ 0; 3/3 | ✅ 11 or more, no ❌: passed |
+
+"Not in the document" checks: 20/20. Cases whose key facts, warnings and flags were unchanged were
+checked by spot reading; every case with a change was read in full.
+
+Changes against the last run of each set:
+
+| Case | Before | Run 45 | Notes |
+|---|---|---|---|
+| TB1 | ⚠️ | ✅ | 19.48 corrected to 19.50 by code across paragraphs; no flag |
+| TC2 | ✅ | ⚠️ | The chart reading had both loss quarters; the answer gave only 2Q '26 |
+| GC2 (lectures and equations) | ✅ | ❌ | The positional-encoding formulas exist only as a picture. The new page-reading prompt returned [none] for the slide, and the retry asked for charts. Systematic, not run-to-run variation |
+| D06 | ✅ | ⚠️ | Base station ID, frequency and synchronization information right; PSS, SSS and PBCH left out |
+| GA6 | ⚠️ | ✅ | Iris recognition now named correctly |
+| PA10 | ✅ | ⚠️ | Another point from the Discussion instead of the stated limitations (as in Runs 30-32) |
+| VA1 | ❌ | ✅ | First time right: CIC 16, then 2, 2, 2, total 128 = 6.144 MHz / 48 kHz; the number check flagged the correct 128 (a product of four numbers) |
+| RA6 | ⚠️ | ✅ | "Reconfigurable" this time |
+| BS9 | ⚠️ | ✅ | Cited to the right page now |
+| RV1 | ⚠️ | ⚠️ | The confirmed reading is used now, but one sentence is cited to the wrong page (flagged) |
+
+Predictions: TB1 ✅ (yes); TD3 and SC3 stay ❌ (yes); lecture decks unchanged (no: GC2, because the
+page-reading prompt change reached a formula slide); paper sets unchanged (yes, within run-to-run
+variation).
+
+Speed: the equation set took 13.3 minutes (64 in Run 39) and the fifth holdout 11.8 minutes (51.8 in
+Run 41) on the same kind of code path: Runs 39 and 41 had the same slowdown as the first half of Run 45.
+
+### Fix after Run 45
+
+| Problem | Fix | Kind |
+|---|---|---|
+| A figure page that is not a chart page, read as [none], was asked again for charts (GC2) | Chart pages are asked again for charts; any other figure page with [none] is asked again with a prompt that names equations, tables, charts and diagrams and has no [none] answer. The prompt is part of the cache version, so pages stored as empty are read again | Code and prompt |
+
+Check before closing the stage: GC2 in both sets once (the cause is systematic), D06, TC2 and PA10
+three times each (one-case drops are counted only when repeats confirm them).

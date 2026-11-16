@@ -2,18 +2,27 @@
 
 Author: PARK, SEHO
 
-Principle: **everything runs locally** on one MacBook Pro (M4 Pro, 24 GB). No cloud models or services, including image generation.
+Principle: **everything runs locally** on the devices I own: a MacBook Pro (Apple M4 Pro, 24 GB unified memory) and an iPhone. No cloud models or services.
 
-Goal: a local agent that helps with graduate-school preparation, exam preparation, reading PDFs, papers and handouts, formula, graph and financial-statement analysis, art-style analysis, and image generation (anime and subculture styles, game illustration, realistic people, animals, objects and landscapes).
+## Direction (from 2026-11-16)
+
+Stages 0-6 built a local agent that reads documents, images and formulas with exact, code-checked answers. From Stage 7 the project treats the MacBook as one large embedded device and the iPhone as a client node:
+
+- **Sense**: a telemetry layer reads the machine's own hardware (battery, power, thermal state, memory, storage, Wi-Fi radio) in one uniform format, sampled in the background on the efficiency cores.
+- **Decide**: domain agents (battery, Wi-Fi, performance) run fixed diagnostic procedures in code: measure, compute, classify, rank causes. Lightweight models (statistics, a small classifier, a fitted propagation model) are used where a rule is not enough.
+- **Act**: the agent proposes fixes and applies them only after confirmation; it also controls its own workload against power, thermal and memory limits.
+- **Explain**: a small local language model turns the structured result into an answer. It does not compute or invent numbers; the numbers in the answer are checked against the measurements, as in Stages 4-6.
+
+The goal is engineering problem solving with the hardware at hand (embedded systems, wireless communication, control), not imitating a cloud chatbot. A question such as "why is my Wi-Fi so slow?" goes straight to the Wi-Fi agent, which measures, decides and answers in seconds.
 
 ## How every stage is verified
 
-1. Questions come from case files and run with one command (`scripts/run_eval_set.py`). Every answer is read and graded against the page images and the expected answer written before the run; the grade and its reason are recorded per case. From Stage 6 on, each run is also published with its answers (`scripts/export_run.py` → `evals/documents/runs/`), so every grade can be checked; the earlier runs on public papers and the formula runs are published the same way (`evals/documents/runs/`, `evals/formulas/runs/`).
-2. Every observed failure gets a fix and an offline regression test (`python -m unittest discover -s tests`).
-   A drop of one case is counted only when repeated runs confirm it (answers vary between runs).
-3. Holdout questions are never used for tuning; fixes are measured on new, unseen questions.
-4. Results go to `docs/benchmarks.md` as a numbered run; enforced constraints go to `docs/guardrails.md`.
-5. A stage is finished when its "done when" line is met, then it is committed and pushed.
+1. Every agent has a scenario set: questions with the expected route, diagnosis and action, and conditions created on purpose (moving away from the router, a heavy workload, running on battery). Each answer is graded against the measurements and the expectation written before the run.
+2. Fitted models are scored on data they were not fitted on: held-out measurement points for the coverage model, unseen discharge sessions for battery-time prediction, unseen days for the anomaly detector.
+3. Predictions are written before a run; a single-case drop counts only when repeats confirm it.
+4. Every failure gets a fix and an offline regression test (`python -m unittest discover -s tests`). Sensor readers are tested with recorded outputs, so tests run without the hardware.
+5. Speed and memory are measured for every agent (`logs/model_calls.jsonl`, `scripts/profile_calls.py`).
+6. Results go to `docs/benchmarks.md`, decisions and progress to `docs/devlog.md`; a stage is committed when its "done when" line is met.
 
 ## Done
 
@@ -24,93 +33,107 @@ Goal: a local agent that helps with graduate-school preparation, exam preparatio
 | 2 Math | Engineering calculator (numpy, scipy, sympy), unit-aware calculation (pint), loop guards | 6-10 | 44f5c99 |
 | 3 Vision | Separate vision model as a tool, zoom, two-reading verification, image question planner, one-command test set | 11-24 | b4c74bc |
 | 4 Documents | PDF and PowerPoint reading, page and passage search, vision for equations and figures, cited answers with code checks, four holdouts | 25-33 | c20fa03 |
-| 5 Formulas | Numbered and unnumbered equations located, cropped, read twice and checked against the image; equations given first in document answers; Greek letters and equation numbers searched; answers that change an equation flagged; a fifth holdout | 34-41 | ea2a9b2 |
+| 5 Formulas | Equations located, cropped, read twice and checked against the image; given first in document answers; a fifth holdout | 34-41 | ea2a9b2 |
 
-## Latest stage
+## Schedule to 2026-11-30
 
-### Stage 5 — Formulas, complete
+| Dates | Stage | Main deliverable |
+|---|---|---|
+| 11-16 | 6 close | Run 45 graded; a short holdout; sensor probe run on the Mac |
+| 11-17 to 11-19 | 7 Device layer and battery agent | Telemetry layer, background sampler on efficiency cores, question router, battery and power agent |
+| 11-20 to 11-22 | 8 Wi-Fi agent | Link reading, 10-second active test, fault location, use-case verdict, best-network ranking, anomaly detection |
+| 11-23 to 11-25 | 9 Coverage planning | Floor plan, measured signal map, fitted indoor propagation model, router placement and count |
+| 11-26 to 11-27 | 10 Chip-aware optimisation | Small models, admission control, thermal and power feedback control, battery-aware policy, battery-time model |
+| 11-28 to 11-29 | 11 iPhone client | Ask the Mac agent from the iPhone (Shortcuts, Siri); Bluetooth "smart key" as a stretch goal |
+| 11-30 | 12 Portfolio | README results, demo recording, final scenario runs |
 
-Built: `agent/formula_tools.py` (an equation located by its number in the text layer, or a displayed equation without a number found from its layout; two crops at different margins, two readings by the vision model compared after normalising the LaTeX, the more complete reading kept, a third call that checks the result against the image, a structure check), its use in `agent/document_planner.py` (equations named in a question, or found by rare words for a formula question, are read and given first with the passages next to them; the answer states each reading's status; an answer that changes an equation is flagged; Greek letters and equation numbers are search keywords), `scripts/run_formula_set.py` and 28 reference LaTeX transcriptions written from the page images in `evals/formulas/`, and an equation question set in `evals/documents/equations.toml`.
+Progress is checked against this table every day in `docs/devlog.md`. If a stage runs late, the stretch items (marked *stretch*) are dropped first, then Stage 11 shrinks to the Shortcuts client.
 
-- [x] Formula reader: locate, crop twice, read twice, compare by code; structure check (sympy's LaTeX parser was tried and not used: it drops parts of paper formulas silently)
-- [x] Development set of 28 numbered equations graded by code (Runs 34-36: whole-page reading exact 17-19 of 28, two crops 20 → 23 → 26 of 28)
-- [x] Third call that checks the chosen reading against the image; the more complete of two readings kept (Run 36)
-- [x] Formula reader in document answers (Run 37: equation set ✅ 12 of 14, the four earlier equation failures fixed; Run 38: all five document sets passed their gates)
-- [x] Unnumbered displayed equations, lists of equation numbers, rare-word ranking (Runs 39-40: equation set ✅ 16 of 18, then the two misses fixed)
-- [x] Fifth holdout, one two-column paper, run once (Run 41: ✅ 11, ⚠️ 5, ❌ 0; "not in the document" 3/3; ten confirmed readings, all exact)
-- [ ] Symbol table per document: not built. In every test the symbols were explained correctly from the text next to the equation once the equation and that text were given together; it stays an option if a later test needs it
-- [ ] Dimension checks of formulas: not built (no test needed them)
+## Stage 6 — Tables, financial statements and graphs (closing)
 
-Holdouts, each run once on unseen documents:
+- [x] Development set and baseline (Run 42: ✅ 11 of 23)
+- [x] Picture pages read, charts transcribed as tables, statement totals and calculations checked by code (Run 43: ✅ 18)
+- [x] Chart pages, cached page readings, a related figure no longer given for the asked item (Run 44: ✅ 19, 83%, "not in the document" 3/3)
+- [x] Arithmetic explained across paragraphs; page index no longer given to the vision model
+- [ ] Run 45: tables set and regression of every earlier document set, gates in `evals/documents/tables.md`
+- [ ] Short holdout on unseen financial documents, run once
 
-| Run | Documents | Fully correct | Wrong | "Not in the document" checks |
-|---|---|---|---|---|
-| 27 | Three lecture decks | 76% | 3 | 3/3 |
-| 29 | Two short papers, before passage search | 38% | 11 | 3/3 |
-| 31 | Two long papers | 62.5% | 4 | 3/3 |
-| 33 | Two one-column papers with equations, tables and figures | 74% | 3 | 2/2 |
-| 41 | One two-column paper with 13 numbered equations | 69% | 0 | 3/3 |
-
-Formula reading: a reading confirmed by two crops was exact 46 times of 47 on the development formulas (Runs 35-36) and 10 times of 10 on the unseen paper (Run 41).
-
-Done when: transcriptions match the known LaTeX or are marked uncertain. Met: every confirmed reading but one matched; the readings that did not were marked "close", "disagree" or "check failed", and the answers said so.
-
-Carried over:
-- Stage 3: redesign the accurate profile from the Run 24 findings; a vision holdout on new images
-- Stage 5: the page description offers its own transcription of an equation that was read, and the answer sometimes takes it (RV1, EQ4); braces that mark a count are read as exponents (RV4); inline formulas come from the text layer (RV8); the third check call raises false alarms and its catches are unmeasured; the model's passage selection sometimes fails to parse
-- Stage 4 items closed by Stage 5: Greek letters and equation numbers are searched, equation-heavy explanations are given with the equation (MR2, MR4 fixed), unnumbered formulas are read from the page (BS3). Still open: the vision model can miss a chart when asked for "equations and figures" (BS9)
-
-## Next
-
-### Stage 6 — Tables, financial statements and graphs
-- Table → CSV; code checks totals and subtotals (for example assets = liabilities + equity)
-- Ratios and growth rates computed by the math tools, never by the model
-- Graphs: trends described; values read from a chart are marked approximate; data in the document is preferred
-
-Verify: a public financial statement with known figures, a chart with known data.
 Done when: extracted figures pass the code checks and chart values are never presented as exact.
 
-- [x] Development set: 24 pages of a Korean annual report, a US 10-K, two Korean results decks, and synthetic charts and tables with known values (`evals/documents/tables.toml`, `scripts/make_chart_set.py`)
-- [x] Baseline on the Stage 5 code (Run 42: ✅ 11, ⚠️ 3, ❌ 9 of 23, 48%; "not in the document" 3/3)
-- [x] Fixes for the four causes: picture pages always read; charts and pictured tables transcribed as tables, with values read from an axis marked ~; statement totals checked by code (`agent/table_tools.py`); calculations done by code ([calc: ...]) and written arithmetic recomputed; numbers with several thousands separators kept whole
-- [x] Rerun of the development set (Run 43: ✅ 18, ⚠️ 2, ❌ 3 of 23, 78%; one "not in the document" check failed; gate not passed)
-- [x] Fixes from Run 43: computed numbers explained and rounding slips corrected in any format; chart pages read for any question; charts read as [none] asked again; page readings cached; a related figure no longer given for the asked item
-- [ ] Rerun of the development set (Run 44)
-- [ ] Regression check of the earlier document sets
-- [ ] Holdout, run once: a Korean half-year report, a second 10-K, two more results decks, a paper with tables
+## Stage 7 — Device layer and battery agent (11-17 to 11-19)
 
-### Stage 7 — Visual reasoning experiment
-- Thinking variant of the vision model (`qwen3-vl:8b`) vs the instruct variant on counting, charts, sheet music and fine details (cases 02, 06, 08, 11)
-- Thinking turned on for the planner
-- Measure accuracy against time; decide a fast mode and an accurate mode
+Telemetry layer (`agent/device/`): one reader per source, each returning values with units and a timestamp, read-only, no administrator rights by default.
 
-Done when: both modes are measured and the defaults are chosen from the numbers.
+- [ ] Sensor probe: which readings this Mac allows (battery registry, power and thermal state, memory pressure, storage, Wi-Fi radio, chip power with and without administrator rights)
+- [ ] Readers: battery (charge, cycle count, design and full-charge capacity, voltage, current, temperature), power source and power mode, thermal state, CPU and GPU load, memory pressure and swap, storage space and throughput
+- [ ] Background sampler at a fixed period, run at background priority so macOS places it on the efficiency cores; its own CPU time and energy measured on both core types
+- [ ] Question router in code (keywords and patterns, under 1 ms); the small model only when the rules do not decide
+- [ ] Battery and power agent: health against Apple's published limits (80% of design capacity, 1,000 cycles) → replacement advice; heavy workload on battery → connect power or use High Power Mode; remaining time from measured power (voltage × current) and remaining energy; the biggest energy users
+- [ ] Discharge sessions logged from day one (training data for Stage 10)
 
-### Stage 8 — Painter (image generation)
-- Local image runner (ComfyUI) controlled through its API as an agent tool
-- Painter models chosen by purpose: anime-specialised SDXL models for anime, subculture and game illustration; FLUX or Z-Image models for realistic images
-- Two modes: **original creation** from a text description, and **reference-based** generation (image-to-image, style reference)
-- Memory management: language and vision models are unloaded while painting and loaded again afterwards
-- Speed and memory measured per model and size
+Verify: readers tested on recorded outputs; scenario set for the battery agent (on battery, charging, under load).
+Done when: "how is my battery?" answers in under 5 seconds with measured values, and every scenario gets the expected advice.
 
-Verify: speed and peak memory per model; prompt adherence checked by reading the outputs.
-Done when: both modes work from the agent and the speed table is recorded.
+## Stage 8 — Wi-Fi and network agent (11-20 to 11-22)
 
-### Stage 9 — See, paint, check
-- The vision model analyses reference images and writes a style sheet (line weight, colouring, proportions, shading, palette)
-- The painter generates from the style sheet and the request
-- The vision model checks the result against the request (hands, colours, character details); a failed check repaints, with a limit
-- LoRA for the user's own style or a recurring character; pose control (ControlNet)
-- Copyright: style references are genre styles or the user's own work, not a living artist's style copied for use
+- [ ] Link reading: signal strength, noise, signal-to-noise ratio, channel, band, channel width, PHY mode, link rate
+- [ ] 10-second active test: latency, jitter and loss to the router and to the internet; DNS lookup time; download and upload throughput
+- [ ] Fault location: Wi-Fi link, router, internet provider or DNS, from which segment is slow
+- [ ] Use-case verdict from published requirements (online gaming, video call, streaming, messaging), with the reason
+- [ ] Channel scan: nearby networks per channel and band, congestion score, channel advice for my router
+- [ ] Best network among several (for example public Wi-Fi): ranked from the scan, then the top candidates tested with confirmation
+- [ ] Anomaly detection: a baseline from the background log (robust statistics per hour of day); "is my network acting strange?" compares now with the baseline
+- [ ] Actions with confirmation: reconnect, switch band or network
 
-Verify: a character drawn several times stays consistent; the check catches planted errors.
-Done when: the loop improves results in the recorded comparison.
+Verify: scenarios created on purpose (near and far from the router, behind walls, a saturated link); the fault location is checked against where the problem was created.
+Done when: "why is my Wi-Fi slow?" returns the faulty segment, a use-case verdict and a fix in about 15 seconds.
 
-### Stage 10 — Motion and media
-- `make_gif` (Pillow) and `clip_video` (ffmpeg)
+## Stage 9 — Coverage planning on a floor plan (11-23 to 11-25)
 
-### Stage 11 — Files and document generation
-- Read, write and edit files with confirmation; docx, pdf and pptx output; automatic file classifier
+- [ ] Floor plan with a known scale; walls marked as line segments with a material type
+- [ ] Signal measured at 15-25 points around the home, with the router position recorded
+- [ ] Indoor propagation model fitted by least squares: path loss = PL₀ + 10·n·log₁₀(d) + Σ wall losses (multi-wall model); path-loss exponent and wall losses reported
+- [ ] Model scored on held-out points it was not fitted on
+- [ ] Coverage map for any router position; placement search and the number of routers needed for a target level (for example −67 dBm for video calls) in every room
+- [ ] Agent question: "where should I put the router?" / "how many access points do I need?"
 
-### Stage 12 — Portfolio
-- README with the architecture diagram and results tables, demo recordings, project write-up
+The floor plan of my home is kept out of the repository; the repository uses a synthetic plan with the same method.
+
+Verify: prediction error on held-out points; the predicted dead zones checked by measurement.
+Done when: the fitted model predicts held-out points within a stated error and the placement advice is checked at the predicted weak spots.
+
+## Stage 10 — Chip-aware optimisation (11-26 to 11-27)
+
+- [ ] Profile of every model call (load, prompt, generation time, memory held) from `logs/model_calls.jsonl`
+- [ ] Small model for routing fallback and answer writing (`qwen3:4b`, `qwen3:1.7b` compared with `qwen3:8b` on the scenario sets); the large models only for documents
+- [ ] Memory budget: which models stay loaded together in 24 GB; context size per call
+- [ ] Admission control: each heavy job's memory, time and power measured once; a new job is started, run with a smaller model, or deferred from the current load
+- [ ] Thermal and power feedback control: workload adjusted to keep power or the thermal state below a target; step response recorded (overshoot, settling time)
+- [ ] Battery-aware policy: model size and pace chosen from charge level and remaining work
+- [ ] Battery remaining-time model trained on the logged discharge sessions; compared with the macOS estimate (`pmset -g batt`) on unseen sessions
+- [ ] *stretch*: on-device text recognition (Apple Vision) instead of the vision model for text pages; MLX against Ollama
+
+Verify: time, memory and energy per answer before and after; the controller's response plotted.
+Done when: the device agents answer with the small model at the same scenario grades, and the controller holds its target in the recorded test.
+
+## Stage 11 — iPhone client (11-28 to 11-29)
+
+- [ ] Local HTTP endpoint on the Mac (home network only, with a shared key)
+- [ ] iPhone Shortcut "Ask Mac": a question typed or spoken through Siri goes to the Mac agent, and the answer comes back to the phone
+- [ ] iPhone-side measurement: the phone tests the Wi-Fi where it is ("how is the Wi-Fi in the bedroom?")
+- [ ] *stretch*: Bluetooth Low Energy "smart key": a small iOS app (Swift, CoreBluetooth); when the phone comes near, the Mac sends a status summary; a button asks for a diagnosis
+
+Verify: answers on the phone match the answers on the Mac; round-trip time measured.
+Done when: a Mac diagnosis can be asked and read on the iPhone.
+
+## Stage 12 — Portfolio (11-30)
+
+- README with the architecture, results tables and plots (coverage map, controller response, speed before and after)
+- Demo recording: a spoken question on the iPhone → diagnosis on the Mac → answer on the phone
+- Final scenario runs for every agent
+
+## Later
+
+- Image generation (painter), postponed: the earlier plan for Stages 8-9 (local image runner, see-paint-check loop) moves after Stage 12
+- Visual reasoning experiment (thinking vision model), redesign of the accurate profile, a vision holdout on new images
+- Open items from Stage 5: page descriptions sometimes win over confirmed equation readings (RV1, EQ4); braces read as exponents (RV4); inline formulas from the text layer (RV8)

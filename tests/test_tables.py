@@ -195,6 +195,36 @@ class ExplainTests(unittest.TestCase):
         self.assertEqual(tt.fill_calculations("[calc: 89.3 + 15.4]")[0], "89.3 + 15.4 = 104.7")
 
 
+class RetryPromptTests(unittest.TestCase):
+    def test_a_chart_page_read_as_none_is_asked_for_its_charts(self):
+        from agent import document_planner as dp
+        from agent.document_tools import Document, Page
+
+        class Vision:
+            def __init__(self):
+                self.calls = []
+
+            def describe(self, path, question):
+                self.calls.append(question)
+                return {"status": "ok", "answer": "[none]" if len(self.calls) == 1 else "| Q | Units |\n|---|---|\n| Q3 | 921 |", "text": ""}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            page = Page(number=1, text="921\n1,038\n-11.3%\nQ3 2025\nQ3 2026\n2,145\n+4.2%\n20,514\n22,817\n-10.1%", title="", images=1)
+            document = Document(path=root / "deck.pdf", kind="pdf", pages=[page])
+            vision = Vision()
+            planner = dp.DocumentQuestionPlanner(None, type("R", (), {"vision": vision})(), root)
+            planner_image = dp.page_image
+            dp.page_image = lambda document, number, cache_dir: root / "p1.png"
+            (root / "p1.png").write_bytes(b"")
+            try:
+                notes = planner._look(document, [1], "How many units?")
+            finally:
+                dp.page_image = planner_image
+            self.assertIn("921", notes[1])
+            self.assertIn("holds one or more charts", vision.calls[1])
+
+
 class ChartPageTests(unittest.TestCase):
     def test_chart_labels_but_not_text_tables(self):
         from agent.document_tools import Page, is_chart_page
@@ -235,7 +265,9 @@ class NotesCacheTests(unittest.TestCase):
             notes = planner._look(document, [1], "What was Q1 revenue?")
             self.assertIn("412.0", notes[1])
             self.assertEqual(len(vision.calls), 2)
-            self.assertIn("holds one or more charts", vision.calls[1])
+            # Run 45 (GC2): a picture page that is not a chart page is asked for every kind of content.
+            self.assertIn("Its text layer is almost empty", vision.calls[1])
+            self.assertIn("Equations", vision.calls[1])
             again = dp.DocumentQuestionPlanner(None, type("R", (), {"vision": Vision()})(), root)
             self.assertIn("412.0", again._look(document, [1], "What was Q1 revenue?")[1])  # from the cache
 

@@ -1,18 +1,63 @@
-# Local LLM Agent
+# Local Edge Agent
 
-A tool-using agent that runs entirely on a MacBook Pro (Apple M4 Pro, 24 GB) with local models served by Ollama. No cloud APIs. The agent core uses only the Python standard library; the math tools use numpy, scipy, sympy and pint, the vision tools use Pillow, and the document tools use pypdfium2 and python-pptx.
+An edge AI agent that runs entirely on my own devices: a MacBook Pro (Apple M4 Pro, 24 GB unified memory) as the compute node and an iPhone as a client. Local models are served by Ollama; no cloud APIs. The agent core uses only the Python standard library.
 
 Author: PARK, SEHO
 
 ## Motivation
 
-An LLM is a probability-based decision engine that can only output text. This project wraps a local LLM with tools and an agent loop: the LLM handles judgment (what to do, which tool to use), and code handles exact execution. This makes tasks possible that the LLM could not do on its own, such as reading the clock, the file system or an image, and makes tasks it could only guess at, such as arithmetic, exact and efficient.
+The project treats the MacBook as one large embedded device. Instead of imitating what a cloud chatbot does, it uses the hardware at hand (battery, power and thermal sensors, the Wi-Fi radio, storage, the efficiency and performance cores) to solve engineering problems:
 
-A second theme runs through the project: a rule only holds reliably when code enforces it. Rules written in prompts are followed inconsistently by small models, so constraints that matter for correctness are moved into code and shown in the terminal when they act ([docs/guardrails.md](docs/guardrails.md)).
+- **Sense**: read the machine's own telemetry in one uniform format, sampled in the background on the efficiency cores.
+- **Decide**: diagnose in code (measure, compute, classify, rank causes), with lightweight models where a rule is not enough: robust statistics for anomalies, a small classifier, a fitted indoor propagation model.
+- **Act**: propose fixes and apply them only after confirmation; keep the agent's own workload within power, thermal and memory limits (feedback control, admission control).
+- **Explain**: a small local language model writes the answer from the structured result. It never computes or invents a number; numbers in answers are checked against the measurements by code.
 
-See [docs/findings.md](docs/findings.md) for experiments and results, and [docs/roadmap.md](docs/roadmap.md) for the stage plan.
+Example: "why is my Wi-Fi so slow?" goes straight to the Wi-Fi agent, which reads the radio, runs a 10-second test, finds whether the Wi-Fi link, the router, the internet provider or DNS is the slow segment, and answers which uses (gaming, video calls, messaging) the link can carry and what to change.
+
+A theme from the first stages carries over: a rule only holds reliably when code enforces it. Constraints that matter for correctness are moved from prompts into code ([docs/guardrails.md](docs/guardrails.md)).
+
+## Status
+
+| Part | State |
+|---|---|
+| Agent core: tool calling, time and engineering math tools, traces | Done (Stages 0-2) |
+| Vision: images, text in images, two-reading verification | Done (Stage 3) |
+| Documents: PDF and PowerPoint reading with cited, code-checked answers; equations read from the page image; tables, statements and charts | Done (Stages 4-5); Stage 6 closing |
+| Device layer and battery agent | Planned, Stage 7 |
+| Wi-Fi and network agent | Planned, Stage 8 |
+| Coverage planning on a floor plan | Planned, Stage 9 |
+| Chip-aware optimisation: small models, admission control, thermal and power feedback control | Planned, Stage 10 |
+| iPhone client (Shortcuts and Siri; Bluetooth as a stretch goal) | Planned, Stage 11 |
+
+Plan and dates: [docs/roadmap.md](docs/roadmap.md). Progress and design decisions: [docs/devlog.md](docs/devlog.md). Experiments and results: [docs/findings.md](docs/findings.md), [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Architecture
+
+Target design (the device parts are being built from Stage 7):
+
+```
+iPhone (Shortcut / Siri) --local HTTP--+
+                                       v
+user question --> router (code, rules first; small model only if the rules do not decide)
+                    |
+    +---------------+----------------+-----------------+------------------+
+    v               v                v                 v                  v
+ battery agent   Wi-Fi agent    performance agent   document planner   agent loop
+    |               |                |              (Stages 4-6)       (tools, Stages 0-3)
+    +-------+-------+----------------+
+            v
+ telemetry layer (agent/device/): battery, power, thermal, memory, storage, Wi-Fi radio
+ background sampler at background priority (efficiency cores) --> logs for baselines and models
+            |
+            v
+ diagnosis in code: measure -> compute -> classify -> rank causes -> propose actions (confirmed)
+            |
+            v
+ small local model writes the answer; code checks its numbers against the measurements
+```
+
+Document and image questions use the pipeline built in Stages 3-6:
 
 ```
 user input
@@ -20,35 +65,25 @@ user input
    +-- contains a document path (.pdf, .pptx)? --yes--> Document planner (agent/document_planner.py)
    |                                      pages are extracted as text; the planner model picks pages
    |                                      (slides) or passages (papers: sections, tables, figure captions);
-   |                                      pages with equations or figures are read by the vision model;
+   |                                      pages with equations, figures or charts are read by the vision model;
+   |                                      statement totals and calculations are done by code;
    |                                      the answer cites [p.N] and code checks citations and numbers;
    |                                      "not in the document" is accepted only after a second search
    |
    +-- contains an image path? --yes--> Image question planner (agent/image_planner.py)
-   |                                      1. plan: qwen3:14b splits the question into parts (JSON schema)
-   |                                      2. execute: code makes one vision call per part
-   |                                      3. check: code verifies every part was answered
-   |                                      4. answer: code assembles the answer from the vision results
-   |                                                      |
-   no                                                     v
-   v                                       qwen3-vl:8b-instruct (vision model)
-Agent loop (agent/loop.py) <-- system prompt + tool schemas + history
-   |
-   v
-OllamaClient (agent/llm.py) --HTTP--> Ollama server --> qwen3:14b / qwen3:8b (main)
-   |
-   v
-tool calls? --yes--> ToolRegistry (agent/tools.py) runs the tool --> result goes back to the model
-   |
+   |                                      plan parts (JSON schema), one vision call per part,
+   |                                      check every part was answered, assemble the answer
    no
    v
-final answer
+Agent loop (agent/loop.py) --> OllamaClient (agent/llm.py) --HTTP--> Ollama --> qwen3 models
+   |
+tool calls --> ToolRegistry (agent/tools.py) --> result back to the model --> final answer
 ```
 
 - **Tool registry**: plain Python functions become tools. JSON schemas are generated from type hints and docstrings.
-- **Guards in code**: argument validation, repeated-failure blocking, step limits, image preparation, two-reading verification for text in images, and the image planner. Each guard is listed with the run that motivated it in [docs/guardrails.md](docs/guardrails.md).
-- **Safety**: file tools are sandboxed to the workspace folder; tools can require user confirmation.
-- **Tracing**: every model call and tool result is written to `logs/*.jsonl`.
+- **Guards in code**: argument validation, repeated-failure blocking, step limits, two-reading verification, citation and number checks. Each guard is listed with the run that motivated it in [docs/guardrails.md](docs/guardrails.md).
+- **Safety**: file tools are sandboxed to the workspace folder; tools that change something require confirmation; device readers are read-only.
+- **Profiling**: every model call is logged with its load, prompt and generation time and the memory held (`logs/model_calls.jsonl`, summarised by `scripts/profile_calls.py`).
 
 ## Setup
 
@@ -100,6 +135,8 @@ papers/paper.pdf Write equation (3) in LaTeX and explain each symbol.
 python -m unittest discover -s tests -v          # offline tests with a scripted fake model
 python scripts/run_eval_set.py --set documents --fast   # the document test set
 python scripts/run_eval_set.py --set documents --cases evals/documents/equations.toml --fast   # questions about equations
+python scripts/run_eval_set.py --set documents --cases evals/documents/tables.toml --fast   # tables, statements and charts
+python scripts/profile_calls.py                    # where the time of the model calls went
 python scripts/run_formula_set.py                  # formula transcription: page reading against two crops, graded by code
 python scripts/run_vision_set.py --fast          # the vision test set, fast profile (about 7 minutes)
 python scripts/run_vision_set.py --accurate      # the same set, experimental accurate profile (much slower)

@@ -221,8 +221,17 @@ Write only what is on the page. If the page has none of these, write [none]."""
 CHART_PROMPT = """This image is a page of a document and it holds one or more charts.
 For each chart write its title and unit, then a Markdown table with one row per category (x-axis label, slice or step) and one column per series, named as in the legend, with the value printed on or next to each bar, point or slice. If no value is printed, estimate it from the axis and write it with ~ in front. Keep minus signs and percentages as printed."""
 
+# Run 45 (GC2): a slide whose formulas exist only as a picture came back as [none] from VISUAL_PROMPT,
+# and the retry asked for charts, which the slide does not have. A page that is not a chart page is
+# asked again with this prompt, which names every kind of content and has no [none] answer.
+FIGURE_PROMPT = """This image is a page of a document. Its text layer is almost empty, so its content is in the picture: equations, a diagram, a table or a chart. Transcribe it:
+- Equations: each in LaTeX on its own line between $$ and $$, exactly as printed; do not simplify or complete anything.
+- Tables: as Markdown tables, cell by cell.
+- Charts: a Markdown table per chart, with values estimated from an axis marked ~.
+- Diagrams and pictures: one or two sentences each with the labels written on them."""
+
 # Page readings are cached per document; the version changes when these prompts change.
-_PROMPT_VERSION = hashlib.md5((VISUAL_PROMPT + CHART_PROMPT).encode()).hexdigest()[:8]
+_PROMPT_VERSION = hashlib.md5((VISUAL_PROMPT + CHART_PROMPT + FIGURE_PROMPT).encode()).hexdigest()[:8]
 
 CAPTION_PROMPT = """This image is a page of a document; the page has no text apart from what is in the picture.
 In at most three sentences, say what the page shows and copy the important words, names, labels and numbers written on it. Write only what is on the page."""
@@ -628,7 +637,9 @@ class DocumentQuestionPlanner:
         unread, and the answer took the wrong bar. In slides and reports (not papers) a figure page
         whose text is mostly numbers is a chart page and is read for any question. Readings are
         cached per page, and a chart page read as [none] is asked once more for its charts only
-        (TD3: a page of sixteen bar groups came back as [none]).
+        (TD3: a page of sixteen bar groups came back as [none]); any other figure page read as [none]
+        is asked once more with a prompt that names every kind of content (Run 45, GC2: formulas
+        drawn as a picture).
         """
         if self.vision is None:
             return {}
@@ -656,9 +667,11 @@ class DocumentQuestionPlanner:
             self.on_tool_call("describe_image", {"path": relative, "question": f"equations and figures on p.{number}"}, result["text"])
             answer = clean_transcription(result.get("answer", "")) if result.get("status") == "ok" else ""
             page = document.page(number)
-            if answer in ("", "[none]") and (is_chart_page(page) or (page.images > 0 and len(page.text) < 400)):
-                result = self.vision.describe(relative, CHART_PROMPT.format(n=number))
-                self.on_tool_call("describe_image", {"path": relative, "question": f"charts on p.{number}"}, result["text"])
+            chart_page = is_chart_page(page)
+            if answer in ("", "[none]") and (chart_page or (page.images > 0 and len(page.text) < 400)):
+                retry, label = (CHART_PROMPT, "charts") if chart_page else (FIGURE_PROMPT, "content")
+                result = self.vision.describe(relative, retry)
+                self.on_tool_call("describe_image", {"path": relative, "question": f"{label} on p.{number}"}, result["text"])
                 answer = clean_transcription(result.get("answer", "")) if result.get("status") == "ok" else ""
             if result.get("status") == "ok":
                 stored[str(number)] = answer if answer != "[none]" else ""
