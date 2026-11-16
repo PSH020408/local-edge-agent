@@ -24,6 +24,16 @@ Rules:
 - Keep each fact's meaning: available memory is not used memory, free storage is not used storage, a macOS estimate is not the agent's own estimate.
 - No headings, no lists, no closing offers."""
 
+# Run D3: qwen3:4b-instruct translated terms freely ("High Power Mode" as "high capacity mode", vents as
+# "valves", fans as "pump") and mixed available with used memory. The Korean terms are given, not left to it.
+KOREAN_TERMS = """Use these Korean terms:
+High Power Mode = 고성능 모드; Low Power Mode = 저전력 모드; Automatic = 자동
+memory available = 사용 가능한 메모리 (not 사용량); memory used by apps = 앱이 사용 중인 메모리
+storage free = 남은 저장 공간; maximum capacity (macOS) = 최대 용량(macOS); full-charge capacity / design capacity = 설계 용량 대비 완충 용량
+charge = 충전량; charge cycles = 충전 횟수; cell voltages = 셀 전압; spread = 편차
+vents = 통풍구; fans = 팬; thermal pressure = 열 압력; power drawn = 소비 전력
+"X% of one core" means X% of a single core's time (200% = two cores fully busy)."""
+
 _NUMBER = re.compile(r"(?<![\w.])-?\d[\d,]*(?:\.\d+)?")
 
 
@@ -60,6 +70,21 @@ def unsupported(answer: str, report: Report, question: str) -> list[str]:
     return out
 
 
+_LATIN = re.compile(r"[A-Za-z][A-Za-z-]+")
+_COMMON = {"mac", "macbook", "macos", "apple", "ok"}
+
+
+def stray_words(answer: str, report: Report, question: str) -> list[str]:
+    """Latin words in a Korean answer that are in neither the report nor the question.
+
+    Run D3, L05: a rewritten answer held a broken fragment ("2. tqdm.") that the number check let through.
+    """
+    if not re.search(r"[가-힣]", answer):
+        return []
+    known = (report_text(report) + " " + question).lower()
+    return sorted({w for w in _LATIN.findall(answer) if w.lower() not in known and w.lower() not in _COMMON})
+
+
 _REASONING = re.compile(r"^\s*(okay|ok|alright|let me|first,|so,|hmm|wait)\b|let me (tackle|check|think|look)|the user is asking",
                         re.I)
 
@@ -92,23 +117,34 @@ class Written:
     reason: str = ""     # why it was rejected
 
 
+def _problem(text: str, report: Report, question: str) -> tuple[str, list[str]]:
+    """The reason an answer is not usable ("" if it is) and its unsupported numbers."""
+    if looks_like_reasoning(text):
+        return "it describes its reasoning instead of answering", []
+    bad = unsupported(text, report, question)
+    if bad:
+        return f"these numbers are not in the facts: {', '.join(bad)}", bad
+    words = stray_words(text, report, question)
+    if words:
+        return f"these words are not in the facts: {', '.join(words)}", []
+    return "", []
+
+
 def write(report: Report, question: str, llm=None) -> Written:
     started = time.perf_counter()
     if llm is None:
         return Written(template(report), "template-no-model", [], time.perf_counter() - started)
     # Run D2: English questions were answered in Korean; the language is stated by code, not left to the model.
-    language = "Korean" if re.search(r"[가-힣]", question) else "English"
-    content = f"Question: {question}\n\n{report_text(report)}\n\nAnswer in {language}."
+    korean = bool(re.search(r"[가-힣]", question))
+    content = f"Question: {question}\n\n{report_text(report)}\n\n" + (KOREAN_TERMS + "\n\nAnswer in Korean." if korean else "Answer in English.")
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": content}]
     try:
         first = clean(llm.chat(messages)["message"]["content"])
     except Exception as exc:  # noqa: BLE001
         return Written(template(report), "template", [], time.perf_counter() - started, reason=f"model failed: {exc}")
-    reasoning = looks_like_reasoning(first)
-    bad = unsupported(first, report, question)
-    if not bad and not reasoning:
+    problem, bad = _problem(first, report, question)
+    if not problem:
         return Written(first, "model", [], time.perf_counter() - started)
-    problem = "it describes its reasoning instead of answering" if reasoning else f"these numbers are not in the facts: {', '.join(bad)}"
     retry = messages + [{"role": "assistant", "content": first},
                         {"role": "user", "content": f"The answer is not usable: {problem}. "
                                                     "Write only the answer, copying numbers only from the facts."}]
@@ -116,7 +152,7 @@ def write(report: Report, question: str, llm=None) -> Written:
         second = clean(llm.chat(retry)["message"]["content"])
     except Exception:  # noqa: BLE001
         second = ""
-    bad_again = unsupported(second, report, question) if second else bad
-    if second and not bad_again and not looks_like_reasoning(second):
+    problem_again, bad_again = _problem(second, report, question) if second else (problem, bad)
+    if second and not problem_again:
         return Written(second, "model-retry", bad, time.perf_counter() - started, first=first, reason=problem)
     return Written(template(report), "template", bad_again, time.perf_counter() - started, first=first, reason=problem)

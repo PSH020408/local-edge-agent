@@ -23,6 +23,8 @@ HEAVY_CPU = 70.0            # % of all cores
 HEAVY_GPU = 50.0            # %
 BUSY_CPU = 85.0
 CELL_SPREAD = 0.05          # V between the highest and the lowest cell
+ADAPTER_LIMIT = 0.85        # share of the adapter rating above which the adapter counts as at its limit
+ASSIST_SMALL = 5.0          # W from the battery on the adapter that is not yet a problem (Run D3, L01-L02)
 GPU_BUSY = 80.0             # % active
 GPU_HELD = 0.45             # frequency below this share of the maximum while busy
 BUSY_PROCESS_CPU = 90.0     # % of one core for the whole capture
@@ -157,10 +159,16 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
         if on_battery and power and power > 0.5:
             f["time left at the present power (own estimate)"] = minutes(60 * energy / power)
     discharging_on_adapter = not on_battery and current is not None and current < -0.2
+    supplied, rating = _mean(view, "power.system_input"), _num(view, "power.adapter_watts")
+    # Run D3, L01-L02: 3.0 W from the battery while the adapter gave 72 W of its 100 W. That is not a weak
+    # adapter; it is a problem only when the adapter gives nothing, is at its limit, or the battery carries a lot.
+    at_limit = bool(supplied and rating and supplied >= ADAPTER_LIMIT * rating)
+    assist_only = False
     if discharging_on_adapter and voltage is not None:
         power = abs(voltage * current)
         f["power drawn from the battery although the adapter is connected"] = f"{power:.1f} W"
-        if present is not None and power > 0.5:
+        assist_only = bool(supplied) and not at_limit and power < ASSIST_SMALL
+        if present is not None and power > 0.5 and not assist_only:
             f["time left at the present power (own estimate)"] = minutes(60 * present * voltage / 1000 / power)
     if _num(view, "power.macos_time_remaining") is not None:
         f["time left (macOS estimate)"] = minutes(_num(view, "power.macos_time_remaining"))
@@ -184,7 +192,8 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
         else:
             findings.append(Finding("battery_ok", "info", "Battery health is good", evidence, "No action needed."))
     if temperature is not None and temperature >= BATTERY_HOT:
-        findings.append(Finding("battery_hot", "warning", "The battery is warm", {"battery temperature": f["battery temperature"]},
+        findings.append(Finding("battery_hot", "warning", f"The battery is warmer than it should be (above {BATTERY_HOT:g} °C)",
+                                {"battery temperature": f["battery temperature"]},
                                 "Lower the load or move the Mac to a hard, open surface so the vents are free."))
     if len(cells) >= 2 and max(cells) - min(cells) > CELL_SPREAD:
         findings.append(Finding("cell_imbalance", "warning", "The battery cells are out of balance", {"cell voltages": f["cell voltages"]},
@@ -210,7 +219,8 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
             for key in ("adapter rating", "power drawn by the Mac from the adapter", "time left at the present power (own estimate)"):
                 if key in f:
                     evidence[key] = f[key]
-            supplied = _mean(view, "power.system_input")
+            if rating and supplied:
+                evidence["share of the adapter rating in use"] = f"{100 * supplied / rating:.0f}%"
             if not supplied:  # Run D2, L01-L02: adapter reported as connected, 0 W in, the battery carrying the load
                 # Run D2: the adapter had been unplugged on purpose during the run; macOS still reported
                 # "AC attached" while the input power was already 0 W. The status flag lags the power reading.
@@ -218,9 +228,17 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
                                         "The Mac runs on its battery although macOS still reports the adapter as connected", evidence,
                                         "If the adapter was just unplugged, macOS will catch up in a moment; otherwise reconnect it, "
                                         "check the cable and try another port. The battery is draining."))
-            else:
-                findings.append(Finding("charger_weak", "problem", "The battery discharges although the adapter is connected", evidence,
+            elif assist_only:
+                findings.append(Finding("battery_assist", "info",
+                                        "The battery adds a little power while the adapter is below its limit", evidence,
+                                        "No action needed if it stops within a few minutes; if it continues, try another cable or port."))
+            elif at_limit:
+                findings.append(Finding("charger_weak", "problem", "The battery discharges because the adapter is at its limit", evidence,
                                         "Use an adapter with more power or lower the load."))
+            else:
+                findings.append(Finding("adapter_short", "warning",
+                                        "The battery discharges although the adapter is below its rating", evidence,
+                                        "Try another cable or port; a cable rated for less power can limit the adapter."))
         if heavy and mode_now is not None and mode_now != 2:
             findings.append(Finding("suggest_high_power", "info", "Heavy work on the adapter without High Power Mode",
                                     {"energy mode now": f["energy mode now"]}, "Turn on High Power Mode for the adapter (System Settings > Battery)."))
@@ -301,7 +319,7 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
     if gpu_active is not None and gpu_freq is not None and gpu_max and gpu_active >= GPU_BUSY and gpu_freq <= GPU_HELD * gpu_max:
         evidence = {k: f[k] for k in ("GPU active time", "GPU frequency", "GPU power", "thermal pressure") if k in f}
         if level:
-            findings.append(Finding("gpu_held_low", "problem", "The GPU is busy but held at its lowest clocks by thermal management", evidence,
+            findings.append(Finding("gpu_held_low", "problem", "The GPU is busy but held at its lowest clocks by thermal management (fan speed is not measured)", evidence,
                                     "Shut the Mac down fully, wait 30 seconds and start it again; keep the vents free. "
                                     "If it returns, run Apple Diagnostics for the fans."))
         else:

@@ -106,3 +106,58 @@ Predictions: Korean answers that copy the numbers (yes); a few rewrites (one); t
 | Adapter reported as connected but supplying nothing (L01, L02) | New finding when the input power is 0 W while the battery discharges: a just-unplugged adapter that macOS has not caught up with, or a loose or faulty one; the time left is computed in this state too. A scenario of this state and case B16 added | Code |
 | English questions answered in Korean | The language is stated by code in the request ("Answer in English.") | Code |
 | Meanings mixed (available and used, raw and macOS capacity) and added causes | Writer rules: keep each fact's meaning; give only the causes in the findings | Prompt |
+
+## Run D3 — after the Run D2 fixes (2026-11-16)
+
+Commit `dec29c9`. Same models. 39 cases (B16 added), adapter connected for the live cases. The gate of Run D2
+was used again (no new gate was written before this run).
+
+| Check | Run D2 | Run D3 |
+|---|---|---|
+| Route right | 38 of 38 | **39 of 39** |
+| Findings as expected | 28 of 28 | **29 of 29** |
+| Answers by the model (first or second try) | 34 of 34 | **35 of 35** (two rewritten) |
+| Answers with a number not in the facts at first | 1 | 2 (both caught and rewritten) |
+| Live battery questions | 4.4 s | 4.6 s (median) |
+| Live performance questions | 13.3 s | 13.6 s (median) |
+
+**Gate passed.** The Run D2 fixes held: B10 now gives the time to full (macOS 58 min, own estimate 44 min),
+B14 and P13 are answered in English, B16 (adapter supplying nothing) is diagnosed and explained correctly.
+
+Hand grading of the 35 answers, stricter than in Run D2 (a wrong Korean term now counts as ⚠️):
+**✅ 13, ⚠️ 19, ❌ 3.**
+
+| Kind | Cases | Example |
+|---|---|---|
+| ❌ Wrong diagnosis | L01, L02 | See below |
+| ❌ Broken text | L05 | The rewritten answer holds "압축된 메모리는 2. tqdm."; the number check let "2." pass as a counting word |
+| ⚠️ Meanings mixed | B01, B04, B09, P01, P04, P10, P11, L03, L04 | "12.2GB 중 88%가 사용 가능" (P01); available memory called used (L03, L04, again) |
+| ⚠️ Wrong term | B02, B03, B12, P02, P12 | High Power Mode as "고용량 모드", vents as "밸브", fans as "펌프" |
+| ⚠️ Added cause or advice | B11, B13, P05 | "turn High Power Mode off" (B11), not in the findings |
+| ⚠️ Contradicts a finding | B08 | Calls 38.5 °C "not hot" although the finding is a heat warning (again) |
+| ⚠️ Unmeasured claim | P03 | "the fans are confirmed not to work" (again); fan speed is not read |
+
+The prompt rules added after Run D2 ("keep each fact's meaning", "give only the causes in the findings")
+did not stop the mix-ups: the same three cases (P03, B08, available memory) went wrong again.
+
+**A false alarm on the adapter (L01, L02).** With the adapter connected, the Mac drew 72.0 W from it (of
+100 W) and 3.0 W from the battery (−0.24 A). The diagnosis called this a weak adapter ("use an adapter with
+more power") and gave 19 h 44 min as time left. Neither fits: the adapter had 28 W to spare, and 3 W is
+small. The rule fired on any discharge on the adapter. Both cases show the same battery values to 0.1, so
+the battery readings had not refreshed between them (the gauge updates less often than once per question).
+
+### Fixes after Run D3
+
+| Problem | Fix | Kind |
+|---|---|---|
+| Any discharge on the adapter called a weak adapter (L01, L02) | Weak adapter only when it supplies at least 85% of its rating. Under 5 W from the battery with the adapter below its limit is information (`battery_assist`), with no time left. More than that below the rating: a cable or port to check (`adapter_short`). Scenario `adapter_headroom` and case B17 added | Code |
+| Broken fragments in an answer (L05) | A Korean answer whose Latin words are in neither the facts nor the question is rewritten once, like a wrong number | Code |
+| Wrong Korean terms, available called used | The Korean terms are given with every Korean question (High Power Mode = 고성능 모드, memory available = 사용 가능한 메모리, ...) | Prompt |
+| "Not hot" at 38.5 °C (B08) | The finding states its threshold: "warmer than it should be (above 35 °C)" | Code |
+| "Fans confirmed not to work" (P03) | The GPU finding says that fan speed is not measured | Code |
+
+Gate for Run D4, written before it: route 40 of 40, findings 30 of 30, at least 33 of 36 answers by the model
+with no unsupported number or stray word, live times as before; by hand: no ❌, and fewer ⚠️ for meanings
+mixed and wrong terms (9 and 5 in Run D3). Predictions: the terms fix most of the wrong-term cases; the
+meaning mix-ups drop but do not disappear, since a 4B model still writes "X 중 Y%" across two facts.
+

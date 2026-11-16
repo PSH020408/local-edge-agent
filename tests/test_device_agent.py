@@ -155,6 +155,34 @@ class RunD2FixTests(unittest.TestCase):
         self.assertTrue(llm.calls[0][1]["content"].endswith("Answer in English."))
 
 
+class RunD3FixTests(unittest.TestCase):
+    def test_a_little_power_from_the_battery_is_not_a_weak_adapter(self):
+        # Run D3, L01-L02: 3.0 W from the battery with the adapter at 72 W of 100 W was called a weak adapter.
+        agent = DeviceAgent(FixtureShell(FIXTURES, overrides=SCENARIOS["adapter_headroom"]), sleep=NO_SLEEP, battery_seconds=1)
+        report = agent.diagnose("충전기 꽂았는데 배터리 괜찮아?").report
+        self.assertIn("battery_assist", report.codes())
+        self.assertNotIn("charger_weak", report.codes())
+        self.assertNotIn("time left at the present power (own estimate)", report.facts)
+
+    def test_an_adapter_at_its_limit_is_still_weak(self):
+        agent = DeviceAgent(FixtureShell(FIXTURES, overrides=SCENARIOS["weak_charger"]), sleep=NO_SLEEP, battery_seconds=1)
+        self.assertIn("charger_weak", agent.diagnose("충전기 꽂았는데 배터리가 줄어").report.codes())
+
+    def test_stray_words_in_a_korean_answer_are_rejected(self):
+        # Run D3, L05: "압축된 메모리는 2. tqdm." passed the number check.
+        report = AnswerTests.REPORT
+        self.assertEqual(writer.stray_words("충전 횟수는 2. tqdm. 286회입니다.", report, "배터리 어때?"), ["tqdm"])
+        self.assertEqual(writer.stray_words("macOS 기준 충전 횟수 286회입니다.", report, "배터리 어때?"), [])
+        result = writer.write(report, "배터리 어때?", FakeLLM("충전 횟수 286회. tqdm.", "충전 횟수는 286회로 양호합니다."))
+        self.assertEqual(result.method, "model-retry")
+        self.assertIn("tqdm", result.reason)
+
+    def test_korean_terms_are_given_for_korean_questions(self):
+        llm = FakeLLM("배터리 상태는 양호합니다.")
+        writer.write(AnswerTests.REPORT, "배터리 어때?", llm)
+        self.assertIn("High Power Mode = 고성능 모드", llm.calls[0][1]["content"])
+
+
 class AnswerTests(unittest.TestCase):
     REPORT = Report("battery", {"charge": "90%", "charge cycles": "286 of 1,000 rated"},
                     [Finding("battery_ok", "info", "Battery health is good", {"charge cycles": "286 of 1,000 rated"}, "No action needed.")])

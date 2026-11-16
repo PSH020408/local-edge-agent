@@ -125,6 +125,8 @@ SCENARIOS: dict[str, dict] = {
     # Seen live in Run D2 (21:22): adapter reported as connected, 0 W in, the battery carrying about 75 W.
     "adapter_not_supplying": {"battery_ioreg": _battery(Amperage=-6316, Voltage=11807, AppleRawCurrentCapacity=4658,
                                                         CellVoltage=[3935, 3944, 3927], SystemPowerIn=0)} | _heavy(),
+    # Seen live in Run D3 (21:35): the adapter gave 72 W of its 100 W and the battery added 3.0 W.
+    "adapter_headroom": {"battery_ioreg": _battery(Amperage=-240, SystemPowerIn=72000)},
     "ac_not_high_power_heavy": {"pmset_custom": _text("pmset_custom").replace("powermode            2", "powermode            0")} | _heavy(),
     "gpu_held_low": {"powermetrics": _powermetrics(443, 99.88, 3151, "Moderate"),
                      "thermal_pressure": "com.apple.system.thermalpressurelevel 1\n", "gpu_ioreg": _gpu(99)},

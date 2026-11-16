@@ -124,6 +124,16 @@ keys = ["44"]
 note = "The state seen live in Run D2 (L01, L02): adapter reported as connected, 0 W in, the battery discharging at 6.3 A."
 
 [[case]]
+id = "B17"
+question = "충전기 꽂았는데 배터리가 조금씩 줄어드는 것 같아"
+scenario = "adapter_headroom"
+route = "battery"
+expect = ["battery_assist"]
+forbid = ["charger_weak", "adapter_not_supplying"]
+keys = ["72"]
+note = "The state seen live in Run D3 (L01, L02): 3.0 W from the battery while the adapter gave 72 W of its 100 W. Not a weak adapter."
+
+[[case]]
 id = "B12"
 question = "고성능 모드 켜야 돼?"
 scenario = "recorded"
