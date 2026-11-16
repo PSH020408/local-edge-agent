@@ -105,7 +105,7 @@ Diagnosis and agents:
 - [x] Admission control for heavy jobs
 - [x] Battery-aware energy mode switching with restore; job energy from hardware counters (`evals/device/energy.md`)
 - [ ] Policy table settled by the energy of each mode (run E3 with the corrected meter)
-- [ ] Speed check before long runs
+- [x] Speed check before long runs (`scripts/speed_check.py`; test-set runs stop when the Mac is under 60% of its normal speed)
 - [ ] Thermal/power feedback control of long runs, with a recorded step test
 
 Verify: readers tested on recorded outputs; scenario sets for both agents (on battery, charging, heavy load, the GPU state seen on 2026-11-16 replayed from its readings); router accuracy on 30 questions; budgets measured.

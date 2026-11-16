@@ -119,6 +119,14 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
     cells = [c for c in cells if c is not None]
     cpu, gpu = cpu_percent(view), _mean(view, "gpu.usage")
     heavy = (cpu is not None and cpu >= HEAVY_CPU) or (gpu is not None and gpu >= HEAVY_GPU)
+    asks_mode = bool(re.search(r"모드|mode", question, re.I))
+    discharging_on_adapter = not on_battery and current is not None and current < -0.2
+    # What matters depends on the power source (decided 2026-11-17). On the adapter: battery health and
+    # lifespan, heat, and whether the adapter does its job; the energy mode made no difference to speed
+    # (energy runs E1-E3) and the time left does not apply. On battery: time left, consumption, efficiency,
+    # stability and heat. Facts that do not matter are left out, so the writer cannot bring them in.
+    battery_side = on_battery or discharging_on_adapter
+    hot = temperature is not None and temperature >= BATTERY_HOT
 
     if source:
         f["power source"] = "battery" if on_battery else "power adapter"
@@ -126,7 +134,7 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
         f["charge"] = f"{charge}%"
     if view.value("power.charge_state"):
         f["charge state (macOS)"] = str(view.value("power.charge_state"))
-    if mode_now is not None:
+    if mode_now is not None and (on_battery or asks_mode):
         f["energy mode now"] = MODE_NAMES.get(mode_now, str(mode_now))
     if macos_health is not None:
         f["maximum capacity (macOS)"] = f"{macos_health:g}%"
@@ -140,9 +148,9 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
         f["battery temperature"] = f"{temperature:.1f} °C"
     if cells:
         f["cell voltages"] = ", ".join(f"{c:.3f} V" for c in cells) + f" (spread {1000 * (max(cells) - min(cells)):.0f} mV)"
-    if cpu is not None:
+    if cpu is not None and (battery_side or hot):
         f["CPU use"] = f"{cpu}%"
-    if gpu is not None:
+    if gpu is not None and (battery_side or hot):
         f["GPU use"] = f"{gpu:.0f}%"
 
     # Power and time
@@ -154,12 +162,11 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
         f["power drawn by the Mac from the adapter"] = f"{_mean(view, 'power.system_input'):.1f} W"
         if _num(view, "power.adapter_watts"):
             f["adapter rating"] = f"{_num(view, 'power.adapter_watts')} W"
-    if present is not None and voltage is not None:
+    if present is not None and voltage is not None and battery_side:
         energy = present * voltage / 1000
         f["energy left in the battery"] = f"{energy:.1f} Wh"
         if on_battery and power and power > 0.5:
             f["time left at the present power (own estimate)"] = minutes(60 * energy / power)
-    discharging_on_adapter = not on_battery and current is not None and current < -0.2
     supplied, rating = _mean(view, "power.system_input"), _num(view, "power.adapter_watts")
     # Run D3, L01-L02: 3.0 W from the battery while the adapter gave 72 W of its 100 W. That is not a weak
     # adapter; it is a problem only when the adapter gives nothing, is at its limit, or the battery carries a lot.
@@ -252,20 +259,21 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
                 findings.append(Finding("adapter_short", "warning",
                                         "The battery discharges although the adapter is below its rating", evidence,
                                         "Try another cable or port; a cable rated for less power can limit the adapter."))
-        if heavy and mode_now is not None and mode_now != 2:
-            findings.append(Finding("suggest_high_power", "info", "Heavy work on the adapter without High Power Mode",
-                                    {"energy mode now": f["energy mode now"]}, "Turn on High Power Mode for the adapter (System Settings > Battery)."))
-        elif mode_now == 2:
-            findings.append(Finding("adapter_high_power", "info", "On the adapter in High Power Mode", {"energy mode now": f["energy mode now"]},
-                                    "Nothing to change: heavy work can run at full speed."))
+        if asks_mode:
+            findings.append(Finding("mode_not_needed", "info", "On the adapter the energy mode does not change the speed of model jobs",
+                                    {"measured (qwen3:14b)": "25.3 tokens/s in Automatic and in High Power (runs E1-E3)"},
+                                    "Leave it as it is. High Power only lets the fans run faster in work that lasts many minutes."))
         if view.value("battery.is_charging") == 0 and charge is not None and charge < 100 and view.value("battery.fully_charged") != 1 \
                 and (current is None or current >= -0.2):
             findings.append(Finding("charging_paused", "info", "Charging is paused by macOS",
                                     {k: f[k] for k in ("charge", "charging held by macOS") if k in f},
                                     "Normal: macOS holds the charge below full to protect the battery."))
+    if on_battery and mode_now == 2:
+        findings.append(Finding("high_power_on_battery", "info", "High Power Mode is on while running on battery",
+                                {"energy mode now": f["energy mode now"]},
+                                "Automatic gave the same speed for model jobs (runs E1-E3); on battery Automatic is enough."))
     profile_high = profile.get("power.profile_ac_high_power_mode")
     mode_ac = _num(view, "power.mode_ac")
-    asks_mode = bool(re.search(r"모드|mode", question, re.I))
     if asks_mode and profile_high is not None and mode_ac is not None and (profile_high == 1) != (mode_ac == 2):
         findings.append(Finding("mode_sources_disagree", "info", "Two macOS sources report the adapter's energy mode differently",
                                 {"pmset": MODE_NAMES.get(mode_ac, str(mode_ac)), "system_profiler High Power": "on" if profile_high else "off"},

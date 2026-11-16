@@ -128,3 +128,29 @@ integral kept by the gauge chip itself; E1's charge-drop figure for High Power (
 the same settle rule. Resolution on battery: 1 mAh, about 0.0125 Wh, so a job should use at least 0.3 Wh
 (a few dozen seconds of a 14B model) for an error under 5%.
 
+## E3 — qwen3:14b generation, charge drop on battery (2026-11-17 07:01, 94% charge)
+
+| Mode | Time (s) | Tokens/s | Idle W | Job mean W | Wh | Windows |
+|---|---|---|---|---|---|---|
+| Low Power | 56.8 | 14.2 | **−4.5** | 37.8 | 0.596 | 2 |
+| Automatic | 31.8 | 25.4 | 4.5 | 56.9 | 0.503 | 2 |
+| High Power | 32.3 | 25.1 | 3.8 | 99.4 | 0.892 | 2 |
+
+Predictions: Automatic and High Power about equal (**no**: 0.50 against 0.89 Wh); Low Power within 15% of
+Automatic (not decidable, see below).
+
+- **Low Power is invalid.** The idle minute before it read −4.5 W: the charge left went up while nothing ran.
+  The gauge's charge figure is an estimate that it corrects now and then (from the cell voltage), not a pure
+  sum of current, and a correction inside a window shows up as energy. The negative idle was then subtracted,
+  which added energy to the job. A check now flags any idle reading under 0.5 W.
+- **High Power disagrees with itself.** E1's charge drop for the same job in High Power was 0.608 Wh; E3 gives
+  0.892 Wh. With 1 mAh steps (0.0125 Wh) the difference is 23 steps, so it is the gauge's estimation, not its
+  resolution.
+- **What holds**: speed is the same as in E1 and E2 to within 1%, and Automatic's 57 W during generation
+  agrees with the 66-80 W the system counter measured on the adapter (minus the display and the rest at idle).
+
+On battery, a 30-60 s job's energy (about 0.5 Wh, 0.8% of the battery) is within the gauge's estimation noise.
+Two ways out: measure the modes on the adapter, where the system counter followed the load second by second
+(it needs the adapter's mode to be switched for the test and restored afterwards), or run each mode several
+times for several minutes on battery so that the job uses several Wh.
+

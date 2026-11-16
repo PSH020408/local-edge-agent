@@ -26,7 +26,7 @@ id = "B01"
 question = "배터리 상태 어때?"
 scenario = "recorded"
 route = "battery"
-expect = ["battery_ok", "adapter_high_power", "charging_paused"]
+expect = ["battery_ok", "charging_paused"]
 keys = ["90", "286"]
 
 [[case]]
@@ -138,7 +138,7 @@ id = "B12"
 question = "고성능 모드 켜야 돼?"
 scenario = "recorded"
 route = "battery"
-expect = ["adapter_high_power", "mode_sources_disagree"]
+expect = ["mode_not_needed", "mode_sources_disagree"]
 keys = []
 
 [[case]]
@@ -146,7 +146,7 @@ id = "B13"
 question = "무거운 작업 돌리는 중인데 에너지 모드 바꿔야 해?"
 scenario = "ac_not_high_power_heavy"
 route = "battery"
-expect = ["suggest_high_power"]
+expect = ["mode_not_needed"]
 keys = []
 
 [[case]]

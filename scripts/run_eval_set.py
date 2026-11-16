@@ -212,6 +212,8 @@ def main() -> None:
     parser.add_argument("--no-planner", action="store_true", help="send every question to the agent loop")
     parser.add_argument("--only", help="comma-separated case ids, e.g. 02,06,H3")
     parser.add_argument("--out", help="report folder (default logs/<set>_runs)")
+    parser.add_argument("--no-speed-check", action="store_true", help="skip the speed check before the run")
+    parser.add_argument("--force", action="store_true", help="run even if the speed check finds the Mac much slower than normal")
     args = parser.parse_args()
     args.cases = args.cases or str(ROOT / SETS[args.set][0] / "cases.toml")
     args.out = args.out or str(ROOT / "logs" / f"{args.set}_runs")
@@ -226,6 +228,13 @@ def main() -> None:
     names = COMPARE if args.compare else [n.strip() for n in args.profiles.split(",")] if args.profiles else [profile_name(args)]
     for name in names:
         resolve_profile(cfg, name)  # fail before hours of running, not in the middle
+    if not args.no_speed_check:
+        # Stage 7: Run 45 lost hours to a GPU held at its lowest clocks; a few seconds of checking first.
+        from agent.device.speed_check import before_long_run
+        checked = before_long_run(cfg["llm"]["host"])
+        print(f"Speed check: {checked.message}")
+        if checked.verdict == "much slower" and not args.force:
+            sys.exit("Stopped before the run. Fix the cause above (or restart the Mac), or run again with --force.")
     stamp = f"{datetime.now():%Y%m%d_%H%M%S}"
     runs = [run_profile(cfg, args, name, cases, stamp) for name in names]
     if len(runs) > 1:

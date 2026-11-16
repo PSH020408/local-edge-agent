@@ -194,6 +194,10 @@ def measure(shell, job, sleep=time.sleep, clock=time.monotonic) -> tuple[object,
     # Energy run E2: a 14B generation came out at 4.1 W, below the 5.1 W idle, with the sample check passed.
     if check == "ok" and mean is not None and mean < idle:
         check = f"the job's mean ({mean:.1f} W) is below the idle power ({idle:.1f} W): the window missed the job"
+    # Energy run E3: the idle minute before a Low Power run read -4.5 W (the charge left went up), and the
+    # subtraction then added energy to the job. The gauge re-estimates its charge now and then.
+    if check == "ok" and idle is not None and idle < 0.5:
+        check = f"the idle power read {idle:.1f} W, which is not physical: the gauge re-estimated its charge"
     if check == "ok" and windows == 5:
         check = "not back near idle after five publications"
     return result, Energy(t1 - t0, None if joules is None else joules / 3600, mean, idle, window, check, windows, source)

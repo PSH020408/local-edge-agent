@@ -261,3 +261,15 @@ SMC fan reading of the Stage 7 plan); the mode named as a cause (B08, B10-B12) i
 seen in every run. From Run D1 to Run D5 the hand grade went from no usable answer to ✅ 26 of 36 with no ❌.
 The answer writer is left here; the next device-set run comes with the next Stage 7 feature.
 
+## Change before Run D6: the battery agent by power source (2026-11-17)
+
+On the adapter the battery report keeps health, lifespan, heat and the adapter's own faults, and drops the
+energy mode (unless the question asks about it), the time left and the load figures (unless the battery is
+discharging or hot). On battery it keeps everything. The findings `adapter_high_power` and
+`suggest_high_power` are replaced by `mode_not_needed` (only when the question asks about the mode, with the
+measured speeds as evidence), and `high_power_on_battery` is added. Cases B01, B12 and B13 updated.
+
+Gate for Run D6, written before it: route 40 of 40, findings 30 of 30, no ❌, no energy mode in the answers to
+adapter questions other than B12 and B13, ⚠️ at most 10 (Run D5: 10). Prediction: the mode remarks of B08,
+B10, B11 and B12 disappear, so ⚠️ falls to about 6-7; the meaning mix-ups of P04 and the fan guesses stay.
+

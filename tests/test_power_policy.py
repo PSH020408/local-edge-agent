@@ -187,6 +187,19 @@ class EnergyTests(unittest.TestCase):
         _, energy = pp.measure(gauge, gauge.job(30), sleep=gauge.advance, clock=gauge.clock)
         self.assertIn("missed the job", energy.check)
 
+    def test_a_charge_that_goes_up_at_idle_is_flagged(self):
+        # Energy run E3: the idle minute read -4.5 W because the gauge re-estimated the charge upwards.
+        gauge = FakeGauge(idle=5.0, busy=70.0)
+        gauge.mah0 += 0
+        original = gauge.advance
+        def advance(seconds):
+            original(seconds)
+            if 60 < gauge.t <= 121 and int(gauge.t) == 120:
+                gauge.mah0 += 30  # the gauge raises its estimate by 30 mAh
+        gauge.advance = advance
+        _, energy = pp.measure(gauge, gauge.job(30), sleep=gauge.advance, clock=gauge.clock)
+        self.assertIn("not physical", energy.check)
+
     def test_run_with_policy_on_battery(self):
         gauge = FakeGauge(charge=70)
         original = pp.measure
