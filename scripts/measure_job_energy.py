@@ -6,8 +6,8 @@ Run it on battery (the adapter unplugged), with the charge at 40% or more:
     python scripts/measure_job_energy.py --job medium         # qwen3:4b-instruct writes 3,000 tokens
 
 The same job runs in Low Power, Automatic and High Power; the battery mode is restored after each run. The
-energy comes from the power controller's running sum of the system load (power_policy.measure), so each
-run waits for the registry's publications (one per minute): about 3-4 minutes per mode. The report gives
+energy comes from hardware counters read at the registry's publications (power_policy.measure; on battery
+the gauge's coulomb counter), so each run waits for publications (one per minute): about 3-4 minutes per mode. The report gives
 time, tokens per second, watts and the energy per 1,000 tokens. Whether racing at High Power uses less
 energy than going slowly is decided here. Reports go to logs/energy/.
 """
@@ -82,7 +82,7 @@ def main() -> None:
                    "tokens": count, "tokens_per_s": round(count / (result.get("eval_duration", 1) / 1e9), 1),
                    "mean_w": energy.mean_watts and round(energy.mean_watts, 1),
                    "idle_w": energy.idle_watts and round(energy.idle_watts, 1),
-                   "wh": energy.wh and round(energy.wh, 3), "check": energy.check, "notes": " ".join(switch.notes)}
+                   "wh": energy.wh and round(energy.wh, 3), "source": energy.source, "windows": energy.windows, "check": energy.check, "notes": " ".join(switch.notes)}
             rows.append(row)
             print(json.dumps(row), flush=True)
 

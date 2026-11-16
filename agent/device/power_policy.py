@@ -6,9 +6,10 @@ The three parts:
 2. BatteryMode   save -> switch -> run -> restore, like saving a register before an interrupt handler and
                  restoring it after. The restore runs even when the job fails, and is skipped when the user
                  changed the mode during the job (the user's choice wins).
-3. measure()     the energy of the job from the power controller's own running sum of the system load
-                 (sampled every second in hardware, published every 60 s). The first version integrated
-                 V x I itself and failed its own cross-check (energy run E1).
+3. measure()     the energy of the job from counters kept in hardware, read at the registry's publications
+                 (once a minute): on the adapter the power controller's running sum of the system load, on
+                 battery the gauge's coulomb counter (the charge left). Chosen by experiment (E1, E2 and
+                 the step tests in evals/device/energy.md).
 
 Only the battery setting is changed (`pmset -b`); the adapter setting stays as the user set it. The sudoers
 rule allows exactly the three commands in SET_COMMANDS and nothing else, and this module runs no other
@@ -121,6 +122,7 @@ class Energy:
     window_seconds: float     # from the publication before the job to the last one counted
     check: str                # "ok", or why the result should not be used
     windows: int = 1          # publications after the job until the counter was back near idle
+    source: str = "system counter"  # on battery: "charge drop" (the gauge's coulomb counter)
 
 
 def integrate(samples: list[tuple[float, float]]) -> float:
@@ -147,56 +149,63 @@ def wait_for_publication(shell, after, sleep=time.sleep, clock=time.monotonic, t
 
 
 def measure(shell, job, sleep=time.sleep, clock=time.monotonic) -> tuple[object, Energy]:
-    """Runs `job` between two publications of the power controller's running sum of the system load.
+    """Runs `job` between publications of the battery registry and returns its energy.
 
-    First version (energy run E1) integrated V x I sampled every second, but the registry publishes new
-    values only every 60 s, so a 30-60 s job was mostly measured in the state before it. The controller
-    itself samples the load every second and adds it up; the difference of that sum between two
-    publications is the exact energy in between. The job starts right after one publication; after the job,
-    the next publication closes the window, and the idle power measured in the minute before the job is
-    subtracted for the part of the window after the job (and the second or so before it).
+    History: E1 integrated V x I sampled every second, but the registry publishes once a minute. E2 used the
+    power controller's running sum of the system load: right on the adapter (step test, same minute, no
+    lag), but on battery it hardly moved during a 14B generation (6.4 W against 4.9 W idle while the chip
+    alone drew 17 W) and the energy never arrived later either. On battery the energy therefore comes from
+    the battery gauge's own coulomb counter: the drop of the charge left (mAh) times the voltage.
+
+    The job starts right after a publication. After the job the window is extended, one publication at a
+    time, until a window is back near the idle power (measured the same way in the minute before), so
+    energy that is reported late is still counted; the idle power is subtracted for the time outside the job.
     """
     first, _ = wait_for_publication(shell, None, sleep, clock)
-    first, _ = wait_for_publication(shell, first.get("battery.update_time"), sleep, clock)  # a fresh one
-    start, t_start_pub = wait_for_publication(shell, first.get("battery.update_time"), sleep, clock)
-    idle = _mean_watts(first, start)
+    first, t_first = wait_for_publication(shell, first.get("battery.update_time"), sleep, clock)  # a fresh one
+    start, t_start = wait_for_publication(shell, first.get("battery.update_time"), sleep, clock)
+    source = "charge drop" if start.get("power.external") == 0 else "system counter"
+    idle = _mean_watts(first, start, t_start - t_first, source)
     t0 = clock()
     result = job()
     t1 = clock()
     seen = _battery_state(shell).get("battery.update_time")
-    end, t_end_pub = wait_for_publication(shell, seen, sleep, clock)
-    # Integrate until the counter has settled back to idle. On the adapter the counter followed the load
-    # within the same minute (step test, 2026-11-16); on battery it read far too low for short jobs (energy
-    # run E2), as if its source were filtered or late. Energy that arrives late still arrives, so the window
-    # is extended, one publication at a time, until a window of at least 20 s is back near idle.
-    previous, windows = start, 1
+    end, t_end = wait_for_publication(shell, seen, sleep, clock)
+    previous, t_previous, windows = start, t_start, 1
     while windows < 5:
-        recent = _mean_watts(previous, end)
-        if idle is None or recent is None or (recent <= 1.2 * idle + 1.0 and _samples(previous, end) >= 20):
+        recent = _mean_watts(previous, end, t_end - t_previous, source)
+        if idle is None or recent is None or (recent <= 1.2 * idle + 1.0 and t_end - t_previous >= 20):
             break
-        previous = end
-        end, t_end_pub = wait_for_publication(shell, end.get("battery.update_time"), sleep, clock)
+        previous, t_previous = end, t_end
+        end, t_end = wait_for_publication(shell, end.get("battery.update_time"), sleep, clock)
         windows += 1
-    window = t_end_pub - t_start_pub
-    total = _joules(start, end)
-    outside = (t0 - t_start_pub) + (t_end_pub - t1)
+    window = t_end - t_start
+    total = _joules(start, end, source)
+    outside = (t0 - t_start) + (t_end - t1)
     check = "ok"
-    samples = _samples(start, end)
     if total is None or idle is None:
-        check = "the running sum was not readable"
-    elif samples is None or abs(samples - window) > max(3.0, 0.05 * window):
-        check = f"{samples} load samples in a {window:.0f} s window: a publication was missed"
+        check = f"the {source} was not readable"
+    elif source == "system counter":
+        samples = _samples(start, end)
+        if samples is None or abs(samples - window) > max(3.0, 0.05 * window):
+            check = f"{samples} load samples in a {window:.0f} s window: a publication was missed"
     joules = None if total is None or idle is None else total - idle * outside
     mean = None if joules is None or t1 <= t0 else joules / (t1 - t0)
     # Energy run E2: a 14B generation came out at 4.1 W, below the 5.1 W idle, with the sample check passed.
-    if check == "ok" and mean is not None and idle is not None and mean < idle:
+    if check == "ok" and mean is not None and mean < idle:
         check = f"the job's mean ({mean:.1f} W) is below the idle power ({idle:.1f} W): the window missed the job"
     if check == "ok" and windows == 5:
-        check = "the counter had not settled back to idle after five publications"
-    return result, Energy(t1 - t0, None if joules is None else joules / 3600, mean, idle, window, check, windows)
+        check = "not back near idle after five publications"
+    return result, Energy(t1 - t0, None if joules is None else joules / 3600, mean, idle, window, check, windows, source)
 
 
-def _joules(a: dict, b: dict) -> float | None:
+def _joules(a: dict, b: dict, source: str = "system counter") -> float | None:
+    if source == "charge drop":
+        mah = (a.get("battery.present_capacity"), b.get("battery.present_capacity"))
+        volts = [v for v in (a.get("battery.voltage"), b.get("battery.voltage")) if v is not None]
+        if None in mah or not volts:
+            return None
+        return (mah[0] - mah[1]) / 1000 * (sum(volts) / len(volts)) * 3600
     x, y = a.get("power.system_energy_sum"), b.get("power.system_energy_sum")
     return None if x is None or y is None else y - x
 
@@ -206,9 +215,14 @@ def _samples(a: dict, b: dict) -> float | None:
     return None if x is None or y is None else y - x
 
 
-def _mean_watts(a: dict, b: dict) -> float | None:
-    joules, samples = _joules(a, b), _samples(a, b)
-    return None if joules is None or not samples else joules / samples
+def _mean_watts(a: dict, b: dict, seconds: float, source: str = "system counter") -> float | None:
+    joules = _joules(a, b, source)
+    if joules is None:
+        return None
+    if source == "system counter":
+        samples = _samples(a, b)
+        return joules / samples if samples else None
+    return joules / seconds if seconds > 0 else None
 
 
 @dataclass

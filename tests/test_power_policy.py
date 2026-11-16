@@ -104,7 +104,11 @@ class FakeGauge(FakeMac):
         self.t, self.watts, self.idle, self.busy = 5.0, idle, idle, busy
         self.queue = [idle] * lag  # the counter adds the load of `lag` seconds ago
         self.energy_mj, self.samples = 0, 0
-        self.published = (0, 0, 0)  # (update time, running sum in mW*s, samples)
+        self.published = (0, 0, 0, 0)  # (update time, running sum in mW*s, samples, mAh used)
+        self.counter_follows_load = True  # False: the system counter stays at idle (seen on battery)
+        data = plistlib.loads(self.battery.encode())[0]
+        self.volts, self.mah0 = data["Voltage"] / 1000, data["AppleRawCurrentCapacity"]
+        self.true_mj = 0
 
     def clock(self):
         return self.t
@@ -113,16 +117,20 @@ class FakeGauge(FakeMac):
         for _ in range(int(round(seconds))):
             self.t += 1
             self.queue.append(self.watts)
-            self.energy_mj += int(self.queue.pop(0) * 1000)
+            delayed = self.queue.pop(0)
+            self.energy_mj += int((delayed if self.counter_follows_load else self.idle) * 1000)
+            self.true_mj += int(self.watts * 1000)
             self.samples += 1
             if int(self.t) % 60 == 0:
-                self.published = (int(self.t), self.energy_mj, self.samples)
+                mah = round(self.true_mj / 1000 / 3600 / self.volts * 1000)
+                self.published = (int(self.t), self.energy_mj, self.samples, mah)
 
     def run(self, name, command=None):
         if name == "battery_ioreg":
             data = plistlib.loads(self.battery.encode())
-            update, total, count = self.published
+            update, total, count, mah = self.published
             data[0]["UpdateTime"] = update
+            data[0]["AppleRawCurrentCapacity"] = self.mah0 - mah
             data[0]["PowerTelemetryData"].update(AccumulatedSystemLoad=total, SystemLoadAccumulatorCount=count)
             return Output(name, plistlib.dumps(data).decode(), True, 0.0)
         return super().run(name, command)
@@ -141,9 +149,18 @@ class EnergyTests(unittest.TestCase):
         self.assertAlmostEqual(pp.integrate([(0, 10.0), (360, 10.0)]), 1.0)
         self.assertAlmostEqual(pp.integrate([(0, 0.0), (3600, 20.0)]), 10.0)
 
+    def test_on_battery_the_charge_drop_is_used(self):
+        # Step test on battery (2026-11-17): the system counter stayed near idle during a 14B generation.
+        gauge = FakeGauge(idle=5.0, busy=70.0)
+        gauge.counter_follows_load = False
+        _, energy = pp.measure(gauge, gauge.job(60), sleep=gauge.advance, clock=gauge.clock)
+        self.assertEqual(energy.source, "charge drop")
+        self.assertAlmostEqual(energy.wh, 70 * 60 / 3600, delta=0.04)  # 1.17 Wh, within the 1 mAh steps
+        self.assertEqual(energy.check, "ok")
+
     def test_energy_from_the_running_sum(self):
         # 40 W for 90 s on a 10 W machine: 3,600 J = 1.0 Wh, although the registry publishes only every 60 s.
-        gauge = FakeGauge()
+        gauge = FakeGauge(on_battery=False)
         result, energy = pp.measure(gauge, gauge.job(90), sleep=gauge.advance, clock=gauge.clock)
         self.assertEqual(result, "done")
         self.assertAlmostEqual(energy.wh, 1.0, delta=0.02)
@@ -153,21 +170,20 @@ class EnergyTests(unittest.TestCase):
 
     def test_energy_that_arrives_late_is_still_counted(self):
         # A counter that adds the load 45 s late: the window is extended until it is back near idle.
-        gauge = FakeGauge(lag=45)
+        gauge = FakeGauge(lag=45, on_battery=False)
         _, energy = pp.measure(gauge, gauge.job(30), sleep=gauge.advance, clock=gauge.clock)
         self.assertAlmostEqual(energy.wh, 40 * 30 / 3600, delta=0.01)
         self.assertGreater(energy.windows, 1)
         self.assertEqual(energy.check, "ok")
 
     def test_a_short_job_is_still_measured(self):
-        gauge = FakeGauge()
+        gauge = FakeGauge(on_battery=False)
         _, energy = pp.measure(gauge, gauge.job(20), sleep=gauge.advance, clock=gauge.clock)
         self.assertAlmostEqual(energy.wh, 40 * 20 / 3600, delta=0.01)
 
     def test_a_window_that_missed_the_job_is_flagged(self):
         # Energy run E2: the counter showed less power during a 14B generation than at idle.
-        gauge = FakeGauge(busy=10.0)
-        gauge.busy = 2.0
+        gauge = FakeGauge(busy=2.0, on_battery=False)
         _, energy = pp.measure(gauge, gauge.job(30), sleep=gauge.advance, clock=gauge.clock)
         self.assertIn("missed the job", energy.check)
 
@@ -180,7 +196,7 @@ class EnergyTests(unittest.TestCase):
         finally:
             pp.measure = original
         self.assertEqual((record.decision.mode, record.result, gauge.mode), (pp.LOW, "done", 0))
-        self.assertAlmostEqual(record.energy.wh, 40 * 30 / 3600, delta=0.01)
+        self.assertAlmostEqual(record.energy.wh, 40 * 30 / 3600, delta=0.025)  # charge drop: 1 mAh steps (0.0125 Wh)
 
     def test_deferred_at_low_charge(self):
         mac = FakeMac(charge=15)

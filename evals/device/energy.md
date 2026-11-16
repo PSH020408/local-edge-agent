@@ -108,3 +108,23 @@ current reading is averaged, so a short burst arrives late or smeared. `power_po
 window open, one publication at a time, until the counter is back near idle; energy that arrives late is
 still counted. To confirm: the same step test on battery.
 
+## Step test on battery (2026-11-17 00:00)
+
+| Window (s) | Counter mean W | Chip W, same window | Chip W, window before |
+|---|---|---|---|
+| 92-152 | 4.9 | 2.2 | 0.1 |
+| 152-212 (job 151-195) | 6.4 | 16.9 | 2.1 |
+| 212-272 | 5.2 | 0.1 | 16.8 |
+| 272-331 | 5.1 | 0.1 | 0.1 |
+
+Prediction: on battery the energy arrives late, in the window after the job. **No**: it never arrived. During
+the job the counter rose by 1.5 W while the chip alone drew 17 W; the window after stayed at idle. On battery
+the system counter does not measure the load of a job, so it cannot be used there at all, late or not.
+
+The battery gauge's own coulomb counter (the charge left, in mAh) is the measurement on battery. It is an
+integral kept by the gauge chip itself; E1's charge-drop figure for High Power (0.608 Wh for 31.8 s, about
+69 W) agrees with the 66-80 W the system counter measured for the same generation on the adapter.
+`power_policy.measure` now uses the system counter on the adapter and the charge drop on battery, with
+the same settle rule. Resolution on battery: 1 mAh, about 0.0125 Wh, so a job should use at least 0.3 Wh
+(a few dozen seconds of a 14B model) for an error under 5%.
+

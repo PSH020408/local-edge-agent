@@ -88,8 +88,9 @@ Core (no administrator rights):
 - [x] Load and memory: CPU and GPU utilisation, load average, memory pressure, swap, energy-heavy processes
 - [x] Storage: free space, health status, read and write throughput; buses and links (Thunderbolt, USB)
 - [x] Thermal pressure level
-- [ ] Store (SQLite, 7 days) and background sampler at background priority; its own CPU time measured on both core types
-- [ ] Discharge sessions logged from day one (training data for Stage 9)
+- [x] Store (SQLite, 21 days) and background sampler at background priority; battery read once a minute, the rate at which the registry publishes
+- [ ] Sampler cost measured at default and background priority (10 minutes each)
+- [x] Discharge sessions logged (sampler running since 11-16; training data for Stage 9)
 
 Extended:
 - [x] Per-second capture of CPU, GPU and Neural Engine frequency, residency and power (`powermetrics`, allowed without a password for that one command)
@@ -97,11 +98,15 @@ Extended:
 - [ ] Short benchmarks for memory bandwidth and SSD throughput, compared with the measured normal
 
 Diagnosis and agents:
-- [ ] Capture of n seconds → features (mean, maximum, trend) → rules: GPU held at low clocks, runaway process, memory thrashing, battery ageing or heat, charger too weak, storage full or slow, heat without fan response
-- [ ] Battery agent: health against Apple's limits (80%, 1,000 cycles), remaining time from measured power, High Power Mode and charger advice, reasons for fast drain or heat
-- [ ] Performance agent: "why is my Mac slow or hot?", "can I run this now?"
-- [ ] Question router: rules first, `qwen3:1.7b` when the rules do not decide
-- [ ] Admission control for heavy jobs and thermal/power feedback control of long runs; a speed check before long runs
+- [x] Capture of n seconds → features (mean, maximum, trend) → rules: GPU held at low clocks, runaway process, memory thrashing, battery ageing or heat, charger too weak or not supplying, charge held by macOS, storage full or failing
+- [x] Battery agent: health against Apple's limits (80%, 1,000 cycles), remaining time from measured power, High Power Mode and charger advice, reasons for fast drain or heat
+- [x] Performance agent: "why is my Mac slow or hot?", "can I run this now?"
+- [x] Question router: rules first, `qwen3:1.7b` when the rules do not decide (device set Runs D1-D5: 40 of 40 in D5)
+- [x] Admission control for heavy jobs
+- [x] Battery-aware energy mode switching with restore; job energy from hardware counters (`evals/device/energy.md`)
+- [ ] Policy table settled by the energy of each mode (run E3 with the corrected meter)
+- [ ] Speed check before long runs
+- [ ] Thermal/power feedback control of long runs, with a recorded step test
 
 Verify: readers tested on recorded outputs; scenario sets for both agents (on battery, charging, heavy load, the GPU state seen on 2026-11-16 replayed from its readings); router accuracy on 30 questions; budgets measured.
 Done when: both agents answer within budget with measured values, every scenario gets the expected diagnosis, and the controller holds its target in a recorded test.

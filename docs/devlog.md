@@ -9,7 +9,7 @@ Dated entries: what was built, what was decided and why, and progress against th
 | Stage | Planned | Started | Finished | State |
 |---|---|---|---|---|
 | 6 close | 11-16 | 11-15 | | Regression passed (Run 45 and check); holdout pending |
-| 7 Hardware diagnosis, chip-aware from the start | 11-16 to 11-21 | 11-16 | | Core built and tested (Runs D1-D5, no wrong answer in D5); power policy, speed check, feedback control, fan reading and the logging of battery sessions to do |
+| 7 Hardware diagnosis, chip-aware from the start | 11-16 to 11-21 | 11-16 | | Readers, store, sampler (logging), diagnosis, agents, router, admission and energy mode switching done; energy meter settled by experiment. To do: run E3, speed check, feedback control, sampler cost, fan reading (stretch) |
 | 8 Wireless: Wi-Fi, coverage, Bluetooth | 11-22 to 11-26 | | | |
 | 9 iPhone client and battery-time model | 11-27 to 11-28 | | | |
 | 10 Portfolio | 11-29 to 11-30 | | | |
@@ -184,4 +184,8 @@ Generation and a 7,684-token prompt with qwen3:14b in each mode. Speed: Automati
 ## 2026-11-16 — Stage 7: step test of the energy counter on the adapter
 
 One minute of 14B generation between idle periods, with powermetrics as a reference. On the adapter the counter followed the load within the same minute and fell back right after: no lag. It also showed that the system drew about 66-80 W during generation while the chip drew 25-32 W, so memory, display and the rest take more than half the power of a bandwidth-bound job, and chip power alone would understate its energy by half. The E2 failures therefore point to the battery side, where the load comes from the gauge's averaged current. The meter now integrates until the counter settles back to idle instead of stopping at the first publication; the step test on battery will confirm the cause.
+
+## 2026-11-17 — Stage 7: on battery, the coulomb counter
+
+The step test on battery answered the open question: the system counter barely moved during a 14B generation (6.4 W against 4.9 W idle, while the chip alone drew 17 W), and the energy did not arrive later either. On battery that counter does not measure a job's load. The battery gauge's coulomb counter (the charge left, in mAh) does: E1's charge-drop figure for High Power, about 69 W, matches the 66-80 W measured on the adapter. The meter now picks its source by power state (system counter on the adapter, charge drop on battery), each read at the registry's publications and integrated until the reading settles back to idle. Three measurement designs in one evening, each replaced because an experiment showed where it failed.
 
