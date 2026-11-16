@@ -37,17 +37,34 @@ The goal is engineering problem solving with the hardware at hand (embedded syst
 
 ## Schedule to 2026-11-30
 
+Four stages. Efficiency is not a separate stage: every agent from Stage 7 on is built within a time,
+memory and energy budget, on the small models, with the background work on the efficiency cores.
+Only what needs collected data comes later (the battery-time model is trained in Stage 9 on the
+discharge sessions logged from Stage 7 on).
+
 | Dates | Stage | Main deliverable |
 |---|---|---|
-| 11-16 | 6 close | Run 45 graded; a short holdout; sensor probe run on the Mac |
-| 11-17 to 11-19 | 7 Device layer and battery agent | Telemetry layer, background sampler on efficiency cores, question router, battery and power agent |
-| 11-20 to 11-22 | 8 Wi-Fi agent | Link reading, 10-second active test, fault location, use-case verdict, best-network ranking, anomaly detection |
-| 11-23 to 11-25 | 9 Coverage planning | Floor plan, measured signal map, fitted indoor propagation model, router placement and count |
-| 11-26 to 11-27 | 10 Chip-aware optimisation | Small models, admission control, thermal and power feedback control, battery-aware policy, battery-time model |
-| 11-28 to 11-29 | 11 iPhone client | Ask the Mac agent from the iPhone (Shortcuts, Siri); Bluetooth "smart key" as a stretch goal |
-| 11-30 | 12 Portfolio | README results, demo recording, final scenario runs |
+| 11-16 | 6 close | Run 45 graded and checked (done); a short holdout on unseen financial documents |
+| 11-16 to 11-21 | 7 Hardware diagnosis, chip-aware from the start | Telemetry of every readable part of the machine, background sampler on the efficiency cores, per-second capture, performance and fault diagnosis, battery and performance agents, question router, budgets, admission control, thermal and power feedback control |
+| 11-22 to 11-26 | 8 Wireless | Wi-Fi diagnosis, coverage on a floor plan, Bluetooth coverage, propagation compared across bands |
+| 11-27 to 11-28 | 9 iPhone client | Ask the Mac agent from the iPhone (Shortcuts, Siri); measurements where the phone is; battery-time model trained on the logged sessions |
+| 11-29 to 11-30 | 10 Portfolio | README results and plots, demo recording, final scenario runs |
 
-Progress is checked against this table every day in `docs/devlog.md`. If a stage runs late, the stretch items (marked *stretch*) are dropped first, then Stage 11 shrinks to the Shortcuts client.
+Progress is checked against this table every day in `docs/devlog.md`. If a stage runs late, items
+marked *stretch* are dropped first.
+
+## Budgets for every device agent
+
+| Budget | Target |
+|---|---|
+| Quick answer from stored readings | under 3 s |
+| Diagnosis with a per-second capture of n seconds | n + 5 s |
+| Background sampler | under 1% of one core, at background priority (efficiency cores) |
+| Language model | `qwen3:4b` for answers, `qwen3:1.7b` for routing fallback; the 14B and vision models only for documents |
+| Rights | read-only; administrator rights only for `powermetrics`, allowed for that one command |
+| Numbers | every number in an answer is checked against the measurements |
+
+Time, memory and energy per answer are measured for every agent (`logs/model_calls.jsonl`, `powermetrics`).
 
 ## Stage 6 — Tables, financial statements and graphs (closing)
 
@@ -60,80 +77,65 @@ Progress is checked against this table every day in `docs/devlog.md`. If a stage
 
 Done when: extracted figures pass the code checks and chart values are never presented as exact.
 
-## Stage 7 — Device layer and battery agent (11-17 to 11-19)
+## Stage 7 — Hardware diagnosis, chip-aware from the start (11-16 to 11-21)
 
-Telemetry layer (`agent/device/`): one reader per source, each returning values with units and a timestamp, read-only, no administrator rights by default.
+Design: [stage7_design.md](stage7_design.md).
 
-- [ ] Sensor probe: which readings this Mac allows (battery registry, power and thermal state, memory pressure, storage, Wi-Fi radio, chip power with and without administrator rights)
-- [ ] Readers: battery (charge, cycle count, design and full-charge capacity, voltage, current, temperature), power source and power mode, thermal state, CPU and GPU load, memory pressure and swap, storage space and throughput
-- [ ] Background sampler at a fixed period, run at background priority so macOS places it on the efficiency cores; its own CPU time and energy measured on both core types
-- [ ] Question router in code (keywords and patterns, under 1 ms); the small model only when the rules do not decide
-- [ ] Battery and power agent: health against Apple's published limits (80% of design capacity, 1,000 cycles) → replacement advice; heavy workload on battery → connect power or use High Power Mode; remaining time from measured power (voltage × current) and remaining energy; the biggest energy users
-- [ ] Discharge sessions logged from day one (training data for Stage 10)
+Core (no administrator rights):
+- [x] Sensor probe: what this Mac allows, with recorded outputs for offline tests (identifiers removed)
+- [x] Telemetry layer (`agent/device/`): one reader per source, values in SI units with a timestamp and a quality flag
+- [x] Battery: charge, cycle count, design, full-charge and present capacity, voltage, current, temperature; adapter power; power mode
+- [x] Load and memory: CPU and GPU utilisation, load average, memory pressure, swap, energy-heavy processes
+- [x] Storage: free space, health status, read and write throughput; buses and links (Thunderbolt, USB)
+- [x] Thermal pressure level
+- [ ] Store (SQLite, 7 days) and background sampler at background priority; its own CPU time measured on both core types
+- [ ] Discharge sessions logged from day one (training data for Stage 9)
 
-Verify: readers tested on recorded outputs; scenario set for the battery agent (on battery, charging, under load).
-Done when: "how is my battery?" answers in under 5 seconds with measured values, and every scenario gets the expected advice.
+Extended:
+- [x] Per-second capture of CPU, GPU and Neural Engine frequency, residency and power (`powermetrics`, allowed without a password for that one command)
+- [ ] Fan speed and temperature sensors from the system management controller (*stretch*: no public interface; keys differ by model)
+- [ ] Short benchmarks for memory bandwidth and SSD throughput, compared with the measured normal
 
-## Stage 8 — Wi-Fi and network agent (11-20 to 11-22)
+Diagnosis and agents:
+- [ ] Capture of n seconds → features (mean, maximum, trend) → rules: GPU held at low clocks, runaway process, memory thrashing, battery ageing or heat, charger too weak, storage full or slow, heat without fan response
+- [ ] Battery agent: health against Apple's limits (80%, 1,000 cycles), remaining time from measured power, High Power Mode and charger advice, reasons for fast drain or heat
+- [ ] Performance agent: "why is my Mac slow or hot?", "can I run this now?"
+- [ ] Question router: rules first, `qwen3:1.7b` when the rules do not decide
+- [ ] Admission control for heavy jobs and thermal/power feedback control of long runs; a speed check before long runs
 
-- [ ] Link reading: signal strength, noise, signal-to-noise ratio, channel, band, channel width, PHY mode, link rate
-- [ ] 10-second active test: latency, jitter and loss to the router and to the internet; DNS lookup time; download and upload throughput
-- [ ] Fault location: Wi-Fi link, router, internet provider or DNS, from which segment is slow
-- [ ] Use-case verdict from published requirements (online gaming, video call, streaming, messaging), with the reason
-- [ ] Channel scan: nearby networks per channel and band, congestion score, channel advice for my router
-- [ ] Best network among several (for example public Wi-Fi): ranked from the scan, then the top candidates tested with confirmation
-- [ ] Anomaly detection: a baseline from the background log (robust statistics per hour of day); "is my network acting strange?" compares now with the baseline
-- [ ] Actions with confirmation: reconnect, switch band or network
+Verify: readers tested on recorded outputs; scenario sets for both agents (on battery, charging, heavy load, the GPU state seen on 2026-11-16 replayed from its readings); router accuracy on 30 questions; budgets measured.
+Done when: both agents answer within budget with measured values, every scenario gets the expected diagnosis, and the controller holds its target in a recorded test.
 
-Verify: scenarios created on purpose (near and far from the router, behind walls, a saturated link); the fault location is checked against where the problem was created.
-Done when: "why is my Wi-Fi slow?" returns the faulty segment, a use-case verdict and a fix in about 15 seconds.
+## Stage 8 — Wireless: Wi-Fi, coverage and Bluetooth (11-22 to 11-26)
 
-## Stage 9 — Coverage planning on a floor plan (11-23 to 11-25)
+- [ ] Wi-Fi link reading: signal, noise, SNR, channel, band, width, PHY mode, link rate
+- [ ] 10-second active test: latency, jitter and loss to the router and the internet, DNS time, throughput; fault location (Wi-Fi link, router, provider, DNS); use-case verdict (gaming, video call, streaming, messaging)
+- [ ] Channel scan and the best of several networks (public Wi-Fi: ranked from the scan, top candidates tested with confirmation); anomaly detection against the logged baseline
+- [ ] Coverage on a floor plan: walls marked, signal measured at 15-25 points, multi-wall path-loss model fitted by least squares, scored on held-out points, router placement and count
+- [ ] Bluetooth coverage: signal strength against distance and walls with a Bluetooth device carried around the fixed Mac (connected earbuds, or an iPhone test app)
+- [ ] Propagation compared across bands: Wi-Fi 2.4 GHz, 5 GHz and Bluetooth (path-loss exponent, wall loss)
 
-- [ ] Floor plan with a known scale; walls marked as line segments with a material type
-- [ ] Signal measured at 15-25 points around the home, with the router position recorded
-- [ ] Indoor propagation model fitted by least squares: path loss = PL₀ + 10·n·log₁₀(d) + Σ wall losses (multi-wall model); path-loss exponent and wall losses reported
-- [ ] Model scored on held-out points it was not fitted on
-- [ ] Coverage map for any router position; placement search and the number of routers needed for a target level (for example −67 dBm for video calls) in every room
-- [ ] Agent question: "where should I put the router?" / "how many access points do I need?"
+The floor plan of my home stays out of the repository; the repository uses a synthetic plan.
+Done when: "why is my Wi-Fi slow?" returns the faulty segment, a verdict and a fix in about 15 s, and the coverage model predicts held-out points within a stated error.
 
-The floor plan of my home is kept out of the repository; the repository uses a synthetic plan with the same method.
+## Stage 9 — iPhone client (11-27 to 11-28)
 
-Verify: prediction error on held-out points; the predicted dead zones checked by measurement.
-Done when: the fitted model predicts held-out points within a stated error and the placement advice is checked at the predicted weak spots.
+- [ ] Local HTTP endpoint on the Mac (home network only, shared key)
+- [ ] iPhone Shortcut "Ask Mac" with Siri: question to the Mac agent, answer back on the phone
+- [ ] Measurements where the phone is ("how is the Wi-Fi in the bedroom?")
+- [ ] Battery remaining-time model trained on the discharge sessions logged since Stage 7, compared with the macOS estimate on unseen sessions
+- [ ] *stretch*: Bluetooth Low Energy "smart key" iOS app (Swift, CoreBluetooth)
 
-## Stage 10 — Chip-aware optimisation (11-26 to 11-27)
-
-- [ ] Profile of every model call (load, prompt, generation time, memory held) from `logs/model_calls.jsonl`
-- [ ] Small model for routing fallback and answer writing (`qwen3:4b`, `qwen3:1.7b` compared with `qwen3:8b` on the scenario sets); the large models only for documents
-- [ ] Memory budget: which models stay loaded together in 24 GB; context size per call
-- [ ] Admission control: each heavy job's memory, time and power measured once; a new job is started, run with a smaller model, or deferred from the current load
-- [ ] Thermal and power feedback control: workload adjusted to keep power or the thermal state below a target; step response recorded (overshoot, settling time)
-- [ ] Battery-aware policy: model size and pace chosen from charge level and remaining work
-- [ ] Battery remaining-time model trained on the logged discharge sessions; compared with the macOS estimate (`pmset -g batt`) on unseen sessions
-- [ ] *stretch*: on-device text recognition (Apple Vision) instead of the vision model for text pages; MLX against Ollama
-
-Verify: time, memory and energy per answer before and after; the controller's response plotted.
-Done when: the device agents answer with the small model at the same scenario grades, and the controller holds its target in the recorded test.
-
-## Stage 11 — iPhone client (11-28 to 11-29)
-
-- [ ] Local HTTP endpoint on the Mac (home network only, with a shared key)
-- [ ] iPhone Shortcut "Ask Mac": a question typed or spoken through Siri goes to the Mac agent, and the answer comes back to the phone
-- [ ] iPhone-side measurement: the phone tests the Wi-Fi where it is ("how is the Wi-Fi in the bedroom?")
-- [ ] *stretch*: Bluetooth Low Energy "smart key": a small iOS app (Swift, CoreBluetooth); when the phone comes near, the Mac sends a status summary; a button asks for a diagnosis
-
-Verify: answers on the phone match the answers on the Mac; round-trip time measured.
 Done when: a Mac diagnosis can be asked and read on the iPhone.
 
-## Stage 12 — Portfolio (11-30)
+## Stage 10 — Portfolio (11-29 to 11-30)
 
-- README with the architecture, results tables and plots (coverage map, controller response, speed before and after)
+- README with the architecture, results tables and plots (coverage maps, controller response, budgets before and after)
 - Demo recording: a spoken question on the iPhone → diagnosis on the Mac → answer on the phone
 - Final scenario runs for every agent
 
 ## Later
 
-- Image generation (painter), postponed: the earlier plan for Stages 8-9 (local image runner, see-paint-check loop) moves after Stage 12
+- Image generation (painter), postponed: the earlier plan (local image runner, see-paint-check loop) moves after Stage 10
 - Visual reasoning experiment (thinking vision model), redesign of the accurate profile, a vision holdout on new images
 - Open items from Stage 5: page descriptions sometimes win over confirmed equation readings (RV1, EQ4); braces read as exponents (RV4); inline formulas from the text layer (RV8)

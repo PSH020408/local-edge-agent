@@ -13,6 +13,15 @@ log_dir = "logs"          # JSONL traces of every session
 image_planner = true      # questions with an image path: plan parts in code, one vision call per part
 planner_model = "qwen3:14b"  # plans image questions, also with --fast (Run 19: 8B dropped parts of the question)
 
+[device]
+enabled = true            # questions about this Mac's battery and performance go to the device agent (Stage 7)
+answer_model = "qwen3:4b-instruct"  # writes the answer from the diagnosis; the numbers are checked by code.
+                                    # Not "qwen3:4b": that tag is the 2507 thinking model, which ignores
+                                    # think = false and wrote its reasoning as the answer (Run D1)
+router_model = "qwen3:1.7b"  # only when the routing rules match no topic or several
+capture_seconds = 10      # per-second capture for performance questions
+store = "logs/device.db"  # readings of the background sampler (scripts/run_sampler.py)
+
 [vision]
 model = "qwen3-vl:8b-instruct"  # instruct variant answers directly; the default qwen3-vl:8b is the thinking variant
 max_side = 1280                 # pixel budget = max_side^2 * 3/4 (about 1.2 MP); smaller = faster, too small loses text

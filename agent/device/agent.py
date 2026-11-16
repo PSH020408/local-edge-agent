@@ -1,0 +1,102 @@
+"""Device agent: question → route → measure → diagnose → answer.
+
+battery:     a 2-second capture of the fast sources (no chip readings), the macOS battery profile,
+             the usual battery power from the store when there is history.
+performance: an n-second capture with powermetrics (default 10 s), the energy ranking (top),
+             storage space and health; "can I run ...?" also gets an admission decision.
+
+Every stage is timed, so the budgets (quick answer under 3 s, diagnosis n + 5 s) are measured.
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+
+from . import answer as writer
+from .capture import Capture, capture
+from .diagnosis import Report, battery_report, job_from_question, performance_report
+from .readings import by_name
+from .router import Route, route
+from .sources import battery, load, storage
+
+
+@dataclass
+class DeviceResult:
+    question: str
+    route: Route
+    report: Report | None = None
+    answer: str = ""
+    method: str = ""
+    unsupported: list[str] = field(default_factory=list)
+    rejected: str = ""        # the model's first answer, when it was not used
+    rejected_reason: str = ""
+    timings: dict = field(default_factory=dict)
+    readings: dict = field(default_factory=dict)  # name -> (value, unit, quality), for the run report
+
+
+class DeviceAgent:
+    def __init__(self, shell, writer_llm=None, router_llm=None, store=None, capture_seconds: int = 10,
+                 battery_seconds: int = 2, sleep=time.sleep, on_event=None) -> None:
+        self.shell, self.writer_llm, self.router_llm, self.store = shell, writer_llm, router_llm, store
+        self.capture_seconds, self.battery_seconds, self.sleep = capture_seconds, battery_seconds, sleep
+        self.on_event = on_event or (lambda message: None)
+
+    def run(self, question: str) -> str | None:
+        """Answer for a device question; None when the question is not about the device."""
+        result = self.diagnose(question)
+        return result.answer if result.route.topic else None
+
+    def diagnose(self, question: str, topic: str | None = None) -> DeviceResult:
+        started = time.perf_counter()
+        chosen = Route(topic, "given", {}, 0.0) if topic else route(question, self.router_llm)
+        result = DeviceResult(question, chosen, timings={"route": round(chosen.seconds, 4)})
+        if not chosen.topic:
+            return result
+        self.on_event(f"device: {chosen.topic} ({chosen.method})")
+        measure_started = time.perf_counter()
+        if chosen.topic == "battery":
+            view = capture(self.shell, seconds=self.battery_seconds, with_chip=False, sleep=self.sleep)
+            profile = {r.name: r.value for r in battery.read_profile(self.shell) if r.ok}
+            baseline = self._usual_battery_power()
+            top = self._top() if view.value("power.source") == "Battery" else []
+            result.report = battery_report(view, profile, baseline, top, question)
+            extra = profile
+        else:
+            view = capture(self.shell, seconds=self.capture_seconds, with_chip=True, sleep=self.sleep)
+            disk = {r.name: r.value for r in storage.read(self.shell) if r.ok}
+            result.report = performance_report(view, disk, self._top(), job_from_question(question))
+            extra = disk
+        result.timings["measure"] = round(time.perf_counter() - measure_started, 3)
+        result.readings = self._snapshot(view, extra)
+        self.on_event(f"device: findings {', '.join(result.report.codes())}")
+        written = writer.write(result.report, question, self.writer_llm)
+        result.answer, result.method, result.unsupported = written.text, written.method, written.unsupported
+        result.rejected, result.rejected_reason = written.first, written.reason
+        result.timings["answer"] = round(written.seconds, 3)
+        result.timings["total"] = round(time.perf_counter() - started, 3)
+        return result
+
+    def _top(self) -> list[tuple[str, float]]:
+        values = by_name(load.read_top(self.shell))
+        out = []
+        for rank in (1, 2, 3):
+            name, impact = values.get(f"process.energy{rank}_name"), values.get(f"process.energy{rank}_impact")
+            if name and name.ok and impact and impact.ok:
+                out.append((name.value, impact.value))
+        return out
+
+    def _usual_battery_power(self) -> float | None:
+        """Mean battery power on battery over the last 7 days of the store, if there is enough history."""
+        if self.store is None:
+            return None
+        volts = dict(self.store.series("battery.voltage", 7 * 24 * 60))
+        amps = self.store.series("battery.current", 7 * 24 * 60)
+        powers = [abs(volts[t] * a) for t, a in amps if a < -0.05 and t in volts]
+        return sum(powers) / len(powers) if len(powers) >= 30 else None
+
+    @staticmethod
+    def _snapshot(view: Capture, extra: dict) -> dict:
+        snap = {name: (r.value, r.unit, r.quality) for name, r in sorted(view.latest.items())}
+        snap.update({name: (value, "", "ok") for name, value in extra.items()})
+        return snap

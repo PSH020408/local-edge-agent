@@ -9,12 +9,10 @@ Dated entries: what was built, what was decided and why, and progress against th
 | Stage | Planned | Started | Finished | State |
 |---|---|---|---|---|
 | 6 close | 11-16 | 11-15 | | Regression passed (Run 45 and check); holdout pending |
-| 7 Device layer and battery agent | 11-17 to 11-19 | | | |
-| 8 Wi-Fi and network agent | 11-20 to 11-22 | | | |
-| 9 Coverage planning | 11-23 to 11-25 | | | |
-| 10 Chip-aware optimisation | 11-26 to 11-27 | | | |
-| 11 iPhone client | 11-28 to 11-29 | | | |
-| 12 Portfolio | 11-30 | | | |
+| 7 Hardware diagnosis, chip-aware from the start | 11-16 to 11-21 | 11-16 | | Design done; probe passed (21 of 21 sources) |
+| 8 Wireless: Wi-Fi, coverage, Bluetooth | 11-22 to 11-26 | | | |
+| 9 iPhone client and battery-time model | 11-27 to 11-28 | | | |
+| 10 Portfolio | 11-29 to 11-30 | | | |
 
 ## History before this log
 
@@ -53,7 +51,7 @@ Dated entries: what was built, what was decided and why, and progress against th
 
 **How the work is done from Stage 7.** Each part starts with a design note: the problem, the components, two or three options with their trade-offs, and the choice with its reason. Code follows the note, with tests, and the note is kept below in this log.
 
-**Schedule.** Stages 7-12 by 2026-11-30 (table above). Stretch items are dropped first if a stage runs late.
+**Schedule.** Stages 7-12 by 2026-11-30, revised the same day to four stages (entry below). Stretch items are dropped first if a stage runs late.
 
 ## 2026-11-16 — Stage 6: Run 44 and fixes
 
@@ -81,3 +79,70 @@ Lessons for the device agents: (1) a long run should start with a short speed ch
 Run 45 ran all eight document sets (178 questions). One real regression: a slide whose formulas exist only as a picture was read as [none], and the retry asked for charts (GC2, in two sets). A figure page that is not a chart page is now asked again with a prompt that names every kind of content; the check read both formulas. Three one-case drops (D06, TC2, PA10) were run three times each: D06 and TC2 were right 3 of 3 (run-to-run variation), PA10 stayed ⚠️ as in earlier runs. Every gate is met; the tables set went from 48% to 87% over Stage 6. Remaining: one short holdout on unseen financial documents, run once on this code.
 
 Profile of the normal-speed part of Run 45: `qwen3:14b` took 76% of the model time and two thirds of that was reading the prompt; model loading was under 1%. Shorter contexts are the first target for Stage 10.
+
+## 2026-11-16 — Plan revised: four stages, efficiency from the start
+
+**Decision.** Chip-aware optimisation is no longer a stage of its own. Every device agent is built within a time, memory and energy budget from Stage 7 on (budgets in [roadmap.md](roadmap.md)). Wi-Fi diagnosis and coverage planning are one stage, with Bluetooth coverage added. Stages: 7 hardware diagnosis (11-16 to 11-21), 8 wireless (11-22 to 11-26), 9 iPhone client and the battery-time model (11-27 to 11-28), 10 portfolio (11-29 to 11-30).
+
+**Why.** Optimising at the end measures and tunes agents that were designed without limits; embedded systems are designed against their budgets from the start. Only what needs collected data waits: the battery-time model needs days of logged discharge sessions.
+
+**Stage 7 design decisions** (details in [stage7_design.md](stage7_design.md)):
+
+| Question | Choice | Reason |
+|---|---|---|
+| Format of a reading | Fixed record: name, value, unit, time, quality | Like a register map: one format for every source, SI units, missing values marked instead of failing |
+| When to read | Background every 10 s (storage every 10 min), on demand for questions, per-second capture of n seconds for a diagnosis | Baselines need history; diagnosis needs dense data only while it runs |
+| Storage | SQLite (standard library), 7 days kept | Queries by time window; constant size like a ring buffer |
+| How to read | macOS built-in commands parsed in Python, no new packages | Uses what the platform provides; outputs can be recorded and replayed in tests |
+| Administrator rights | `powermetrics` only, allowed without a password for that one command | Chip frequency and power per second are needed for diagnosis; the rule is limited to one read-only command and can be removed with one command |
+| Router | Rules first, `qwen3:1.7b` only when the rules do not decide | Most questions are routed in under a millisecond |
+| Advice thresholds | Health below 80% or 1,000 cycles → replace (Apple's limits); 80-85% → watch; heavy load (CPU ≥ 70% or GPU ≥ 50% for 2 min) on battery → connect power; on power without High Power Mode → suggest it; charge below 20% → defer; battery at 35 °C or more → heat warning; average power 1.5× the usual → list the biggest users | Published limits where they exist, otherwise values to be checked against the logged baseline |
+| Sampler start | By command first; started at login once it is stable | Simple to debug before it runs unattended |
+| Bluetooth partner (Stage 8) | Connected earbuds if the Mac reads their signal, otherwise an iPhone test app | Decided by the probe at the start of Stage 8 |
+
+## 2026-11-16 — Stage 7: sensor probe
+
+`scripts/probe_device.py` ran every macOS command the readers will use: 21 of 21 available, `powermetrics` included (sudoers rule for that one command, checked with `visudo -c`). Two findings changed the plan: the battery registry also reports the whole-system input power on the adapter, so total power is measurable on AC without rights; and battery health is reported three ways (90% in macOS, 86.0% raw, 88.4% nominal), so the design now states which one each rule uses. Reviewing the fixtures before the first commit showed that process lists name the applications on the machine, and that the battery's manufacturing data was kept; the probe now replaces process names and removes that data, with tests. Results in `docs/stage7_design.md` §14.
+
+## 2026-11-16 — Stage 7: which source decides the power mode
+
+Two sources disagreed on the power mode while the Mac was on the adapter: `pmset -g` reported `powermode 2` (High Power), while `system_profiler SPPowerDataType` reported Low Power Mode on and High Power Mode off. System Settings shows High Power Mode on the adapter, and `pmset -g custom` gives the setting per power source: adapter `powermode 2` (High Power), battery `powermode 0` (Automatic). Decision: the power mode is read from `pmset -g custom`; the `system_profiler` switches are kept as readings, and a disagreement is reported, not resolved silently. The energy mode is a user setting; the low clocks seen at idle (GPU 338 MHz, 0.11 W) come from dynamic voltage and frequency scaling, which works under every mode. `pmset -g custom` was added to the shell commands and the probe; its recording holds the lines shown above until the next probe run records the full output.
+
+## 2026-11-16 — Stage 7: power and thermal readers; a battery-aware power policy
+
+Readers for the power mode per source, the source in use and the macOS time-remaining estimate (`agent/device/sources/power.py`), and for the thermal pressure level and the recorded CPU limits (`thermal.py`), with tests on the recorded outputs and on outputs for the battery case, older Macs and a recorded cap. "No CPU power status has been recorded" is stored as a 100% speed limit with quality "estimated": it is the absence of a record, not a measurement.
+
+Proposed policy (design §15): on the adapter keep High Power and say so; on battery choose Low Power, Automatic or High Power by job class and charge, restore the previous mode afterwards, and decide the table by measuring each job's energy in each mode. Mode changes will use a sudoers rule limited to `pmset -b powermode 0/1/2`.
+
+## 2026-11-16 — Stage 7: load and memory readers
+
+`load.py`: core counts, load average, the busiest process (`ps`, cheap enough for the sampler), CPU use and the energy ranking (`top`, second sample only; for questions), GPU use and GPU memory from the graphics driver's statistics without rights. `memory.py`: total, free, app, wired, file cache, compressed memory, swap used and the swap counters, and the available percentage from `memory_pressure`. On the recording, free memory is 0.3 GB of 24 GB while 88% is available: macOS fills unused memory with file caches, so a shortage is judged from the available percentage, compression and how fast swap grows, not from free memory.
+
+## 2026-11-16 — Stage 7: the device agent, ready for its first test run
+
+Built to the design in one pass, then tested offline on recorded outputs (314 tests):
+
+| Part | File | Role |
+|---|---|---|
+| Readers | `agent/device/sources/storage.py`, `chip.py` | SSD space from the APFS container (not `df`), SMART status, throughput, buses; per-second CPU cluster, GPU and Neural Engine frequency, residency and power from `powermetrics`, with each cluster's maximum frequency |
+| Store | `store.py` | SQLite, one transaction per round, windows with mean, minimum, maximum and slope, 7-day retention |
+| Sampler | `sampler.py`, `scripts/run_sampler.py` | fast sources every 10 s, storage every 10 min, its own CPU time (process and children) stored every round |
+| Capture | `capture.py` | n seconds of per-second readings, powermetrics in a parallel thread (one process for all n samples), features per reading |
+| Diagnosis | `diagnosis.py` | facts computed and formatted by code; findings with evidence and advice; thresholds of design §7-8; admission decision for "can I run ...?" |
+| Router | `router.py` | rules in Korean and English; the small model only for ties, no match, or a keyword inside a general-knowledge question |
+| Answer | `answer.py` | `qwen3:4b` writes from the report; numbers checked against it; one rewrite, then a code template |
+| Agent | `agent.py`, `main.py` | battery: 2 s capture without chip readings; performance: 10 s capture with chip readings; wired into the main question router after documents and images |
+
+Test set (`evals/device/cases.toml`, `scenarios.py`, `scripts/run_device_set.py`): 28 questions on 18 states built from this Mac's recorded outputs (each state changes only the readings it is about, including the GPU state of 05:04), 4 questions that are not about the device, and 6 questions on the Mac as it is. Predictions are written in the case file before the first run.
+
+Three problems were found while building, before any run: process names and battery manufacturing data in the recorded outputs (removed), a recorded plist made invalid by the identifier removal (blank values now keep their type), and English keywords not matched next to Korean particles ("CPU를": `\b` treats Hangul as a word character). Not built yet in Stage 7: switching the energy mode on battery, the 20-second speed check before long runs and the feedback controller; they follow the first test run.
+
+## 2026-11-16 — Stage 7: Run D1, the first run of the device set
+
+Routing 36 of 38, findings 27 of 28 (every routed case right, including the GPU state of 05:04), but the answers failed: the `qwen3:4b` tag in Ollama is the 2507 thinking model, which ignored `think = false`, wrote its reasoning as the answer in English and ran to 1,400-2,600 tokens (25-47 s). The number check rejected 24 of 35 answers and the code template answered instead, so no wrong number reached an answer, but the model's output was unusable as an answer every time. Fixes: `qwen3:4b-instruct` as the answer model, a cap on the answer length, rejection of reasoning written as an answer, a keyword fix ("성능" inside "고성능") and general-knowledge questions decided by rule. Details and the gate for Run D2: `evals/device/results.md`.
+
+Lesson: a model tag is not a fixed thing. The same name pointed to a different model than the one tested in Stages 0-6 (the hybrid `qwen3:8b` and `qwen3:14b` honour `think = false`); the model's identity is now checked by its digest.
+
+## 2026-11-16 — Stage 7: Run D2, the device set passes its gate
+
+With the instruct model: routing 38 of 38, findings 28 of 28, 34 of 34 answers written by the model, battery answers in 4.4 s and performance answers in 13.3 s (68 s and 81 s in Run D1). Hand grading: ✅ 21, ⚠️ 13, ❌ 0; the ⚠️ answers mix up the meaning of a number (available and used memory) or add a cause that is not in the findings. The adapter was unplugged on purpose during the live cases: macOS still reported "AC attached" while 0 W came in and the battery delivered about 75 W. The diagnosis trusted the power reading over the status flag and reported the discharge, but advised a stronger adapter; it now recognises an adapter that supplies nothing. Lesson: two readings of one state can update at different rates, so a diagnosis should rest on the physical measurement (power) rather than on a status flag. Details: `evals/device/results.md`.

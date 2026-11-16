@@ -24,17 +24,16 @@ A theme from the first stages carries over: a rule only holds reliably when code
 | Agent core: tool calling, time and engineering math tools, traces | Done (Stages 0-2) |
 | Vision: images, text in images, two-reading verification | Done (Stage 3) |
 | Documents: PDF and PowerPoint reading with cited, code-checked answers; equations read from the page image; tables, statements and charts | Done (Stages 4-6); tables set 87%, one holdout pending |
-| Device layer and battery agent | Planned, Stage 7 |
-| Wi-Fi and network agent | Planned, Stage 8 |
-| Coverage planning on a floor plan | Planned, Stage 9 |
-| Chip-aware optimisation: small models, admission control, thermal and power feedback control | Planned, Stage 10 |
-| iPhone client (Shortcuts and Siri; Bluetooth as a stretch goal) | Planned, Stage 11 |
+| Hardware diagnosis: telemetry of battery, chip, memory, storage and thermal state; per-second capture; battery and performance agents; budgets, admission control and thermal/power feedback control from the start | In progress, Stage 7 |
+| Wireless: Wi-Fi diagnosis, coverage on a floor plan, Bluetooth coverage | Planned, Stage 8 |
+| iPhone client (Shortcuts and Siri; Bluetooth as a stretch goal); battery-time model | Planned, Stage 9 |
+| Portfolio: results, plots, demo | Planned, Stage 10 |
 
 Plan and dates: [docs/roadmap.md](docs/roadmap.md). Progress and design decisions: [docs/devlog.md](docs/devlog.md). Experiments and results: [docs/findings.md](docs/findings.md), [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Architecture
 
-Target design (the device parts are being built from Stage 7):
+Target design (the device parts are being built from Stage 7; every agent runs within a time, memory and energy budget):
 
 ```
 iPhone (Shortcut / Siri) --local HTTP--+
@@ -137,6 +136,9 @@ python scripts/run_eval_set.py --set documents --fast   # the document test set
 python scripts/run_eval_set.py --set documents --cases evals/documents/equations.toml --fast   # questions about equations
 python scripts/run_eval_set.py --set documents --cases evals/documents/tables.toml --fast   # tables, statements and charts
 python scripts/profile_calls.py                    # where the time of the model calls went
+python scripts/probe_device.py                     # which hardware readings this Mac allows (Stage 7)
+python scripts/run_device_set.py                   # battery and performance questions: scenarios and live
+taskpolicy -b python scripts/run_sampler.py        # background readings every 10 s on the efficiency cores
 python scripts/run_formula_set.py                  # formula transcription: page reading against two crops, graded by code
 python scripts/run_vision_set.py --fast          # the vision test set, fast profile (about 7 minutes)
 python scripts/run_vision_set.py --accurate      # the same set, experimental accurate profile (much slower)

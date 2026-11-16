@@ -1,0 +1,334 @@
+# Stage 7 device test set: battery and performance questions answered by the device agent.
+#
+# scenario: a state built from the outputs recorded on this Mac (evals/device/scenarios.py), so the
+#           expected diagnosis is known; "live" runs on the Mac as it is, graded against the readings
+#           the run records.
+# route:    expected topic: battery, performance or none (not a device question).
+# expect:   findings that must be in the diagnosis; forbid: findings that must not be.
+# keys:     strings the answer should contain (numbers from the facts, as code formats them).
+#
+# Automatic checks per case: route, expected and forbidden findings, keys in the answer, numbers in
+# the answer that are not in the facts, answer written by the model or by the code template, time.
+# Each answer is also read and graded by hand against the facts (✅ / ⚠️ / ❌), as in Stages 4-6.
+#
+# Predictions, written before the first run:
+# - routing: all rule cases right; the general-knowledge questions (R03, R04) and the questions
+#   without a keyword (B15) go to qwen3:1.7b, which may miss one.
+# - findings: all scenario cases right (the rules are code and the scenarios were checked offline).
+# - answers by qwen3:4b: most copy the numbers; a few are rewritten once; Korean answers may drop the
+#   less important findings. Expect 1-3 answers built by the template.
+# - time: battery under 5 s with the small model warm; performance about 10 s of capture + 2-4 s.
+
+# ---------- Battery ----------
+
+[[case]]
+id = "B01"
+question = "배터리 상태 어때?"
+scenario = "recorded"
+route = "battery"
+expect = ["battery_ok", "adapter_high_power", "charging_paused"]
+keys = ["90", "286"]
+
+[[case]]
+id = "B02"
+question = "배터리 교체해야 돼?"
+scenario = "recorded"
+route = "battery"
+expect = ["battery_ok"]
+forbid = ["battery_replace", "battery_aging"]
+keys = ["90"]
+
+[[case]]
+id = "B03"
+question = "배터리 교체해야 할까?"
+scenario = "aged_battery"
+route = "battery"
+expect = ["battery_replace"]
+keys = ["76", "1,043"]
+
+[[case]]
+id = "B04"
+question = "배터리 수명 아직 괜찮아?"
+scenario = "aging_watch"
+route = "battery"
+expect = ["battery_aging"]
+forbid = ["battery_replace"]
+keys = ["83"]
+
+[[case]]
+id = "B05"
+question = "배터리로 얼마나 더 버틸 수 있어?"
+scenario = "on_battery_light"
+route = "battery"
+expect = ["battery_ok"]
+forbid = ["heavy_on_battery"]
+keys = ["265", "10.5"]
+
+[[case]]
+id = "B06"
+question = "지금 배터리로 이 작업 계속해도 괜찮아?"
+scenario = "on_battery_heavy"
+route = "battery"
+expect = ["heavy_on_battery"]
+keys = ["55.4", "32"]
+
+[[case]]
+id = "B07"
+question = "배터리가 너무 빨리 닳는데 왜 그래?"
+scenario = "low_charge_heavy"
+route = "battery"
+expect = ["charge_low", "heavy_on_battery"]
+keys = ["15", "51.7"]
+
+[[case]]
+id = "B08"
+question = "배터리가 왜 이렇게 뜨거워?"
+scenario = "hot_battery"
+route = "battery"
+expect = ["battery_hot"]
+keys = ["38.5"]
+
+[[case]]
+id = "B09"
+question = "배터리 셀 상태는 괜찮아?"
+scenario = "cell_imbalance"
+route = "battery"
+expect = ["cell_imbalance"]
+keys = ["90 mV"]
+
+[[case]]
+id = "B10"
+question = "충전 다 되려면 얼마나 걸려?"
+scenario = "charging"
+route = "battery"
+expect = ["battery_ok"]
+forbid = ["charging_paused"]
+keys = ["44"]
+
+[[case]]
+id = "B11"
+question = "충전기를 꽂았는데 배터리가 오히려 줄어들어"
+scenario = "weak_charger"
+route = "battery"
+expect = ["charger_weak"]
+keys = ["30"]
+
+[[case]]
+id = "B16"
+question = "충전기 꽂혀 있는데 배터리 얼마나 버텨?"
+scenario = "adapter_not_supplying"
+route = "battery"
+expect = ["adapter_not_supplying"]
+forbid = ["charger_weak"]
+keys = ["44"]
+note = "The state seen live in Run D2 (L01, L02): adapter reported as connected, 0 W in, the battery discharging at 6.3 A."
+
+[[case]]
+id = "B12"
+question = "고성능 모드 켜야 돼?"
+scenario = "recorded"
+route = "battery"
+expect = ["adapter_high_power", "mode_sources_disagree"]
+keys = []
+
+[[case]]
+id = "B13"
+question = "무거운 작업 돌리는 중인데 에너지 모드 바꿔야 해?"
+scenario = "ac_not_high_power_heavy"
+route = "battery"
+expect = ["suggest_high_power"]
+keys = []
+
+[[case]]
+id = "B14"
+question = "How is my battery health?"
+scenario = "recorded"
+route = "battery"
+expect = ["battery_ok"]
+keys = ["90", "286"]
+
+[[case]]
+id = "B15"
+question = "전기가 얼마나 남았지?"
+scenario = "on_battery_light"
+route = "battery"
+expect = ["battery_ok"]
+keys = ["70"]
+note = "No keyword: the router's small model must choose."
+
+# ---------- Performance ----------
+
+[[case]]
+id = "P01"
+question = "맥이 왜 이렇게 느려?"
+scenario = "recorded"
+route = "performance"
+expect = ["no_problem"]
+keys = []
+
+[[case]]
+id = "P02"
+question = "맥이 갑자기 엄청 느려졌어"
+scenario = "gpu_held_low"
+route = "performance"
+expect = ["gpu_held_low"]
+forbid = ["no_problem"]
+keys = ["443", "1578"]
+note = "The state of 2026-11-16, 05:04: GPU 99.9% active at its lowest clocks, thermal pressure moderate."
+
+[[case]]
+id = "P03"
+question = "팬이 하나도 안 도는데 괜찮은 거야?"
+scenario = "gpu_held_low"
+route = "performance"
+expect = ["gpu_held_low"]
+keys = []
+
+[[case]]
+id = "P04"
+question = "맥이 너무 뜨거워"
+scenario = "thermal_heavy"
+route = "performance"
+expect = ["thermal_heavy"]
+keys = []
+
+[[case]]
+id = "P05"
+question = "CPU를 계속 잡아먹는 프로그램 있어?"
+scenario = "runaway"
+route = "performance"
+expect = ["busy_process"]
+keys = ["198"]
+
+[[case]]
+id = "P06"
+question = "메모리 부족한 것 같은데 확인해줘"
+scenario = "memory_short"
+route = "performance"
+expect = ["memory_short"]
+keys = ["7%"]
+
+[[case]]
+id = "P07"
+question = "저장공간 얼마나 남았어?"
+scenario = "storage_low"
+route = "performance"
+expect = ["storage_low"]
+keys = ["39.8"]
+
+[[case]]
+id = "P08"
+question = "SSD 상태 괜찮아?"
+scenario = "storage_failing"
+route = "performance"
+expect = ["storage_failing"]
+keys = []
+
+[[case]]
+id = "P09"
+question = "왜 이렇게 버벅거려?"
+scenario = "busy_cpu"
+route = "performance"
+expect = ["cpu_busy"]
+keys = ["92.9"]
+
+[[case]]
+id = "P10"
+question = "지금 이미지 분석 돌려도 돼?"
+scenario = "recorded"
+route = "performance"
+expect = ["admit_run"]
+keys = []
+
+[[case]]
+id = "P11"
+question = "지금 긴 평가 돌려도 돼?"
+scenario = "memory_short"
+route = "performance"
+expect = ["admit_defer", "memory_short"]
+forbid = ["admit_run"]
+keys = []
+
+[[case]]
+id = "P12"
+question = "지금 문서 질문 돌려도 돼?"
+scenario = "gpu_held_low"
+route = "performance"
+expect = ["admit_defer", "gpu_held_low"]
+forbid = ["admit_run"]
+keys = []
+
+[[case]]
+id = "P13"
+question = "Is my Mac overheating?"
+scenario = "recorded"
+route = "performance"
+expect = ["no_problem"]
+forbid = ["thermal_heavy", "thermal_moderate"]
+keys = []
+
+# ---------- Not device questions (router) ----------
+
+[[case]]
+id = "R01"
+question = "오늘 서울 날씨 어때?"
+scenario = "recorded"
+route = "none"
+
+[[case]]
+id = "R02"
+question = "피타고라스 정리를 설명해줘"
+scenario = "recorded"
+route = "none"
+
+[[case]]
+id = "R03"
+question = "메모리 반도체 시장 전망 알려줘"
+scenario = "recorded"
+route = "none"
+note = "Keyword 'memory' in a general question: the small model must decide."
+
+[[case]]
+id = "R04"
+question = "리튬이온 배터리의 화학 원리를 설명해줘"
+scenario = "recorded"
+route = "none"
+note = "Keyword 'battery' in a general question: the small model must decide."
+
+# ---------- Live: the Mac as it is ----------
+
+[[case]]
+id = "L01"
+question = "배터리 상태 어때?"
+scenario = "live"
+route = "battery"
+
+[[case]]
+id = "L02"
+question = "배터리 얼마나 버텨?"
+scenario = "live"
+route = "battery"
+
+[[case]]
+id = "L03"
+question = "지금 맥 상태 어때? 느리거나 뜨거운 데 있어?"
+scenario = "live"
+route = "performance"
+
+[[case]]
+id = "L04"
+question = "지금 문서 질문 돌려도 돼?"
+scenario = "live"
+route = "performance"
+
+[[case]]
+id = "L05"
+question = "메모리 충분해?"
+scenario = "live"
+route = "performance"
+
+[[case]]
+id = "L06"
+question = "저장공간 얼마나 남았어?"
+scenario = "live"
+route = "performance"

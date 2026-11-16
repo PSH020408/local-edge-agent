@@ -1,0 +1,93 @@
+{
+  "SPNVMeDataType" : [
+    {
+      "_items" : [
+        {
+          "_name" : "APPLE SSD AP1024Z",
+          "bsd_name" : "disk0",
+          "detachable_drive" : "no",
+          "device_model" : "APPLE SSD AP1024Z",
+          "device_revision" : "2973.120",
+          "device_serial" : "REMOVED",
+          "partition_map_type" : "guid_partition_map_type",
+          "removable_media" : "no",
+          "size" : "1 TB",
+          "size_in_bytes" : 1000555581440,
+          "smart_status" : "Verified",
+          "spnvme_trim_support" : "Yes",
+          "volumes" : [
+            {
+              "_name" : "iSCPreboot",
+              "bsd_name" : "disk0s1",
+              "iocontent" : "Apple_APFS_ISC",
+              "size" : "524.3 MB",
+              "size_in_bytes" : 524288000
+            },
+            {
+              "_name" : "Macintosh HD",
+              "bsd_name" : "disk0s2",
+              "iocontent" : "Apple_APFS",
+              "size" : "994.66 GB",
+              "size_in_bytes" : 994662584320
+            },
+            {
+              "_name" : "Recovery",
+              "bsd_name" : "disk0s3",
+              "iocontent" : "Apple_APFS_Recovery",
+              "size" : "5.37 GB",
+              "size_in_bytes" : 5368664064
+            }
+          ]
+        }
+      ],
+      "_name" : "Apple SSD Controller"
+    }
+  ],
+  "SPThunderboltDataType" : [
+    {
+      "_name" : "thunderboltusb4_bus_2",
+      "device_name_key" : "MacBook Pro",
+      "domain_uuid_key" : "REMOVED",
+      "receptacle_1_tag" : {
+        "current_speed_key" : "Up to 120 Gb/s",
+        "link_status_key" : "0x100",
+        "receptacle_id_key" : "3",
+        "receptacle_status_key" : "receptacle_no_devices_connected"
+      },
+      "route_string_key" : "0",
+      "switch_uid_key" : "0x05AC1056B1AD12F2",
+      "vendor_name_key" : "Apple Inc."
+    },
+    {
+      "_name" : "thunderboltusb4_bus_1",
+      "device_name_key" : "MacBook Pro",
+      "domain_uuid_key" : "REMOVED",
+      "receptacle_1_tag" : {
+        "current_speed_key" : "Up to 120 Gb/s",
+        "link_status_key" : "0x100",
+        "receptacle_id_key" : "2",
+        "receptacle_status_key" : "receptacle_no_devices_connected"
+      },
+      "route_string_key" : "0",
+      "switch_uid_key" : "0x05AC1056B1AD12F1",
+      "vendor_name_key" : "Apple Inc."
+    },
+    {
+      "_name" : "thunderboltusb4_bus_0",
+      "device_name_key" : "MacBook Pro",
+      "domain_uuid_key" : "REMOVED",
+      "receptacle_1_tag" : {
+        "current_speed_key" : "Up to 120 Gb/s",
+        "link_status_key" : "0x100",
+        "receptacle_id_key" : "1",
+        "receptacle_status_key" : "receptacle_no_devices_connected"
+      },
+      "route_string_key" : "0",
+      "switch_uid_key" : "0x05AC1056B1AD12F0",
+      "vendor_name_key" : "Apple Inc."
+    }
+  ],
+  "SPUSBDataType" : [
+
+  ]
+}

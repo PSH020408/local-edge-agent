@@ -18,6 +18,9 @@ from pathlib import Path
 
 from agent import Agent, LLMError, OllamaClient, TraceLogger, build_default_registry
 from agent.display import format_event, format_tool_call
+from agent.device.agent import DeviceAgent
+from agent.device.shell import LiveShell
+from agent.device.store import Store
 from agent.document_planner import DocumentQuestionPlanner
 from agent.image_planner import ImageQuestionPlanner, PlannerOptions
 from agent.vision_tools import VisionConfig
@@ -137,24 +140,54 @@ def build_session(
         document_planner = DocumentQuestionPlanner(
             planner_llm, registry, workspace, on_tool_call=on_tool_call, on_event=on_event
         )
-    planner = QuestionRouter(document_planner, image_planner) if (image_planner or document_planner) else None
+    device = build_device_agent(cfg, on_event=on_event) if use_planner else None
+    planner = QuestionRouter(document_planner, image_planner, device) if (image_planner or document_planner or device) else None
     return agent, planner, registry, workspace, vision_config, planner_model
 
 
+def build_device_agent(cfg: dict, shell=None, on_event=None, sleep=None):
+    """The Stage 7 device agent: small models only, readings from this Mac (or a recorded shell in tests)."""
+    device_cfg, llm_cfg = cfg.get("device", {}), cfg["llm"]
+    if not device_cfg.get("enabled", False):
+        return None
+
+    def small(model: str, ctx: int, predict: int) -> OllamaClient:
+        # num_predict caps the answer: Run D1 answers ran to 2,600 tokens (45 s) when the model looped.
+        return OllamaClient(model=model, host=llm_cfg["host"], think=False,
+                            options={"temperature": 0.2, "num_ctx": ctx, "num_predict": predict})
+
+    store_path = device_cfg.get("store")
+    store = Store(ROOT / store_path) if store_path and (ROOT / store_path).exists() else None
+    kwargs = {"sleep": sleep} if sleep else {}
+    return DeviceAgent(
+        shell or LiveShell(),
+        writer_llm=small(device_cfg.get("answer_model", "qwen3:4b-instruct"), 4096, 400),
+        router_llm=small(device_cfg.get("router_model", "qwen3:1.7b"), 1024, 30),
+        store=store,
+        capture_seconds=device_cfg.get("capture_seconds", 10),
+        on_event=on_event,
+        **kwargs,
+    )
+
+
 class QuestionRouter:
-    """Questions with a document path go to the document planner, with an image path to the image planner.
+    """Questions with a document path go to the document planner, with an image path to the image planner,
+    questions about this Mac's battery or performance to the device agent.
 
     Anything else returns None and goes to the agent loop.
     """
 
-    def __init__(self, documents: DocumentQuestionPlanner | None, images: ImageQuestionPlanner | None) -> None:
-        self.documents, self.images = documents, images
+    def __init__(self, documents: DocumentQuestionPlanner | None, images: ImageQuestionPlanner | None,
+                 device: DeviceAgent | None = None) -> None:
+        self.documents, self.images, self.device = documents, images, device
         self.options = images.options if images else PlannerOptions()
 
     def run(self, question: str) -> str | None:
         answer = self.documents.run(question) if self.documents else None
         if answer is None and self.images:
             answer = self.images.run(question)
+        if answer is None and self.device:
+            answer = self.device.run(question)
         return answer
 
 
@@ -182,6 +215,8 @@ def describe_setup(model: str, vision_config, planner, planner_model: str, profi
         parts.append(f"Image planner: {planner_model}" + (f" ({', '.join(extras)})" if extras else ""))
     if planner and planner.documents:
         parts.append(f"Documents: {planner_model}")
+    if planner and planner.device:
+        parts.append(f"Device: {planner.device.writer_llm.model}")
     return " | ".join(parts)
 
 

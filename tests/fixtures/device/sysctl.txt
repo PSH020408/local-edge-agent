@@ -1,0 +1,7 @@
+hw.ncpu: 14
+hw.perflevel0.physicalcpu: 10
+hw.perflevel1.physicalcpu: 4
+hw.memsize: 25769803776
+machdep.cpu.brand_string: Apple M4 Pro
+vm.loadavg: { 3.24 2.77 2.73 }
+vm.swapusage: total = 2048.00M  used = 358.50M  free = 1689.50M  (encrypted)

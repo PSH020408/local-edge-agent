@@ -1,0 +1,28 @@
+The system has 25769803776 (1572864 pages with a page size of 16384).
+
+Stats: 
+Pages free: 21160 
+Pages purgeable: 46757 
+Pages purged: 2849251 
+
+Swap I/O:
+Swapins: 1164405 
+Swapouts: 2526537 
+
+Page Q counts:
+Pages active: 655541 
+Pages inactive: 632741 
+Pages speculative: 28366 
+Pages throttled: 0 
+Pages wired down: 155591 
+
+Compressor Stats:
+Pages used by compressor: 24140 
+Pages decompressed: 6551144 
+Pages compressed: 9923034 
+
+File I/O:
+Pageins: 5058022 
+Pageouts: 13643 
+
+System-wide memory free percentage: 88%
