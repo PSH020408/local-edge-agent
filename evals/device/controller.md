@@ -34,3 +34,27 @@ Predictions: settling within 15 s (**18.6 W: 15.2 s, just over; 11.5 W: see belo
   2. The sensor delivers a sample about every 1.25 s and the loop updated every 1.0 s, so about half the
      updates reused the last sample, doubling the effective integral gain. Fix: update only on a new sample.
   On the simulated plant the feedforward brought the step to 12 W into the band in 4.3 s instead of 12.2 s.
+
+## C2 — with feedforward and updates on new samples only (2026-11-17 12:04, adapter)
+
+Idle 0.38 W, training at full speed 28.8 W (10.3 steps/s).
+
+| Phase | Steps/s | Mean chip W | J per step | First in band s | Inside band | Settling s | Below W | Steady error W | Ripple W |
+|---|---|---|---|---|---|---|---|---|---|
+| full speed | 10.25 | 27.80 | 2.71 | - | - | - | - | - | - |
+| held at 18.7 W | 6.77 (66%) | 18.34 | 2.71 | 2.9 | 85% | 12.3 | 3.66 | 0.07 | 1.99 |
+| held at 11.5 W | 4.41 (43%) | 11.28 | 2.56 | 4.7 | 86% | 14.2 | 1.59 | 0.00 | 1.07 |
+
+Predictions: into the band within 5 s (**yes: 2.9 and 4.7 s**), inside the band 90% of the time (**no: 85-86%**),
+steady error within 5% (**yes: 0.07 and 0.00 W**), the same energy per step (**yes, 2.56-2.71 J**), the dip to
+12 W gone (**reduced**: the lowest value of the 18.7 W phase was 15.0 W instead of 12.0 W).
+
+Against C1: the power reaches the target band in 3-5 s instead of about 16 and 9 s, and settles in 12-14 s by
+the strict criterion instead of 15 and 60 s. What is left is ripple of 1-2 W: the work runs in chunks of about
+0.1 s at full power with rests in between, and each 1-second power sample catches a different number of
+chunks. With a ±10% band of ±1.2-1.9 W, that ripple keeps the share inside the band near 85%. Shorter chunks or
+a longer averaging window would lower it, at the cost of overhead or a slower loop; for holding a power budget
+over minutes, a mean within 0.1 W of the target is what matters.
+
+**Stage 7's criterion, "the controller holds its target in a recorded test", is met.**
+

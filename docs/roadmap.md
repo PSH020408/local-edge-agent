@@ -89,7 +89,7 @@ Core (no administrator rights):
 - [x] Storage: free space, health status, read and write throughput; buses and links (Thunderbolt, USB)
 - [x] Thermal pressure level
 - [x] Store (SQLite, 21 days) and background sampler at background priority; battery read once a minute, the rate at which the registry publishes
-- [ ] Sampler cost measured at default and background priority (10 minutes each)
+- [ ] Sampler cost measured at default and background priority (10 minutes each) (*deferred*)
 - [x] Discharge sessions logged (sampler running since 11-16; training data for Stage 9)
 
 Extended:
@@ -105,10 +105,10 @@ Diagnosis and agents:
 - [x] Admission control for heavy jobs
 - [x] Battery-aware energy mode switching with restore; job energy from hardware counters (`evals/device/energy.md`)
 - [x] Energy modes for LLM jobs settled by speed (E1-E3: High Power = Automatic; the gauge cannot resolve one job's energy)
-- [ ] Workload set W: modes across everyday work (tiers 0-5, on the adapter and on battery)
+- [x] Workload set W: 15 scenarios on the adapter (all tiers) and on battery (tiers 0-2); battery tiers 3-5 deferred
 - [x] Speed check before long runs (`scripts/speed_check.py`; test-set runs stop when the Mac is under 60% of its normal speed)
 - [x] Power feedback controller (PI, pacing the work), tested on a simulated plant
-- [ ] Controller held at its targets in a recorded hardware test
+- [x] Controller held at its targets in a recorded hardware test (C2: mean within 0.1 W, in the band after 3-5 s; `evals/device/controller.md`)
 
 Verify: readers tested on recorded outputs; scenario sets for both agents (on battery, charging, heavy load, the GPU state seen on 2026-11-16 replayed from its readings); router accuracy on 30 questions; budgets measured.
 Done when: both agents answer within budget with measured values, every scenario gets the expected diagnosis, and the controller holds its target in a recorded test.

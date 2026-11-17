@@ -24,7 +24,7 @@ A theme from the first stages carries over: a rule only holds reliably when code
 | Agent core: tool calling, time and engineering math tools, traces | Done (Stages 0-2) |
 | Vision: images, text in images, two-reading verification | Done (Stage 3) |
 | Documents: PDF and PowerPoint reading with cited, code-checked answers; equations read from the page image; tables, statements and charts | Done (Stages 4-6); tables set 87%, one holdout pending |
-| Hardware diagnosis: telemetry of battery, chip, memory, storage and thermal state; per-second capture; battery and performance agents; budgets, admission control and thermal/power feedback control from the start | In progress, Stage 7 |
+| Hardware diagnosis: telemetry of battery, chip, memory, storage and thermal state; per-second capture; battery and performance agents; admission control, energy-mode policy, speed check, workload measurements and a power feedback controller | Done, Stage 7 (11-17) |
 | Wireless: Wi-Fi diagnosis, coverage on a floor plan, Bluetooth coverage | Planned, Stage 8 |
 | iPhone client (Shortcuts and Siri; Bluetooth as a stretch goal); battery-time model | Planned, Stage 9 |
 | Portfolio: results, plots, demo | Planned, Stage 10 |
@@ -138,7 +138,11 @@ python scripts/run_eval_set.py --set documents --cases evals/documents/tables.to
 python scripts/profile_calls.py                    # where the time of the model calls went
 python scripts/probe_device.py                     # which hardware readings this Mac allows (Stage 7)
 python scripts/run_device_set.py                   # battery and performance questions: scenarios and live
-taskpolicy -b python scripts/run_sampler.py        # background readings every 10 s on the efficiency cores
+taskpolicy -b python scripts/run_sampler.py        # background readings every 10 s on the efficiency cores (battery once a minute)
+python scripts/speed_check.py                      # is this Mac as fast as normal? (test-set runs check this first)
+python scripts/run_workloads.py --tier 4           # synthetic everyday workloads, on the adapter or on battery
+python scripts/run_controller_test.py              # the power feedback controller holding training at 65% and 40% of its power
+python scripts/measure_job_energy.py --job heavy   # one job in each energy mode on battery
 python scripts/run_formula_set.py                  # formula transcription: page reading against two crops, graded by code
 python scripts/run_vision_set.py --fast          # the vision test set, fast profile (about 7 minutes)
 python scripts/run_vision_set.py --accurate      # the same set, experimental accurate profile (much slower)

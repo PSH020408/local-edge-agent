@@ -9,7 +9,7 @@ Dated entries: what was built, what was decided and why, and progress against th
 | Stage | Planned | Started | Finished | State |
 |---|---|---|---|---|
 | 6 close | 11-16 | 11-15 | | Regression passed (Run 45 and check); holdout pending |
-| 7 Hardware diagnosis, chip-aware from the start | 11-16 to 11-21 | 11-16 | | Readers, store, sampler (logging), diagnosis, agents, router, admission and energy mode switching done; energy meter settled by experiment. To do: run E3, speed check, feedback control, sampler cost, fan reading (stretch) |
+| 7 Hardware diagnosis, chip-aware from the start | 11-16 to 11-21 | 11-16 | 11-17 | Done: readers, store, sampler, diagnosis, agents (Run D6: no wrong answer), energy-mode policy, speed check, workload set W, power controller (C2). Deferred: battery tiers 3-5, sampler cost, SMC sensors |
 | 8 Wireless: Wi-Fi, coverage, Bluetooth | 11-22 to 11-26 | | | |
 | 9 iPhone client and battery-time model | 11-27 to 11-28 | | | |
 | 10 Portfolio | 11-29 to 11-30 | | | |
@@ -226,4 +226,8 @@ Power controller (`agent/device/controller.py`): a PI loop that holds chip power
 ## 2026-11-17 — Stage 7: controller test C1 on the chip
 
 Real MLX training held at 65% and 40% of its full 28.6 W: mean power within 0.2 W of both targets, training speed in proportion (66% and 43% of the steps), and the same energy per step in every phase (2.6-2.7 J), since pacing trades speed for power and does not lower clocks. The trace showed two loop defects: each step started from the old duty, so the 18.6 W phase first fell to 12 W (fixed with feedforward of the duty the target needs, the integral now only corrects the nonlinearity), and the loop updated more often than the sensor delivered samples, doubling the integral gain (fixed: update on new samples only). The 60 s settling time reported for 11.5 W was noise crossing a narrow band, so the report now also gives the first entry into the band and the share of time inside it. Details: `evals/device/controller.md`.
+
+## 2026-11-17 — Stage 7: controller test C2, the criterion met
+
+With feedforward and updates on new samples only, real MLX training reached the target band in 2.9 s (18.7 W) and 4.7 s (11.5 W), against about 16 and 9 s in C1, and held the mean within 0.1 W of both targets. The remaining 1-2 W of ripple comes from pacing in 0.1 s chunks sampled once a second; it keeps the share of time inside a ±10% band at 85%, which matters less than the mean for a power budget held over minutes. Stage 7's last criterion, the controller holding its target in a recorded test, is met. Deferred: battery runs of workload tiers 3-5, the sampler cost experiment, fan and temperature sensors from the SMC.
 
