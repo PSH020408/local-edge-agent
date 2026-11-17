@@ -17,6 +17,7 @@ class Plant:
         self.budget = burst
         self.raw = self.smooth = None
         self._next_sample, self._acc, self._n = 1.0, 0.0, 0
+        self.count = 0
 
     def clock(self):
         return self.t
@@ -35,6 +36,7 @@ class Plant:
                 watts = self._acc / self._n
                 self.raw = watts
                 self.smooth = watts if self.smooth is None else 0.4 * watts + 0.6 * self.smooth
+                self.count += 1
                 self._acc = self._n = 0.0
                 self._next_sample += 1.0
 
@@ -46,9 +48,9 @@ class Plant:
 
 
 class ControllerTests(unittest.TestCase):
-    def run_steps(self, targets, seconds=90):
+    def run_steps(self, targets, seconds=90, feedforward=True):
         plant = Plant()
-        pi = PI.tuned(targets[0], full_watts=45, idle_watts=0.5)
+        pi = PI.tuned(targets[0], full_watts=45, idle_watts=0.5, feedforward=feedforward)
         trace = Trace()
         for k, target in enumerate(targets):
             pi.target = target
@@ -62,6 +64,12 @@ class ControllerTests(unittest.TestCase):
             self.assertIsNotNone(m["settling_s"])
             self.assertLess(m["settling_s"], 30)
             self.assertLess(abs(m["steady_error_w"]), 0.1 * target)
+
+    def test_feedforward_settles_faster(self):
+        # Hardware test 1: without feedforward each step started from the old duty (15 s to settle at 18.6 W).
+        with_ff = step_metrics([r for r in self.run_steps([20.0, 12.0]).rows if r["phase"] == "target 12.0"], 12.0)
+        without = step_metrics([r for r in self.run_steps([20.0, 12.0], feedforward=False).rows if r["phase"] == "target 12.0"], 12.0)
+        self.assertLess(with_ff["first_in_band_s"], without["first_in_band_s"])
 
     def test_no_windup_when_the_target_is_out_of_reach(self):
         # A target above what the job can draw: the duty sits at 1. When the target drops, the loop must react

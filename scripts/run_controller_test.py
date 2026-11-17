@@ -74,16 +74,18 @@ def main() -> None:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     folder = ROOT / "logs" / "controller"
     folder.mkdir(parents=True, exist_ok=True)
-    result = {"idle_w": round(idle_w, 2), "full_w": round(full_w, 2), "kp": pi.kp, "ki": pi.ki, "summary": summary, "trace": trace.rows}
+    result = {"idle_w": round(idle_w, 2), "full_w": round(full_w, 2), "kp": pi.kp, "ki": pi.ki, "feedforward": pi.full_watts is not None,
+              "summary": summary, "trace": trace.rows}
     (folder / f"controller_{stamp}.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     lines = [f"# Power controller test, {stamp}", "", f"Idle {idle_w:.2f} W, training at full speed {full_w:.2f} W; "
              f"Kp {pi.kp:.4f}, Ki {pi.ki:.4f} per W.", "",
-             "| Phase | Steps/s | Mean chip W | J per step | Settling s | Above W | Below W | Steady error W | Ripple W |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "| Phase | Steps/s | Mean chip W | J per step | First in band s | Inside band | Settling s | Above W | Below W | Steady error W | Ripple W |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for name, _, _ in phases:
         m = summary[name]
-        lines.append(f"| {name} | {m['steps_per_s']} | {m['mean_w']} | {m['joules_per_step']} | {m.get('settling_s', '-')} | "
-                     f"{m.get('above_w', '-')} | {m.get('below_w', '-')} | {m.get('steady_error_w', '-')} | {m.get('steady_ripple_w', '-')} |")
+        lines.append(f"| {name} | {m['steps_per_s']} | {m['mean_w']} | {m['joules_per_step']} | {m.get('first_in_band_s', '-')} | "
+                     f"{m.get('inside_band_share', '-')} | {m.get('settling_s', '-')} | {m.get('above_w', '-')} | {m.get('below_w', '-')} | "
+                     f"{m.get('steady_error_w', '-')} | {m.get('steady_ripple_w', '-')} |")
     (folder / f"controller_{stamp}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n" + "\n".join(lines) + f"\n\nReport: logs/controller/controller_{stamp}.md")
 
