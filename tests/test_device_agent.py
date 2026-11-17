@@ -282,3 +282,37 @@ class AgentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TransferTests(unittest.TestCase):
+    QUESTION = "램, ssd, cpu, gpu간 데이터 전송 속도 모두 정상이니?"
+
+    def test_an_unmeasured_quantity_is_said_to_be_unmeasured(self):
+        # 2026-11-17: "transfer speeds are fine" was answered with nothing measuring them.
+        agent = DeviceAgent(FixtureShell(FIXTURES), sleep=NO_SLEEP, capture_seconds=1)
+        report = agent.diagnose(self.QUESTION).report
+        self.assertIn("not_measured", report.codes())
+        self.assertNotIn("transfer_ok", report.codes())
+        fan = agent.diagnose("팬 속도 몇 rpm이야?").report
+        self.assertTrue(any("fan speed" in x.title for x in fan.findings if x.code == "not_measured"))
+
+    def test_transfer_speeds_against_the_normal(self):
+        from agent.device.diagnosis import performance_report
+        from agent.device.capture import capture
+        view = capture(FixtureShell(FIXTURES), seconds=1, with_chip=True, sleep=NO_SLEEP)
+        normal = {"gpu_copy_gbs": 200.0, "cpu_copy_gbs": 80.0, "ssd_write_gbs": 5.0, "ssd_read_gbs": 6.0}
+        good = performance_report(view, bench=dict(normal, normal=normal), question=self.QUESTION)
+        self.assertIn("transfer_ok", good.codes())
+        self.assertNotIn("not_measured", good.codes())
+        self.assertIn("unified memory", good.facts["CPU to GPU"])
+        slow = performance_report(view, bench=dict(normal, ssd_read_gbs=2.0, normal=normal), question=self.QUESTION)
+        self.assertIn("SSD read", next(x for x in slow.findings if x.code == "transfer_slow").title)
+
+    def test_the_benchmark_runs(self):
+        import tempfile
+        from pathlib import Path
+        from agent.device import bench
+        with tempfile.TemporaryDirectory() as folder:
+            first = bench.run(Path(folder) / "b", Path(folder) / "normal.json", on_adapter=True)
+            self.assertGreater(first["cpu_copy_gbs"], 0)
+            self.assertGreater(first["ssd_read_gbs"], 0)

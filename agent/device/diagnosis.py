@@ -296,7 +296,7 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
 
 
 def performance_report(view, storage: dict | None = None, top: list | None = None, job: str | None = None,
-                       loaded: dict | None = None) -> Report:
+                       loaded: dict | None = None, bench: dict | None = None, question: str = "") -> Report:
     """view: a Capture with chip samples; storage: readings from storage.read(); top: [(name, energy impact)]."""
     storage = storage or {}
     report = Report("performance")
@@ -424,11 +424,59 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
             findings.append(Finding("admit_run", "info", "The Mac can take the job now",
                                     {k: f[k] for k in ("memory available now", "memory the job needs", "models of the job already loaded", "thermal pressure") if k in f},
                                     "Start it."))
+    if bench:
+        _transfer(bench, f, findings)
+    # 2026-11-17: asked about transfer speeds, the writer said "no problem with the transfer speeds" although
+    # nothing had measured them. A question about something the agent does not measure gets a finding that
+    # says so, and the writer is not left to fill the gap.
+    for code, pattern, what in NOT_MEASURED:
+        if re.search(pattern, question, re.I) and not (code == "transfer" and bench):
+            findings.append(Finding("not_measured", "info", f"Not measured in this check: {what}", {},
+                                    "Say plainly that this was not measured; do not judge it."))
     if not any(x.severity in ("warning", "problem") for x in findings):
         findings.append(Finding("no_problem", "info", "No performance problem found in the measurements",
                                 {k: f[k] for k in ("CPU use", "GPU use", "memory available", "thermal pressure") if k in f},
                                 "Nothing to change."))
     return report
+
+
+TRANSFER_QUESTION = r"전송\s*속도|대역폭|읽기\s*속도|쓰기\s*속도|bandwidth|throughput|transfer"
+NOT_MEASURED = [
+    ("transfer", TRANSFER_QUESTION, "data transfer speeds (memory, SSD)"),
+    ("fan", r"팬\s*속도|팬\s*rpm|rpm|fan speed", "fan speed (macOS has no public reading of it)"),
+    ("temperature", r"(cpu|gpu|칩|프로세서)\s*온도|(cpu|gpu|chip) temperature", "the chip's temperature (only the battery's is readable; thermal pressure is reported instead)"),
+]
+TRANSFER_SLOW = 0.7          # share of the normal below which a transfer speed counts as slow
+
+
+def _transfer(bench: dict, f: dict, findings: list) -> None:
+    normal = bench.get("normal") or {}
+    names = {"gpu_copy_gbs": "memory bandwidth (GPU copy)", "cpu_copy_gbs": "memory bandwidth (one CPU core)",
+             "ssd_write_gbs": "SSD write", "ssd_read_gbs": "SSD read"}
+    slow = []
+    for key, name in names.items():
+        value = bench.get(key)
+        if value is None:
+            continue
+        text = f"{value:g} GB/s"
+        if normal.get(key):
+            text += f" (normal on this Mac {normal[key]:g} GB/s)"
+            if value < TRANSFER_SLOW * normal[key]:
+                slow.append(name)
+        if key == "gpu_copy_gbs":
+            text += "; Apple's figure for the chip is 273 GB/s"
+        f[name] = text
+    f["CPU to GPU"] = "one shared memory (unified memory): no copy between them, so the memory bandwidth is the transfer speed"
+    evidence = {k: f[k] for k in names.values() if k in f}
+    if slow:
+        findings.append(Finding("transfer_slow", "warning", "Transfer speed below this Mac's normal: " + ", ".join(slow), evidence,
+                                "Measure again with other apps closed; if it stays low, restart the Mac."))
+    elif any(normal.values()):
+        note = " (the normal was recorded now)" if bench.get("normal_set_now") else ""
+        findings.append(Finding("transfer_ok", "info", "Transfer speeds are normal" + note, evidence, "Nothing to change."))
+    else:
+        findings.append(Finding("transfer_measured", "info", "Transfer speeds measured (no normal recorded yet)", evidence,
+                                "Run the check once on the adapter to record the normal."))
 
 
 def job_from_question(question: str) -> str | None:

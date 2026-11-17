@@ -166,6 +166,7 @@ def build_device_agent(cfg: dict, shell=None, on_event=None, sleep=None):
         store=store,
         capture_seconds=device_cfg.get("capture_seconds", 10),
         on_event=on_event,
+        bench_folder=ROOT / "logs",
         **kwargs,
     )
 

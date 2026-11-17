@@ -95,7 +95,7 @@ Core (no administrator rights):
 Extended:
 - [x] Per-second capture of CPU, GPU and Neural Engine frequency, residency and power (`powermetrics`, allowed without a password for that one command)
 - [ ] Fan speed and temperature sensors from the system management controller (*stretch*: no public interface; keys differ by model)
-- [ ] Short benchmarks for memory bandwidth and SSD throughput, compared with the measured normal
+- [x] Short benchmarks for memory bandwidth and SSD throughput, compared with the measured normal (run when a question asks about transfer speeds)
 
 Diagnosis and agents:
 - [x] Capture of n seconds → features (mean, maximum, trend) → rules: GPU held at low clocks, runaway process, memory thrashing, battery ageing or heat, charger too weak or not supplying, charge held by macOS, storage full or failing
@@ -140,6 +140,7 @@ Done when: a Mac diagnosis can be asked and read on the iPhone.
 - README with the architecture, results tables and plots (coverage maps, controller response, budgets before and after)
 - Demo recording: a spoken question on the iPhone → diagnosis on the Mac → answer on the phone
 - Final scenario runs for every agent
+- Answer examples per agent exported from the run reports (`logs/` stays private: live cases name the processes running on this Mac), and screenshots of the terminal and the iPhone
 
 ## Later
 

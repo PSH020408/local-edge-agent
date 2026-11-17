@@ -10,12 +10,14 @@ Every stage is timed, so the budgets (quick answer under 3 s, diagnosis n + 5 s)
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import answer as writer
 from .capture import Capture, capture
-from .diagnosis import Report, battery_report, job_from_question, performance_report
+from .diagnosis import TRANSFER_QUESTION, Report, battery_report, job_from_question, performance_report
 from .readings import by_name
 from .router import Route, route
 from .sources import battery, load, models, storage
@@ -37,8 +39,9 @@ class DeviceResult:
 
 class DeviceAgent:
     def __init__(self, shell, writer_llm=None, router_llm=None, store=None, capture_seconds: int = 10,
-                 battery_seconds: int = 2, sleep=time.sleep, on_event=None) -> None:
+                 battery_seconds: int = 2, sleep=time.sleep, on_event=None, bench_folder=None) -> None:
         self.shell, self.writer_llm, self.router_llm, self.store = shell, writer_llm, router_llm, store
+        self.bench_folder = bench_folder  # where the transfer-speed check writes its test file and keeps the normal
         self.capture_seconds, self.battery_seconds, self.sleep = capture_seconds, battery_seconds, sleep
         self.on_event = on_event or (lambda message: None)
 
@@ -66,7 +69,13 @@ class DeviceAgent:
             view = capture(self.shell, seconds=self.capture_seconds, with_chip=True, sleep=self.sleep)
             disk = {r.name: r.value for r in storage.read(self.shell) if r.ok}
             _, held = models.read(self.shell)
-            result.report = performance_report(view, disk, self._top(), job_from_question(question), held)
+            measured = None
+            if self.bench_folder is not None and re.search(TRANSFER_QUESTION, question, re.I):
+                self.on_event("device: measuring transfer speeds (about 5 s)")
+                from . import bench
+                on_adapter = view.value("power.source") != "Battery"
+                measured = bench.run(Path(self.bench_folder) / "bench", Path(self.bench_folder) / "bench_normal.json", on_adapter)
+            result.report = performance_report(view, disk, self._top(), job_from_question(question), held, measured, question)
             extra = disk
         result.timings["measure"] = round(time.perf_counter() - measure_started, 3)
         result.readings = self._snapshot(view, extra)

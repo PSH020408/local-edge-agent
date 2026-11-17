@@ -28,7 +28,7 @@ TOPICS = {
         r"(?<![a-z])cpu(?![a-z])", r"(?<![a-z])gpu(?![a-z])", r"칩", r"주파수", r"(?<!고)(?<!저)성능", r"돌려도", r"돌릴", r"실행해도", r"저장\s*공간",
         r"디스크", r"(?<![a-z])ssd(?![a-z])", r"(?<!배터리 )용량이?\s*(부족|없|남)", r"프로세스", r"과열",
         r"(?<![a-z])slow(?![a-z])", r"(?<![a-z])hot(?![a-z])", r"(?<![a-z])fans?(?![a-z])", r"(?<![a-z])memory(?![a-z])", r"(?<![a-z])ram(?![a-z])", r"(?<![a-z])swap", r"(?<![a-z])disk(?![a-z])", r"storage",
-        r"can i run", r"throttl", r"overheat",
+        r"can i run", r"throttl", r"overheat", r"전송\s*속도", r"대역폭", r"(?<![a-z])bandwidth", r"throughput",
     ],
 }
 # A keyword alone is not enough when the question asks about a subject in general ("explain how
