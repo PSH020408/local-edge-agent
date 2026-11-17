@@ -505,10 +505,10 @@ def s_game(ctx: Ctx):
     import numpy as np
     world = np.ones(int(6 * ctx.scale * 1024**3) // 8)  # 6 GB of textures and level data held in memory
     stride = max(1, len(world) // 600)
-    frames = ctx.n(120 * 60)
+    frames = 120 * 60  # ticks() scales the count for the quick check (scaling here too made it 1.2 s, 2026-11-17)
     scene = walk(frames, 0.45, 1.0, ctx.rng, step=0.02)
     products = ctx.products_per(0.010)  # the heaviest scene: 10 ms of GPU work in a 16.7 ms frame
-    cpu_frames = [[round(0.4 * s, 3) for s in scene] for _ in range(3)]
+    cpu_frames = [[round(0.4 * s, 3) for s in scene[:ctx.n(frames)]] for _ in range(3)]
     background = ctx.pool().map_async(_game_worker, [(ctx.calibration, f) for f in cpu_frames])
     def frame(i):
         ctx.gpu(products * scene[i])
@@ -566,17 +566,26 @@ def s_training(ctx: Ctx):
 
 
 def s_stress(ctx: Ctx):
-    """Every core and the GPU at once, for a fixed amount of work (about 3 minutes at full speed)."""
+    """Every core and the GPU at once: 60 s of work for each at full speed.
+
+    First full run (2026-11-17, adapter): 180 s of work each took 658 s; thermal pressure reached heavy and the
+    chip held about 32 W, with the GPU at half its clock. The work is now a third, and the CPU and GPU parts
+    are timed separately, so the slowdown of each can be told apart."""
     cores = os.cpu_count() or 8
     workers = cores - 2  # two cores left to feed the GPU (quick check: with all 14 busy the GPU was 29% busy)
     pieces = workers * 8
+    times = {}
 
     def both():
         with mp.get_context("spawn").Pool(workers, initializer=_init_worker, initargs=(ctx.calibration,)) as pool:
-            cpu = pool.map_async(_cpu_job, [ctx.units_for(180) * workers / pieces] * pieces, chunksize=1)
-            ctx.gpu(ctx.products_for(180))
+            started = time.perf_counter()
+            cpu = pool.map_async(_cpu_job, [ctx.units_for(60) * workers / pieces] * pieces, chunksize=1)
+            ctx.gpu(ctx.products_for(60))
+            times["gpu"] = time.perf_counter() - started
             cpu.get()
+            times["cpu"] = time.perf_counter() - started
     ctx.batch("CPU and GPU together", both)
+    ctx.phases.append({"phase": "parts", "kind": "info", "gpu_done_s": round(times["gpu"], 1), "cpu_done_s": round(times["cpu"], 1)})
 
 
 @dataclass

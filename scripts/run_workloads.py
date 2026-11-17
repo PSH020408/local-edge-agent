@@ -96,7 +96,9 @@ class Monitor:
         for key in cores:
             out[key.replace("chip.", "").replace("_cluster_active", "_busy")] = mean(key)
         # Whole system: only publications inside the run, after a 10 s settling time.
-        inside = [(t, s) for t, s in self.publications if 10 <= t <= self.t1]
+        # Publications inside the run (first full run: a 10 s settling margin left runs under 2 minutes with
+        # fewer than two, and no system power; the counter is exact between any two publications anyway).
+        inside = [(t, s) for t, s in self.publications if 0 <= t <= self.t1]
         out["publications"] = len(inside)
         if on_battery:
             powers = [-(s.get("battery.voltage") or 0) * (s.get("battery.current") or 0) for _, s in inside
@@ -110,6 +112,11 @@ class Monitor:
             (_, a), (_, b) = inside[0], inside[-1]
             out["system_w"] = pp._mean_watts(a, b, 0, "system counter")
             out["system_w"] = round(out["system_w"], 1) if out["system_w"] is not None else None
+        # A time series every 5 s for the heat and power curves (the feedback controller is designed from them).
+        out["series"] = [{"t": i, "chip_w": s.get("chip.combined_power"), "gpu_busy": s.get("chip.gpu_active"),
+                          "gpu_mhz": s.get("chip.gpu_frequency"), "p0_mhz": s.get("chip.p0_cluster_frequency"),
+                          "thermal": s.get("chip.thermal_pressure_level")}
+                         for i, s in enumerate(self.samples) if i % 5 == 0]
         return out
 
 

@@ -59,7 +59,7 @@ class SummaryTests(unittest.TestCase):
         samples = [{"chip.combined_power": 30.0, "chip.gpu_active": 90.0, "chip.thermal_pressure_level": 0},
                    {"chip.combined_power": 50.0, "chip.gpu_active": 90.0, "chip.thermal_pressure_level": 1}]
         out = self.monitor(pubs, samples).summary(on_battery=False)
-        self.assertEqual(out["system_w"], 70.0)  # (5200 - 1000) J over 60 samples; the first publication is too early
+        self.assertEqual(out["system_w"], 65.0)  # 5200 J over 80 samples, from the first publication inside the run
         self.assertEqual((out["chip_w"], out["chip_peak_w"], out["thermal_max"]), (40.0, 50.0, 1))
 
     def test_system_power_on_battery_two_ways(self):

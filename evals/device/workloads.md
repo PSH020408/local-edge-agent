@@ -88,3 +88,50 @@ render_3d (24 W, 81%), llm (27 W, 89%) and training (21 W, 69%). Three defects, 
 | stress: 64 s for 18 s of work per core, GPU 29% busy | equal shares on all 14 cores waited for the 4 slower efficiency cores; the thread feeding the GPU had no core left | work cut into small pieces handed out as cores free up; 12 CPU workers, 2 cores left for the GPU; GPU products queued 8 at a time |
 | no system power | runs under a minute see fewer than two registry publications | none needed: full runs last 3-4 minutes |
 
+## W-adapter — all tiers on the adapter, High Power (2026-11-17 09:24-10:20)
+
+Commit `11fa6d5`. Calibration (once, at full speed): a 2048 x 2048 GPU product 2.81 ms (about 6 TFLOP/s),
+4K export 54 frames/s, one training step 97 ms, one C file 0.13 s. The music was a 440 Hz tone, not music.
+
+| Scenario | Time s | Chip W mean (peak) | GPU busy % | System W | Deadlines missed | Prediction (chip W mean) |
+|---|---|---|---|---|---|---|
+| idle | 120 | 0.29 (4.5) | 4 | 8.4 | - | ~0.2 ✅ |
+| document | 181 | 0.24 (9.4) | 2 | 7.2 | 0 of 180 | ~0.3 ✅ |
+| music | 180 | 0.09 (2.1) | 2 | 7.4 | - | ~0.3 ✅ |
+| web | 181 | 1.19 (18.6) | 5 | 8.2 | 0 of 180 | ~1.5 ✅ |
+| video_4k_play | 232 | 0.08 (0.7) | 2 | 7.3 | - | 1-2 (lower) |
+| video_call | 181 | 3.99 (5.4) | 2 | 13.2 | 0 of 180 | 2-3 (higher) |
+| photo | 104 | 7.43 (43.0) | 18 | 15.2 | 0 of 180 | ~8 ✅ |
+| compile | 65 | 8.79 (34.8) | 2 | - | - | ~15 (lower) |
+| file_copy | 17 | 0.20 (2.0) | 2 | - | - | ~3 (lower) |
+| video_edit | 141 | 4.23 (17.3) | 14 | 22.3 | 1 of 600 | ~10 (lower) |
+| game | 176 | 5.02 (25.8) | 36 | 25.8 | 1 of 8,400 | ~15 (lower) |
+| render_3d | 97 | 25.2 (35.7) | 91 | - | - | 25-35 ✅ |
+| llm | 93 | 19.8 (33.3) | 68 | - | - | ~15 ✅ |
+| training | 95 | 24.3 (37.4) | 90 | - | - | ~25 ✅ |
+| stress | **658** | 32.5 (68.7) | 27 | 59.8 | - | 60-70 (**heat limit**) |
+
+What the reference shows:
+1. **Light work costs almost nothing above the screen.** Documents, music, web and 4K playback drew 7-8 W for
+   the whole Mac, the same as idle within the noise; the chip drew under 1.2 W on average. 4K decoding on the
+   media engine added nothing measurable (0.08 W at the chip). A video call was the one light task above idle
+   (13 W: the encoder plus 2 busy cores). For light work, battery life is set by the screen and the base load,
+   not by the energy mode.
+2. **Everyday heavy work comes in bursts.** Photo editing peaked at 43 W but averaged 7 W; building peaked at
+   35 W and averaged 9 W. The mean is what drains the battery; the peak is what the user waits for.
+3. **Sustained GPU work sits at 20-25 W of chip power** (render 25 W, training 24 W, LLM 20 W, GPU 68-91% busy)
+   with thermal pressure still nominal after about 95 s. Training slowed slightly from epoch to epoch (25.4,
+   26.8, 27.4 s per epoch: +8% in 80 s), the first sign of heat.
+4. **Everything at once hits the heat limit.** The stress scenario's work, 180 s at full speed for every core
+   and the GPU, took 658 s: thermal pressure reached heavy, the chip held about 32 W on average (peak 69 W) and
+   the GPU ran at half its clock (672 MHz against 1,348 MHz in the render). On this 14-inch machine, sustained
+   combined load is capped by heat at roughly a third of its burst speed.
+5. Predictions: right for the light tiers and for sustained GPU work; too high for compile, file copy, video
+   edit and game, whose heavy phases are shorter than planned (the full build took 16 s, not 40 s: one file
+   compiles faster in a parallel build than alone, which the calibration measured).
+
+Changes before the battery runs: the stress work is a third (60 s at full speed for each part) and times its
+CPU and GPU parts separately; every run stores a 5-second time series of chip power, GPU clock and thermal
+pressure (the curves the feedback controller will be designed from); system power uses every publication
+inside the run (runs under 2 minutes had none). Stress is run again on the adapter with the new size.
+
