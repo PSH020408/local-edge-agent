@@ -348,3 +348,28 @@ class MemoryByAppTests(unittest.TestCase):
             self.assertTrue(any(word in x.title for x in result.report.findings if x.code == "not_measured"), question)
         battery = agent.diagnose("배터리 온도 괜찮아?")
         self.assertEqual(battery.route.topic, "battery")
+
+
+class WorkTests(unittest.TestCase):
+    """"Can I edit 4K video / play a demanding game now?", judged from the measured loads and the present state."""
+
+    def agent(self, scenario):
+        return DeviceAgent(FixtureShell(FIXTURES, overrides=SCENARIOS[scenario]), sleep=NO_SLEEP, capture_seconds=1, battery_seconds=1)
+
+    def test_a_held_gpu_rules_out_a_game(self):
+        report = self.agent("gpu_held_low").diagnose("지금 고사양 게임 가능한가?").report
+        self.assertIn("work_not_now", report.codes())
+
+    def test_time_on_battery_for_the_work(self):
+        result = self.agent("on_battery_light").diagnose("배터리로 게임 얼마나 할 수 있어?")
+        self.assertEqual((result.route.topic, result.route.method), ("performance", "rules-work"))
+        finding = next(x for x in result.report.findings if x.code == "work_yes")
+        self.assertIn("h on battery at the 26 W", finding.evidence["reason"])
+
+    def test_overview_and_model_jobs(self):
+        overview = self.agent("recorded").diagnose("지금 어떤 작업 가능해?").report
+        self.assertIn("4K video editing", overview.facts["can take now"])
+        training = self.agent("recorded").diagnose("지금 딥러닝 학습 돌려도 돼?").report
+        self.assertIn("work_yes", training.codes())  # a kind of work, not the agent's own light model job
+        image = self.agent("recorded").diagnose("지금 이미지 분석 돌려도 돼?").report
+        self.assertIn("admit_run", image.codes())

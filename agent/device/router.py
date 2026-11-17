@@ -31,6 +31,11 @@ TOPICS = {
         r"can i run", r"throttl", r"overheat", r"전송\s*속도", r"대역폭", r"(?<![a-z])bandwidth", r"throughput",
         r"화면\s*밝기", r"조도", r"키보드\s*(백라이트|조명|밝기)", r"brightness", r"ambient light",
         r"(cpu|gpu|칩|코어)\s*(의\s*)?(온도|몇\s*도)", r"(cpu|gpu|chip) temperature", r"rpm", r"앱별", r"어떤\s*앱", r"which app",
+        r"(?<![a-z])usb", r"썬더볼트", r"thunderbolt", r"포트", r"(?<![a-z])ports?(?![a-z])", r"버스", r"연결된\s*(장치|기기)", r"외장",
+        r"connected devices?", r"peripheral",
+        r"어떤\s*작업", r"무슨\s*작업", r"뭘\s*할\s*수", r"what can i (do|run)", r"영상\s*편집", r"동영상\s*편집", r"게임", r"(?<![a-z])gam(e|es|ing)(?![a-z])",
+        r"3d", r"렌더링", r"블렌더", r"blender", r"(?<![a-z])render", r"딥러닝", r"학습", r"(?<![a-z])training", r"train a", r"deep.?learning", r"컴파일", r"빌드", r"compil",
+        r"사진\s*편집", r"라이트룸", r"lightroom", r"photo edit", r"video edit", r"edit(ing)? (4k )?video", r"화상\s*(통화|회의)", r"video call",
     ],
 }
 # A keyword alone is not enough when the question asks about a subject in general ("explain how
@@ -77,6 +82,11 @@ def route(question: str, llm=None) -> Route:
         return Route(None, "rules-general", matches, time.perf_counter() - started)
     if len(hit) == 1:
         return Route(hit[0], "rules", matches, time.perf_counter() - started)
+    # "How long can I game on battery?": a kind of work named with battery words is a question for the
+    # performance agent, which gives the time on battery for that work.
+    from .diagnosis import work_from_question
+    if "performance" in hit and work_from_question(question) not in (None, "overview"):
+        return Route("performance", "rules-work", matches, time.perf_counter() - started)
     if llm is not None:
         try:
             reply = llm.chat([{"role": "user", "content": ROUTE_PROMPT.format(question=question)}], format=ROUTE_SCHEMA)

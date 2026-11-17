@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import answer as writer
 from .capture import Capture, capture
-from .diagnosis import TRANSFER_QUESTION, Report, battery_report, job_from_question, performance_report
+from .diagnosis import BUS_QUESTION, TRANSFER_QUESTION, Report, battery_report, job_from_question, performance_report, work_from_question
 from .readings import by_name
 from .router import Route, route
 from .sources import battery, load, memory, models, storage
@@ -78,7 +78,10 @@ class DeviceAgent:
             processes = self.shell.run("ps_cpu")
             total = view.value("memory.total")
             apps = memory.parse_apps(processes.text, total) if processes.ok and total else []
-            result.report = performance_report(view, disk, self._top(), job_from_question(question), held, measured, question, apps)
+            ports = storage.parse_ports(self.shell.run("buses").text) if re.search(BUS_QUESTION, question, re.I) else None
+            work = work_from_question(question)  # "can I edit 4K video now?" before "can I run a model job?"
+            job = None if work else job_from_question(question)
+            result.report = performance_report(view, disk, self._top(), job, held, measured, question, apps, ports, work)
             extra = disk
         result.timings["measure"] = round(time.perf_counter() - measure_started, 3)
         result.readings = self._snapshot(view, extra)

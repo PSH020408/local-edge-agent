@@ -78,3 +78,42 @@ def read_activity(shell) -> list[Reading]:
 def read_buses(shell) -> list[Reading]:
     output = shell.run("buses")
     return parse_buses(output.text if output.ok else "")
+
+
+def _names(node, depth: int = 0) -> list[str]:
+    """Names of the devices in a system_profiler tree (hubs and the devices behind them)."""
+    out = []
+    for item in node.get("_items", []) if isinstance(node, dict) else node:
+        if isinstance(item, dict):
+            if item.get("_name"):
+                out.append(("  " * depth) + item["_name"])
+            out += _names(item, depth + 1)
+    return out
+
+
+def parse_ports(text: str) -> dict:
+    """Ports, what is connected to them and the internal SSD, for questions about buses (added 2026-11-17).
+
+    {"ports": [(port id, speed, connected?, [device names])], "usb": [names], "ssd": {...}}. On this Mac the
+    three USB-C ports are Thunderbolt 5 / USB4 buses, "up to 120 Gb/s" each."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return {}
+    ports = []
+    for bus in data.get("SPThunderboltDataType", []):
+        tag = bus.get("receptacle_1_tag") or {}
+        status = tag.get("receptacle_status_key", "")
+        devices = [i.get("_name") for i in bus.get("_items", []) if isinstance(i, dict) and i.get("_name")]
+        ports.append((tag.get("receptacle_id_key") or bus.get("_name"), tag.get("current_speed_key"),
+                      bool(devices) or (status != "" and "no_devices" not in status), devices))
+    ports.sort(key=lambda p: str(p[0]))
+    usb = _names(data.get("SPUSBDataType", []))
+    nvme = [item for controller in data.get("SPNVMeDataType", []) for item in controller.get("_items", [])]
+    ssd = {}
+    if nvme:
+        disk = nvme[0]
+        ssd = {"model": disk.get("device_model") or disk.get("_name"), "size": disk.get("size"),
+               "health": disk.get("smart_status"), "trim": disk.get("spnvme_trim_support")}
+    return {"ports": ports, "usb": usb, "ssd": ssd}
+

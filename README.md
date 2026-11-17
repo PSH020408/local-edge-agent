@@ -128,6 +128,10 @@ notes/lecture4.pdf 이 강의로 시험 문제 3개를 만들어 줘
 papers/paper.pdf Write equation (3) in LaTeX and explain each symbol.
 ```
 
+## Asking about this Mac
+
+The questions the device agent answers, by component (battery, charger, energy mode, CPU, GPU, heat, memory, storage, ports, transfer speeds, running a job), with what each answer is based on: [docs/device_questions.md](docs/device_questions.md).
+
 ## Tests
 
 ```bash

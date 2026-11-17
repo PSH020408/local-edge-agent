@@ -45,6 +45,34 @@ JOBS = {  # job: (description, memory needed with its models loaded from scratch
 }
 WORKING_MEMORY = 1.0        # GB a job needs beyond its model's weights (context, buffers)
 
+# Everyday work, from the workload set W on this Mac (evals/device/workloads.md, 2026-11-17): memory the work
+# holds, the whole Mac's mean power and the chip's peak power while it ran, and whether it leans on the GPU.
+# Asked "can I edit 4K video now?", the agent answers from these and the present state (added 2026-11-17).
+WORK = {  # key: (description, memory GB, mean system W, peak chip W, GPU-heavy)
+    "light": ("documents, web and music", 1.0, 8.0, 18.0, False),
+    "video_play": ("watching 4K video", 1.0, 7.5, 1.0, False),
+    "video_call": ("a video call", 1.5, 13.0, 5.5, False),
+    "photo": ("photo editing", 4.0, 15.0, 43.0, True),
+    "compile": ("coding and building", 4.0, 17.0, 35.0, False),
+    "video_edit": ("4K video editing and export", 8.0, 22.0, 17.0, True),
+    "game": ("a demanding game", 6.0, 26.0, 26.0, True),
+    "render_3d": ("3D rendering", 4.0, 33.0, 36.0, True),
+    "training": ("training a deep-learning model", 8.0, 32.0, 37.0, True),
+}
+WORK_WORDS = [
+    ("video_edit", r"영상\s*편집|동영상\s*편집|4k\s*(영상\s*)?(편집|내보내기|렌더|export)|video edit|edit(ing)? (4k )?video|premiere|final cut|파이널\s*컷|프리미어"),
+    ("game", r"게임|(?<![a-z])gam(e|es|ing)(?![a-z])"),
+    ("render_3d", r"3d|렌더링|블렌더|blender|(?<![a-z])render"),
+    ("training", r"학습|딥러닝|트레이닝|training|train a|fine.?tun"),
+    ("compile", r"컴파일|빌드|코딩|개발\s*작업|compil|build|coding|xcode"),
+    ("photo", r"사진\s*편집|라이트룸|포토샵|photo edit|lightroom|photoshop"),
+    ("video_call", r"화상\s*(통화|회의)|줌|zoom|facetime|페이스타임|video call|meeting"),
+    ("video_play", r"영상\s*(시청|보기|재생)|유튜브|넷플릭스|youtube|netflix|watch(ing)? (a )?(4k )?(video|movie)|streaming"),
+    ("light", r"문서\s*작업|웹\s*서핑|인터넷|음악|documents?\b(?! question)|browsing|web|music"),
+]
+OVERVIEW_QUESTION = r"어떤\s*작업|무슨\s*작업|뭘\s*할\s*수|뭐\s*할\s*수|what can i (do|run)|which (work|tasks)|what work"
+WORK_QUESTION = r"가능|할\s*수\s*있|돌아가|괜찮|돼\?|될까|되나|해도|can i|could i|is it ok|possible|able to"
+
 
 @dataclass
 class Finding:
@@ -297,7 +325,7 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
 
 def performance_report(view, storage: dict | None = None, top: list | None = None, job: str | None = None,
                        loaded: dict | None = None, bench: dict | None = None, question: str = "",
-                       apps: list | None = None) -> Report:
+                       apps: list | None = None, ports: dict | None = None, work: str | None = None) -> Report:
     """view: a Capture with chip samples; storage: readings from storage.read(); top: [(name, energy impact)]."""
     storage = storage or {}
     report = Report("performance")
@@ -425,6 +453,40 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
             findings.append(Finding("admit_run", "info", "The Mac can take the job now",
                                     {k: f[k] for k in ("memory available now", "memory the job needs", "models of the job already loaded", "thermal pressure") if k in f},
                                     "Start it."))
+    if work:
+        available_gb = available / 100 * total_memory / GB if available is not None and total_memory else None
+        on_battery = view.value("power.source") == "Battery"
+        present, volts = _num(view, "battery.present_capacity"), _num(view, "battery.voltage")
+        energy_wh = present * volts / 1000 if present and volts else None
+        if available_gb is not None:
+            f["memory available now"] = f"{available_gb:.1f} GB"
+        if on_battery and energy_wh:
+            f["energy left in the battery"] = f"{energy_wh:.1f} Wh"
+        keys = list(WORK) if work == "overview" else [work]
+        verdicts = {k: _work_verdict(k, f, findings, available_gb, energy_wh, on_battery) for k in keys}
+        if work == "overview":
+            def label(k, why):
+                hours = re.search(r"about ([\d.]+ h) on battery", why)
+                return WORK[k][0] + (f" (about {hours.group(1)})" if hours else "")
+            groups = {"yes": [], "with care": [], "not now": []}
+            for k, (verdict, why) in verdicts.items():
+                groups[verdict].append(label(k, why) if verdict == "yes" else f"{WORK[k][0]} ({why})")
+            for verdict, key in (("yes", "can take now"), ("with care", "possible with care"), ("not now", "not now")):
+                if groups[verdict]:
+                    f[key] = ", ".join(groups[verdict])
+            findings.append(Finding("work_overview", "info", "What this Mac can take now",
+                                    {k: f[k] for k in ("can take now", "possible with care", "not now") if k in f},
+                                    "Measured loads come from synthetic workloads on this Mac; real applications vary."))
+        else:
+            name, memory_gb, watts, peak, _ = WORK[work]
+            f["work asked about"] = name
+            f["what this work drew in the measurements"] = f"about {watts:g} W for the whole Mac on average, up to {peak:g} W at the chip, about {memory_gb:g} GB of memory"
+            verdict, why = verdicts[work]
+            code, severity, title = {"yes": ("work_yes", "info", f"Yes: {name} fits now"),
+                                     "with care": ("work_care", "warning", f"Possible with care: {name}"),
+                                     "not now": ("work_not_now", "warning", f"Not now: {name}")}[verdict]
+            findings.append(Finding(code, severity, title, {"reason": why, **{k: f[k] for k in ("memory available now", "energy left in the battery") if k in f}},
+                                    "Measured loads come from synthetic workloads on this Mac; a heavier project or game draws more."))
     if bench:
         _transfer(bench, f, findings)
     # Memory by app, when the question is about memory or apps, or memory is short (added 2026-11-17).
@@ -437,6 +499,20 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
         short = next((x for x in findings if x.code == "memory_short"), None)
         if short is not None:
             short.evidence["largest app"] = f"{apps[0][0]} {apps[0][1] / GB:.1f} GB"
+    if ports:
+        listing = []
+        for port, speed, connected, devices in ports.get("ports", []):
+            what = ", ".join(devices) if devices else ("a device" if connected else "nothing connected")
+            listing.append(f"port {port}: {what}" + (f" ({speed})" if speed else ""))
+        if listing:
+            f["USB-C ports (Thunderbolt / USB4)"] = "; ".join(listing)
+        f["USB devices"] = ", ".join(n.strip() for n in ports.get("usb", [])) or "none"
+        ssd = ports.get("ssd") or {}
+        if ssd:
+            f["internal SSD"] = f"{ssd.get('model')}, {ssd.get('size')}, health {ssd.get('health')}, TRIM {ssd.get('trim')}"
+        findings.append(Finding("buses", "info", "Ports and connected devices",
+                                {k: f[k] for k in ("USB-C ports (Thunderbolt / USB4)", "USB devices", "internal SSD") if k in f},
+                                "Nothing to change."))
     # 2026-11-17: asked about transfer speeds, the writer said "no problem with the transfer speeds" although
     # nothing had measured them. A question about something the agent does not measure gets a finding that
     # says so, and the writer is not left to fill the gap.
@@ -453,6 +529,7 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
 
 
 MEMORY_QUESTION = r"메모리|램|(?<![a-z])ram(?![a-z])|memory|어떤\s*앱|무슨\s*앱|앱별|프로그램별|which app"
+BUS_QUESTION = r"usb|썬더볼트|thunderbolt|포트|(?<![a-z])ports?(?![a-z])|버스|(?<![a-z])bus(es)?(?![a-z])|연결된\s*(장치|기기)|외장|connected devices?|peripheral"
 TRANSFER_QUESTION = r"전송\s*속도|대역폭|읽기\s*속도|쓰기\s*속도|bandwidth|throughput|transfer"
 NOT_MEASURED = [
     ("transfer", TRANSFER_QUESTION, "data transfer speeds (memory, SSD)"),
@@ -494,6 +571,36 @@ def _transfer(bench: dict, f: dict, findings: list) -> None:
     else:
         findings.append(Finding("transfer_measured", "info", "Transfer speeds measured (no normal recorded yet)", evidence,
                                 "Run the check once on the adapter to record the normal."))
+
+
+def work_from_question(question: str) -> str | None:
+    """"overview" for "what can I do now?", a WORK key for "can I edit 4K video now?", else None."""
+    q = question.lower()
+    if re.search(OVERVIEW_QUESTION, q):
+        return "overview"
+    if not re.search(WORK_QUESTION, q):
+        return None
+    for key, pattern in WORK_WORDS:
+        if re.search(pattern, q):
+            return key
+    return None
+
+
+def _work_verdict(key: str, f: dict, findings: list, available_gb, energy_wh, on_battery: bool) -> tuple[str, str]:
+    """(verdict, reason) for one kind of work: "yes", "with care" or "not now"."""
+    _, memory_gb, watts, _, gpu = WORK[key]
+    problems = [x for x in findings if x.severity == "problem"]
+    gpu_problem = any(x.code in ("gpu_held_low", "thermal_heavy") for x in problems)
+    if problems and (gpu or not gpu_problem) and (memory_gb >= 4 or gpu):
+        return "not now", problems[0].title
+    if available_gb is not None and available_gb < memory_gb:
+        return "with care", f"needs about {memory_gb:g} GB of memory, {available_gb:.1f} GB available: close large apps first"
+    if on_battery and energy_wh:
+        hours = energy_wh / watts
+        if hours < 0.75:
+            return "not now", f"about {hours * 60:.0f} min on battery at {watts:g} W: connect the adapter"
+        return "yes", f"about {hours:.1f} h on battery at the {watts:g} W this work drew in the measurements"
+    return "yes", f"needs about {memory_gb:g} GB of memory; {available_gb:.1f} GB available" if available_gb is not None else "no limit found"
 
 
 def job_from_question(question: str) -> str | None:
