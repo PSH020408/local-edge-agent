@@ -36,7 +36,8 @@ KOREAN_TERMS = (
     ("charge cycles", "충전 횟수"), ("cell voltages", "셀 전압"), ("spread", "편차"),
     ("vents", "통풍구"), ("fans", "팬"), ("thermal pressure", "열 압력"), ("power drawn", "소비 전력"),
     ("of one core", "한 코어의 시간 기준 (200% = 코어 두 개가 꽉 참; 전체 CPU 사용률에는 쓰지 말 것)"),
-    ("not measured", "측정하지 않음"), ("unified memory", "통합 메모리"), ("memory bandwidth", "메모리 대역폭"),
+    ("not measured", "측정하지 않음"), ("not handled", "다루지 않음 (사용자 설정에 맡김)"),
+    ("resident", "실제 점유 (공유 메모리는 프로세스마다 중복 집계)"), ("unified memory", "통합 메모리"), ("memory bandwidth", "메모리 대역폭"),
 )
 
 

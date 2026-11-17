@@ -296,7 +296,8 @@ def battery_report(view, profile: dict | None = None, baseline_power: float | No
 
 
 def performance_report(view, storage: dict | None = None, top: list | None = None, job: str | None = None,
-                       loaded: dict | None = None, bench: dict | None = None, question: str = "") -> Report:
+                       loaded: dict | None = None, bench: dict | None = None, question: str = "",
+                       apps: list | None = None) -> Report:
     """view: a Capture with chip samples; storage: readings from storage.read(); top: [(name, energy impact)]."""
     storage = storage or {}
     report = Report("performance")
@@ -426,13 +427,24 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
                                     "Start it."))
     if bench:
         _transfer(bench, f, findings)
+    # Memory by app, when the question is about memory or apps, or memory is short (added 2026-11-17).
+    if apps and (re.search(MEMORY_QUESTION, question, re.I) or "memory_short" in [x.code for x in findings]):
+        f["memory by app (resident, largest first)"] = "; ".join(f"{name} {size / GB:.1f} GB ({n} process{'es' if n > 1 else ''})"
+                                                               for name, size, n in apps)
+        findings.append(Finding("memory_by_app", "info", "The apps holding the most memory", 
+                                {"memory by app (resident, largest first)": f["memory by app (resident, largest first)"]},
+                                "Quitting the largest app frees the most; shared memory is counted in each process, so the sums run high."))
+        short = next((x for x in findings if x.code == "memory_short"), None)
+        if short is not None:
+            short.evidence["largest app"] = f"{apps[0][0]} {apps[0][1] / GB:.1f} GB"
     # 2026-11-17: asked about transfer speeds, the writer said "no problem with the transfer speeds" although
     # nothing had measured them. A question about something the agent does not measure gets a finding that
     # says so, and the writer is not left to fill the gap.
     for code, pattern, what in NOT_MEASURED:
         if re.search(pattern, question, re.I) and not (code == "transfer" and bench):
-            findings.append(Finding("not_measured", "info", f"Not measured in this check: {what}", {},
-                                    "Say plainly that this was not measured; do not judge it."))
+            title = f"Not handled: {what}" if code == "user settings" else f"Not measured in this check: {what}"
+            findings.append(Finding("not_measured", "info", title, {},
+                                    "Say plainly that this is not measured or handled; do not judge it or guess a value."))
     if not any(x.severity in ("warning", "problem") for x in findings):
         findings.append(Finding("no_problem", "info", "No performance problem found in the measurements",
                                 {k: f[k] for k in ("CPU use", "GPU use", "memory available", "thermal pressure") if k in f},
@@ -440,11 +452,16 @@ def performance_report(view, storage: dict | None = None, top: list | None = Non
     return report
 
 
+MEMORY_QUESTION = r"메모리|램|(?<![a-z])ram(?![a-z])|memory|어떤\s*앱|무슨\s*앱|앱별|프로그램별|which app"
 TRANSFER_QUESTION = r"전송\s*속도|대역폭|읽기\s*속도|쓰기\s*속도|bandwidth|throughput|transfer"
 NOT_MEASURED = [
     ("transfer", TRANSFER_QUESTION, "data transfer speeds (memory, SSD)"),
-    ("fan", r"팬\s*속도|팬\s*rpm|rpm|fan speed", "fan speed (macOS has no public reading of it)"),
-    ("temperature", r"(cpu|gpu|칩|프로세서)\s*온도|(cpu|gpu|chip) temperature", "the chip's temperature (only the battery's is readable; thermal pressure is reported instead)"),
+    ("fan", r"팬\s*(속도|rpm|회전)|rpm|fan speed", "fan speed (macOS has no public interface for it)"),
+    ("temperature", r"(cpu|gpu|칩|프로세서|코어)\s*(의\s*)?(온도|몇\s*도)|(cpu|gpu|chip|core) temperature",
+     "the CPU and GPU temperature (no public interface; only the battery temperature and the thermal pressure level are readable)"),
+    # Left to the user on purpose (decided 2026-11-17): the user sets these to taste, the agent does not judge them.
+    ("user settings", r"화면\s*밝기|밝기|조도|키보드\s*(백라이트|조명|밝기)|brightness|ambient light|keyboard (backlight|light)",
+     "screen brightness, the light sensor and the keyboard light: left to the user's own settings"),
 ]
 TRANSFER_SLOW = 0.7          # share of the normal below which a transfer speed counts as slow
 

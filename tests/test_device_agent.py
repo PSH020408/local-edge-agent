@@ -316,3 +316,35 @@ class TransferTests(unittest.TestCase):
             first = bench.run(Path(folder) / "b", Path(folder) / "normal.json", on_adapter=True)
             self.assertGreater(first["cpu_copy_gbs"], 0)
             self.assertGreater(first["ssd_read_gbs"], 0)
+
+
+class MemoryByAppTests(unittest.TestCase):
+    PS = (" 12.0  8.0 /Applications/Browser.app/Contents/MacOS/Browser\n"
+          "  3.0  6.0 /Applications/Browser.app/Contents/Frameworks/Browser Helper (Renderer).app/Contents/MacOS/Browser Helper (Renderer)\n"
+          "  1.0  4.0 /Applications/Browser.app/Contents/Frameworks/Browser Helper (GPU).app/Contents/MacOS/Browser Helper (GPU)\n"
+          "  0.5 10.0 /Applications/Editor.app/Contents/MacOS/Editor\n"
+          "  0.1  1.0 /usr/sbin/someservice\n")
+
+    def test_processes_are_grouped_by_app(self):
+        from agent.device.sources import memory
+        apps = memory.parse_apps(self.PS, 24e9)
+        self.assertEqual([a[0] for a in apps], ["Browser", "Editor", "someservice"])
+        self.assertAlmostEqual(apps[0][1], 0.18 * 24e9)
+        self.assertEqual(apps[0][2], 3)
+
+    def test_memory_question_lists_the_apps(self):
+        agent = DeviceAgent(FixtureShell(FIXTURES, overrides={"ps_cpu": self.PS}), sleep=NO_SLEEP, capture_seconds=1)
+        report = agent.diagnose("어떤 앱이 메모리를 제일 많이 써?").report
+        self.assertIn("memory_by_app", report.codes())
+        self.assertTrue(report.facts["memory by app (resident, largest first)"].startswith("Browser"))
+        self.assertNotIn("memory_by_app", agent.diagnose("맥이 왜 이렇게 뜨거워?").report.codes())
+
+    def test_user_settings_and_unreadable_sensors(self):
+        agent = DeviceAgent(FixtureShell(FIXTURES), sleep=NO_SLEEP, capture_seconds=1)
+        for question, word in (("화면 밝기 적당해?", "user's own settings"), ("CPU 온도 몇 도야?", "no public interface"),
+                               ("팬 속도 알려줘", "no public interface")):
+            result = agent.diagnose(question)
+            self.assertEqual(result.route.topic, "performance", question)
+            self.assertTrue(any(word in x.title for x in result.report.findings if x.code == "not_measured"), question)
+        battery = agent.diagnose("배터리 온도 괜찮아?")
+        self.assertEqual(battery.route.topic, "battery")

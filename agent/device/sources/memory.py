@@ -67,3 +67,35 @@ def read(shell) -> list[Reading]:
     out = {name: shell.run(name) for name in ("vm_stat", "memory_pressure", "sysctl")}
     text = {name: o.text if o.ok else "" for name, o in out.items()}
     return parse_sysctl(text["sysctl"], time) + parse_vm_stat(text["vm_stat"], time) + parse_pressure(text["memory_pressure"], time)
+
+
+def app_name(command: str) -> str:
+    """The application a process belongs to: the outermost "X.app" in its path, otherwise the file name.
+
+    Browsers and editors run many helper processes (".../Browser.app/.../Browser Helper (Renderer).app/...");
+    grouping them under the app is what a user means by "which app uses the memory"."""
+    found = re.search(r"/([^/]+)\.app(?:/|$)", command)
+    return found.group(1) if found else command.rsplit("/", 1)[-1]
+
+
+def parse_apps(ps_text: str, total_bytes: float, top: int = 5) -> list[tuple[str, float, int]]:
+    """[(app, bytes, processes)], largest first, from `ps -A -o %cpu=,%mem=,comm=`.
+
+    %mem is the resident set (RSS) as a share of the memory: memory a library shares between processes is
+    counted in each of them, so the sums run high, as in any per-process total. Enough to rank the apps."""
+    totals: dict[str, list] = {}
+    for line in ps_text.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) < 3:
+            continue
+        try:
+            share = float(parts[1])
+        except ValueError:
+            continue
+        app = app_name(parts[2].strip())
+        entry = totals.setdefault(app, [0.0, 0])
+        entry[0] += share / 100 * total_bytes
+        entry[1] += 1
+    ranked = sorted(((a, b, n) for a, (b, n) in totals.items()), key=lambda x: -x[1])
+    return [x for x in ranked if x[1] > 0][:top]
+

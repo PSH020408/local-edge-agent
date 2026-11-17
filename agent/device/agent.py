@@ -20,7 +20,7 @@ from .capture import Capture, capture
 from .diagnosis import TRANSFER_QUESTION, Report, battery_report, job_from_question, performance_report
 from .readings import by_name
 from .router import Route, route
-from .sources import battery, load, models, storage
+from .sources import battery, load, memory, models, storage
 
 
 @dataclass
@@ -75,7 +75,10 @@ class DeviceAgent:
                 from . import bench
                 on_adapter = view.value("power.source") != "Battery"
                 measured = bench.run(Path(self.bench_folder) / "bench", Path(self.bench_folder) / "bench_normal.json", on_adapter)
-            result.report = performance_report(view, disk, self._top(), job_from_question(question), held, measured, question)
+            processes = self.shell.run("ps_cpu")
+            total = view.value("memory.total")
+            apps = memory.parse_apps(processes.text, total) if processes.ok and total else []
+            result.report = performance_report(view, disk, self._top(), job_from_question(question), held, measured, question, apps)
             extra = disk
         result.timings["measure"] = round(time.perf_counter() - measure_started, 3)
         result.readings = self._snapshot(view, extra)
