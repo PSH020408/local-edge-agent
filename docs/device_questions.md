@@ -1,4 +1,4 @@
-# Device agent: question guide
+# User guide: asking about this Mac
 
 The device agent answers questions about this MacBook from its own sensors: battery, charging, processor,
 graphics, heat, memory, storage, ports and the work the machine can take on now. Ask in plain language, in
