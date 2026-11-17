@@ -107,7 +107,8 @@ Diagnosis and agents:
 - [x] Energy modes for LLM jobs settled by speed (E1-E3: High Power = Automatic; the gauge cannot resolve one job's energy)
 - [ ] Workload set W: modes across everyday work (tiers 0-5, on the adapter and on battery)
 - [x] Speed check before long runs (`scripts/speed_check.py`; test-set runs stop when the Mac is under 60% of its normal speed)
-- [ ] Thermal/power feedback control of long runs, with a recorded step test
+- [x] Power feedback controller (PI, pacing the work), tested on a simulated plant
+- [ ] Controller held at its targets in a recorded hardware test
 
 Verify: readers tested on recorded outputs; scenario sets for both agents (on battery, charging, heavy load, the GPU state seen on 2026-11-16 replayed from its readings); router accuracy on 30 questions; budgets measured.
 Done when: both agents answer within budget with measured values, every scenario gets the expected diagnosis, and the controller holds its target in a recorded test.

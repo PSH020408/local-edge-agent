@@ -162,3 +162,26 @@ the CPU part after 108 s. Chip power and clocks every 5th sample (samples about 
    macOS's own thermal pressure level only reacts to the slow one. A controller that waits for thermal
    pressure acts minutes late; chip power and clocks show the state much earlier.
 
+## W-battery, tiers 0-2: Low Power against Automatic (2026-11-17 10:44-11:30)
+
+Same scenarios on battery. Chip power from powermetrics is exact; the whole-system figure is V × I at the 4-6
+registry publications inside each run (coarse); the charge-drop figure ranged from 1.8 to 18 W for the same
+light work and is not used (the gauge's estimate, `evals/device/energy.md`).
+
+| Scenario | Chip W Low Power | Chip W Automatic | System W (V × I) Low / Auto | Deadlines missed Low / Auto |
+|---|---|---|---|---|
+| idle | 0.23 | 0.19 | 4.3 / 5.8 | - |
+| document | 0.08 | 0.19 | 5.0 / 4.9 | 0 / 0 of 180 |
+| music | 0.07 | 0.22 | 5.1 / 5.4 | - |
+| web | 0.62 | 1.03 | 5.0 / 5.7 | 1 / 0 of 180 |
+| video_4k_play | 0.17 | 0.09 | 5.4 / 6.8 | - |
+| video_call | 2.58 | 4.07 | 8.2 / 9.8 | 0 / 0 of 180 |
+
+Prediction (the same power within 1-2 W, no missed deadlines): **held.** Low Power saved 0.1-1.5 W of chip
+power; the largest saving was the video call (1.5 W, about 15% of the whole Mac's 9.8 W), then web (0.4 W).
+The cost was one page load out of 180 that missed its second in Low Power. The whole Mac drew about 5 W on
+battery for light work against 7-8 W on the adapter (screen dimmed on battery, no adapter conversion).
+
+For the policy: on battery, Low Power is a fair default for light work: a small saving (up to about 15% for
+calls, a few percent for documents and web) at almost no cost in responsiveness.
+
