@@ -76,3 +76,15 @@ Mode effects on battery:
 - Photo previews, game frames and video-edit previews: no misses in Automatic and High Power, some in Low Power.
 - Batch phases (export, builds, rendering, training): Low Power 30-50% longer; High Power equal to Automatic
   except in stress, once thermal pressure rises.
+
+## Quick check (2026-11-17 08:37, adapter, a tenth of the work)
+
+Every scenario of tiers 4 and 5 ran without an error. Chip power and GPU busy were in the predicted range for
+render_3d (24 W, 81%), llm (27 W, 89%) and training (21 W, 69%). Three defects, fixed before the full runs:
+
+| Seen | Cause | Fix |
+|---|---|---|
+| game: GPU 6% busy, 2 W | the per-frame GPU budget was scaled down with the durations in the quick check | budgets per tick are not scaled |
+| stress: 64 s for 18 s of work per core, GPU 29% busy | equal shares on all 14 cores waited for the 4 slower efficiency cores; the thread feeding the GPU had no core left | work cut into small pieces handed out as cores free up; 12 CPU workers, 2 cores left for the GPU; GPU products queued 8 at a time |
+| no system power | runs under a minute see fewer than two registry publications | none needed: full runs last 3-4 minutes |
+

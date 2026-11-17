@@ -113,9 +113,17 @@ class Ctx:
         return self._pool
 
     def cpu(self, workers: int, units: float) -> float:
-        """`workers` cores each doing `units` of work; returns the time until all are done."""
+        """`workers` cores each doing `units` of work; returns the time until all are done.
+
+        When the job takes every core, it is cut into small pieces that the pool hands out as cores free up:
+        the 4 efficiency cores are about half as fast, and equal shares would leave the job waiting for them
+        (quick check 2026-11-17: 64 s for 18 s of work per core)."""
         started = time.perf_counter()
-        self.pool().map(_cpu_job, [units] * workers)
+        if workers >= (os.cpu_count() or 8):
+            pieces = workers * 8
+            self.pool().map(_cpu_job, [units * workers / pieces] * pieces, chunksize=1)
+        else:
+            self.pool().map(_cpu_job, [units] * workers)
         return time.perf_counter() - started
 
     def close(self):
@@ -133,19 +141,35 @@ class Ctx:
             self._gpu[size] = (a, b)
         a, b = self._gpu[size]
         started = time.perf_counter()
-        for _ in range(max(1, round(products))):
-            mx.eval(a @ b)
+        left = max(1, round(products))
+        while left:  # up to 8 products queued at once: one wait per group keeps the GPU fed
+            group = min(8, left)
+            mx.eval(*[a @ b for _ in range(group)])
+            left -= group
         return time.perf_counter() - started
 
+    def products_per(self, seconds: float) -> float:
+        """GPU products in a budget per tick (a frame): not scaled by the quick check, unlike durations."""
+        return seconds / self.calibration["gpu_product_seconds"]
+
     def filter_24mp(self) -> float:
-        """An unsharp mask over a 24 MP image on the GPU (photo and video effects): a 3 x 3 blur from shifted
-        copies, then sharpening. Image filters like this are bound by memory bandwidth, as in real editors;
-        a convolution layer would build a huge intermediate matrix instead."""
+        """An unsharp mask over a 24 MP photo on the GPU."""
+        return self._unsharp("photo", (4000, 6000, 3))
+
+    def filter_4k(self) -> float:
+        """The same effect on one 4K video frame (8.3 MP). The calibration measured 94 ms for a 24 MP photo,
+        so a video preview with the photo-sized effect would fill most of its 0.1 s deadline at full speed."""
+        return self._unsharp("frame", (2160, 3840, 3))
+
+    def _unsharp(self, key: str, shape: tuple) -> float:
+        """A 3 x 3 blur from shifted copies, then sharpening. Image filters like this are bound by memory
+        bandwidth, as in real editors; a convolution layer would build a huge intermediate matrix instead
+        (7 GB for 24 MP: the dry run was killed for memory)."""
         import mlx.core as mx
-        if "image" not in self._gpu:
-            self._gpu["image"] = mx.random.uniform(shape=(4000, 6000, 3))
-            mx.eval(self._gpu["image"])
-        image = self._gpu["image"]
+        if key not in self._gpu:
+            self._gpu[key] = mx.random.uniform(shape=shape)
+            mx.eval(self._gpu[key])
+        image = self._gpu[key]
         started = time.perf_counter()
         blurred = sum(mx.roll(image, (dy, dx), axis=(0, 1)) for dy in (-1, 0, 1) for dx in (-1, 0, 1)) / 9
         mx.eval(mx.clip(image + 0.5 * (image - blurred), 0, 1))
@@ -447,7 +471,7 @@ def s_video_edit(ctx: Ctx):
     playback = _play(ctx.assets, ctx.s(60))
     effects = walk(600, 0.0, 1.0, ctx.rng)
     ctx.ticks("preview with effects (a frame within 0.1 s)", 600, 0.1,
-              lambda i: ctx.filter_24mp() if effects[i] > 0.3 else None)
+              lambda i: ctx.filter_4k() if effects[i] > 0.3 else None)
     _ffmpeg_wait(playback)
     frames = max(1, int(40 * ctx.calibration["export_fps"]))  # 40 s of export at full speed
 
@@ -483,7 +507,7 @@ def s_game(ctx: Ctx):
     stride = max(1, len(world) // 600)
     frames = ctx.n(120 * 60)
     scene = walk(frames, 0.45, 1.0, ctx.rng, step=0.02)
-    products = ctx.products_for(0.010)  # the heaviest scene: 10 ms of GPU work in a 16.7 ms frame
+    products = ctx.products_per(0.010)  # the heaviest scene: 10 ms of GPU work in a 16.7 ms frame
     cpu_frames = [[round(0.4 * s, 3) for s in scene] for _ in range(3)]
     background = ctx.pool().map_async(_game_worker, [(ctx.calibration, f) for f in cpu_frames])
     def frame(i):
@@ -544,11 +568,14 @@ def s_training(ctx: Ctx):
 def s_stress(ctx: Ctx):
     """Every core and the GPU at once, for a fixed amount of work (about 3 minutes at full speed)."""
     cores = os.cpu_count() or 8
+    workers = cores - 2  # two cores left to feed the GPU (quick check: with all 14 busy the GPU was 29% busy)
+    pieces = workers * 8
 
     def both():
-        cpu = ctx.pool().map_async(_cpu_job, [ctx.units_for(180)] * cores)
-        ctx.gpu(ctx.products_for(180))
-        cpu.get()
+        with mp.get_context("spawn").Pool(workers, initializer=_init_worker, initargs=(ctx.calibration,)) as pool:
+            cpu = pool.map_async(_cpu_job, [ctx.units_for(180) * workers / pieces] * pieces, chunksize=1)
+            ctx.gpu(ctx.products_for(180))
+            cpu.get()
     ctx.batch("CPU and GPU together", both)
 
 
