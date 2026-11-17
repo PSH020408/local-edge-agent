@@ -102,3 +102,50 @@ understated. Pair 5 is the one exception with AWDL down (its state was read only
   evidence; advice: for a call or a game, turn AirDrop off and Handoff / Universal Control off, or switch AWDL
   off for the session (with confirmation; macOS may switch it back on, as in pairs 7 and 8).
 - Spikes with AWDL down → reported without a cause.
+
+## W3: one hour at rest, the baseline (2026-11-17, 21:52-22:52, `scripts/wifi_log.py`)
+
+60 rounds of one minute, the Mac plugged in and idle at its usual place; the rest of the home used the
+network as usual.
+
+| Minutes | Signal dBm | Router median ms | Router p95 ms | Router spikes % | Internet p95 ms | DNS ms | CCA % |
+|---|---|---|---|---|---|---|---|
+| 0-10 | -46.4 | 3.7 | 58.4 | 7.6 | 64.9 | 12.7 | 1.9 |
+| 10-20 | -46.8 | 3.7 | 53.3 | 7.2 | 59.4 | 7.5 | 2.0 |
+| 20-30 | -46.7 | 3.6 | 51.8 | 6.2 | 55.3 | 7.3 | 1.3 |
+| 30-40 | -46.6 | 3.6 | 58.3 | 7.4 | 62.0 | 7.2 | 1.8 |
+| 40-50 | -46.7 | 3.6 | 58.4 | 6.4 | 66.1 | 11.2 | 1.7 |
+| 50-60 | -46.7 | 3.7 | 58.6 | 7.0 | 62.4 | 11.3 | 1.2 |
+
+- The link is steady: signal -46.6 dBm within ±0.4 dB over the hour; noise -94 dBm, so SNR about 47 dB.
+- AWDL was active in all 60 rounds, so W3 cannot compare states; the steady state of this Mac is AWDL on, with
+  about 7% of replies to the router above 50 ms and a p95 near 56 ms, against 3.2 ms with AWDL off in W2.
+- Internet p95 follows the router p95, so the spikes are added on the Wi-Fi segment, not by the provider.
+- DNS 6-9 ms, with four of 60 lookups at 44-50 ms (one slow lookup per round raises the 10-minute mean).
+- Channel: the home router at about -41 dBm and one other network at -79 to -83 dBm on channel 44; CCA 1-4%.
+- Throughput (4 tests): 135-329 Mb/s down, 165-234 up; responsiveness 257-671 round trips per minute, so a
+  single test is a noisy reading of latency under load.
+
+## Coverage walk: plan, predictions and gate (written before the walk, 2026-11-18)
+
+**Setup.** The home's floor plan stays in `logs/home/` (not published). Scale from the router room's measured
+width: 3.0 m over 155 px, 1.94 cm per px. Walls are extracted from the plan image (dark pixels, 3x3 opening,
+specks under 120 px dropped). The router stands on the floor (0.1 m); the Mac is measured on a chair (0.45 m).
+25 points, 1.0-10.7 m from the router through 0-5 walls; 5 held out before the walk by a seeded draw
+(points 5, 9, 12, 18, 22). All interior doors open. AWDL off during the walk (W2), so the latency at a point
+shows the radio conditions. A Bluetooth speaker next to the router gives the Bluetooth signal at the same points.
+
+**Check of the pipeline on a simulated walk** (known n = 3.0, 8 dB per wall, 3 dB shadowing on the home plan):
+fitted n = 3.14 and 7.4 dB per wall; held-out RMSE 3.3 dB for the multi-wall model against 9.2 (distance only),
+14.6 (free space) and 14.1 (interpolation).
+
+**Predictions.** 5 GHz: n 2.5-3.5, 5-12 dB per interior wall. 2.4 GHz: smaller wall loss than 5 GHz.
+Bluetooth: weakest of the three, lost through two or more walls beyond 7-10 m. MCS falls from 9 near the
+router to 0-3 in the far rooms, roughly following the standard's sensitivity table.
+
+**Gate.** The multi-wall model counts as validated if its held-out RMSE is at most 5 dB for 5 GHz and lower
+than all three baselines. If not, the map is shown as interpolation only and the model is not used for
+predictions.
+
+**Door test.** Three points in line with the router room's door (D1-D3), measured with the door open and
+closed: the loss of a closed door.

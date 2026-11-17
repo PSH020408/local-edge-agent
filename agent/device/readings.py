@@ -21,6 +21,7 @@ UNITS = {
     "code",   # a status code reported by the hardware, kept as it is
     "text",   # a short label such as "Good" or "AC Power"
     "score",  # a relative score computed by macOS, such as a process's energy impact
+    "dBm", "dB", "ms", "Mb/s",  # Stage 8: radio and network path
 }
 QUALITIES = {"ok", "missing", "estimated"}
 _NAME = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")  # "<source>.<item>", e.g. battery.cycle_count

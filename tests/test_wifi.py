@@ -85,3 +85,16 @@ class MeasuringTimeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BluetoothTests(unittest.TestCase):
+    TEXT = ('{"SPBluetoothDataType": [{"device_connected": [{"Mouse X": {"device_minorType": "Mouse", "device_rssi": "-53"}},'
+            ' {"Speaker Y ": {"device_minorType": "Speaker", "device_rssi": "-61"}}, {"Keys": {"device_minorType": "Keyboard"}}]}]}')
+
+    def test_parse_and_pick(self):
+        from agent.device.sources import bluetooth
+        devices = bluetooth.parse(self.TEXT)
+        self.assertEqual([d["rssi_dbm"] for d in devices], [-53, -61, None])
+        self.assertEqual(bluetooth.pick(devices)["name"], "Speaker Y")
+        self.assertEqual(bluetooth.pick(devices, "mouse")["rssi_dbm"], -53)
+        self.assertIsNone(bluetooth.pick(bluetooth.parse("not json")))
