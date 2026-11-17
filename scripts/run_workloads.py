@@ -60,7 +60,11 @@ class Monitor:
         # samples it had not written out yet.
         while not self._stop.is_set():
             out = subprocess.run(chip.command(samples=5), capture_output=True, text=True)
-            self.samples += [{r.name: r.value for r in s} for s in chip.parse(out.stdout)]
+            parsed = [{r.name: r.value for r in s} for s in chip.parse(out.stdout)]
+            now = time.monotonic() - self.t0  # each sample covers the second before its place in the call
+            for k, sample in enumerate(parsed):
+                sample["_t"] = round(now - (len(parsed) - 1 - k), 1)
+            self.samples += parsed
             if not out.stdout:
                 self._stop.wait(1.0)
 
@@ -113,7 +117,7 @@ class Monitor:
             out["system_w"] = pp._mean_watts(a, b, 0, "system counter")
             out["system_w"] = round(out["system_w"], 1) if out["system_w"] is not None else None
         # A time series every 5 s for the heat and power curves (the feedback controller is designed from them).
-        out["series"] = [{"t": i, "chip_w": s.get("chip.combined_power"), "gpu_busy": s.get("chip.gpu_active"),
+        out["series"] = [{"t": s.get("_t", i), "chip_w": s.get("chip.combined_power"), "gpu_busy": s.get("chip.gpu_active"),
                           "gpu_mhz": s.get("chip.gpu_frequency"), "p0_mhz": s.get("chip.p0_cluster_frequency"),
                           "thermal": s.get("chip.thermal_pressure_level")}
                          for i, s in enumerate(self.samples) if i % 5 == 0]

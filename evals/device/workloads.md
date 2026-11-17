@@ -135,3 +135,30 @@ CPU and GPU parts separately; every run stores a 5-second time series of chip po
 pressure (the curves the feedback controller will be designed from); system power uses every publication
 inside the run (runs under 2 minutes had none). Stress is run again on the adapter with the new size.
 
+## Stress again, resized: the power curve (2026-11-17 10:20, adapter)
+
+60 s of full-speed work for the CPU (12 cores) and for the GPU, together. The GPU part finished after 64 s,
+the CPU part after 108 s. Chip power and clocks every 5th sample (samples about 1.25 s apart):
+
+| Sample | Chip W | GPU MHz | Performance-core MHz | Thermal pressure |
+|---|---|---|---|---|
+| 0 | 94.0 | 1,578 | 3,852 | nominal |
+| 5 | 63.9 | 1,421 | 3,278 | nominal |
+| 10 | 53.8 | 1,374 | 2,884 | nominal |
+| 20 | 45.2 | 1,372 | 2,423 | nominal |
+| 30 | 37.6 | 1,316 | 2,074 | nominal |
+| 45 | 34.4 | 1,285 | 1,984 | nominal |
+| 50 (GPU done) | 22.1 | 338 | 2,428 | nominal |
+| 80 | 32.7 | 338 | 3,207 | nominal |
+
+1. **A burst budget that decays.** The chip started at 94 W and fell toward about 34 W like a first-order
+   system (time constant about 10 samples, roughly 12 s), while thermal pressure stayed nominal throughout:
+   this is the power management lowering its budget as the die warms, before macOS reports any thermal
+   pressure. The 11-minute run went on to heavy thermal pressure: a second, slower stage over minutes.
+2. **The GPU is protected, the CPU gives way.** Within the shared budget the GPU kept 81% of its top clock
+   (1,285 of 1,578 MHz) and finished its 60 s of work in 64 s; the performance cores fell to about half
+   (1,984 of 3,852 MHz) and needed 108 s. When the GPU finished, the cores climbed back (2,428 to 3,207 MHz).
+3. For the controller: the plant has a fast stage (the budget, about 12 s) and a slow one (heat, minutes), and
+   macOS's own thermal pressure level only reacts to the slow one. A controller that waits for thermal
+   pressure acts minutes late; chip power and clocks show the state much earlier.
+
