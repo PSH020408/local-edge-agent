@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 
 import numpy as np
@@ -84,6 +84,7 @@ class Plan:
     holdout: list[str] = field(default_factory=list)
     order: list[str] = field(default_factory=list)
     doors: dict[str, list] = field(default_factory=dict)     # name -> [[x1, y1], [x2, y2]] across the opening
+    display_image: Path | None = None                        # another drawing to draw maps on (same pixel coordinates)
     _walls: np.ndarray | None = None
     _floor: np.ndarray | None = None
 
@@ -93,7 +94,11 @@ class Plan:
         data = json.loads(path.read_text(encoding="utf-8"))
         data["image"] = (path.parent / data["image"]).resolve()
         data["router"] = tuple(data["router"])
-        return cls(**data)
+        if data.get("display_image"):
+            data["display_image"] = (path.parent / data["display_image"]).resolve()
+        # The plan file also holds settings for the walk script (throughput points, the point subset).
+        known = {f.name for f in fields(cls) if not f.name.startswith("_")}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
     @property
     def walls(self) -> np.ndarray:
@@ -114,6 +119,12 @@ class Plan:
     def geometry(self, xy) -> dict:
         return {"distance_m": round(self.distance_m(xy), 2), "walls": walls_crossed(self.walls, self.router, xy),
                 "doors": [name for name, (p, q) in self.doors.items() if segments_cross(self.router, xy, p, q)]}
+
+    def for_router(self, xy, height_m: float | None = None) -> "Plan":
+        """The same plan seen from another access point (the home has three); walls and floor are shared."""
+        other = replace(self, router=tuple(xy), router_height_m=self.router_height_m if height_m is None else height_m)
+        other._walls, other._floor = self._walls, self._floor
+        return other
 
 
 # ---------------------------------------------------------------- the model
@@ -179,35 +190,92 @@ def idw(train: list[dict], xy, key: str = "rssi", power: float = 2.0) -> float:
     return total / weights
 
 
+def residual_idw(train: list[dict], model: Model, xy, key: str = "rssi") -> float:
+    """Multi-wall prediction corrected by the interpolated residuals of the measured points (regression kriging
+    with inverse-distance weights): the model carries the trend where nothing was measured, the residuals carry
+    what the model does not know (which walls are concrete, furniture, the router's antenna pattern)."""
+    residuals = [{"xy": r["xy"], "res": r[key] - float(model.predict(r["distance_m"], r["walls"]))} for r in train]
+    return idw(residuals, xy, "res")
+
+
+METHODS = ("multi-wall", "multi-wall + residuals", "interpolation (IDW)", "distance only", "free space (n = 2)")
+
+
+def _predictor(method: str, train: list[dict], key: str):
+    if method == "interpolation (IDW)":
+        return lambda r: idw(train, r["xy"], key)
+    if method == "distance only":
+        m = fit(train, key, walls=False)
+    elif method == "free space (n = 2)":
+        m = fit(train, key, walls=False, fixed_n=2.0)
+    else:
+        m = fit(train, key)
+    if method == "multi-wall + residuals":
+        return lambda r: float(m.predict(r["distance_m"], r["walls"])) + residual_idw(train, m, r["xy"], key)
+    return lambda r: float(m.predict(r["distance_m"], r["walls"]))
+
+
+def loo_rmse(train: list[dict], method: str, key: str) -> float | None:
+    """Leave-one-out error on the training points only: chooses a method without touching the held-out points."""
+    errs = []
+    for i, r in enumerate(train):
+        rest = train[:i] + train[i + 1:]
+        if len(rest) < 4:
+            return None
+        errs.append(_predictor(method, rest, key)(r) - r[key])
+    return round(float(np.sqrt(np.mean(np.square(errs)))), 2) if errs else None
+
+
 def compare(plan: Plan, rows: list[dict], key: str = "rssi") -> dict:
-    """The multi-wall model against two baselines, all scored on the held-out points only."""
+    """Every method fitted on the training points, chosen by leave-one-out error on them, scored on the held-out
+    points (chosen before the walk) once."""
     train = [r for r in rows if r["id"] not in plan.holdout and r.get(key) is not None]
     test = [r for r in rows if r["id"] in plan.holdout and r.get(key) is not None]
     out = {"train_points": len(train), "test_points": len(test)}
-    if len(train) < 4:
+    if len(train) < 5:
         return out
-    models = {"multi-wall": fit(train, key), "distance only": fit(train, key, walls=False),
-              "free space (n = 2)": fit(train, key, walls=False, fixed_n=2.0)}
-    for name, m in models.items():
-        out[name] = {"a_dbm": round(m.a, 1), "n": round(m.n, 2), "wall_db": round(m.wall_db, 1),
-                     "fit_rmse_db": round(m.rmse_fit, 2),
-                     "holdout": errors([float(m.predict(r["distance_m"], r["walls"])) for r in test], [r[key] for r in test])}
-    out["interpolation (IDW)"] = {"holdout": errors([idw(train, r["xy"], key) for r in test], [r[key] for r in test])}
-    out["_model"] = models["multi-wall"]
+    for method in METHODS:
+        predict = _predictor(method, train, key)
+        entry = {"loo_rmse_db": loo_rmse(train, method, key),
+                 "holdout": errors([predict(r) for r in test], [r[key] for r in test])}
+        if method in ("multi-wall", "distance only", "free space (n = 2)"):
+            m = fit(train, key, walls=method == "multi-wall", fixed_n=2.0 if method.startswith("free") else None)
+            entry.update(a_dbm=round(m.a, 1), n=round(m.n, 2), wall_db=round(m.wall_db, 1), fit_rmse_db=round(m.rmse_fit, 2))
+        out[method] = entry
+    out["_model"] = fit(train, key)
+    out["_train"] = train
+    out["chosen"] = min((m for m in METHODS if out[m]["loo_rmse_db"] is not None), key=lambda m: out[m]["loo_rmse_db"])
+    mw, h = out["multi-wall"]["holdout"], {m: out[m]["holdout"].get("rmse_db", 1e9) for m in METHODS}
+    out["gate_multi_wall"] = bool(mw) and mw["rmse_db"] <= 5 and all(h["multi-wall"] < h[m] for m in METHODS if m not in ("multi-wall", "multi-wall + residuals"))
     return out
 
 
 # ---------------------------------------------------------------- maps
 
-def predict_map(plan: Plan, model: Model, step: int = 3) -> np.ndarray:
-    """Predicted signal for every floor pixel (computed every `step` pixels and filled in), NaN elsewhere."""
+def predict_map(plan: Plan, model: Model, step: int = 3, method: str = "multi-wall", train: list[dict] | None = None,
+                key: str = "rssi") -> np.ndarray:
+    """Predicted signal for every floor pixel (computed every `step` pixels and filled in), NaN elsewhere, by the
+    multi-wall model, the model plus interpolated residuals, or interpolation alone."""
     h, w = plan.walls.shape
     out = np.full((h, w), np.nan)
-    for y in range(0, h, step):
-        for x in range(0, w, step):
-            if plan.floor[y, x]:
-                g = plan.geometry((x, y))
-                out[y:y + step, x:x + step] = float(model.predict(g["distance_m"], g["walls"]))
+    ys, xs = np.mgrid[0:h:step, 0:w:step]
+    keep = plan.floor[ys, xs]
+    ys, xs = ys[keep], xs[keep]
+    if method != "interpolation (IDW)":
+        model_values = np.array([float(model.predict(plan.distance_m((x, y)), walls_crossed(plan.walls, plan.router, (x, y))))
+                                 for x, y in zip(xs, ys)])
+    if method in ("interpolation (IDW)", "multi-wall + residuals") and train:
+        pts = np.array([r["xy"] for r in train], dtype=float)
+        vals = np.array([r[key] - (float(model.predict(r["distance_m"], r["walls"])) if method != "interpolation (IDW)" else 0.0)
+                         for r in train])
+        d = np.hypot(xs[:, None] - pts[None, :, 0], ys[:, None] - pts[None, :, 1])
+        wgt = 1 / np.maximum(d, 1e-6) ** 2
+        interp = (wgt * vals).sum(axis=1) / wgt.sum(axis=1)
+        values = interp if method == "interpolation (IDW)" else model_values + interp
+    else:
+        values = model_values
+    for x, y, v in zip(xs, ys, values):
+        out[y:y + step, x:x + step] = v
     out[~plan.floor] = np.nan
     return out
 
@@ -222,7 +290,7 @@ def _font(size: int):
 def render(plan: Plan, values: np.ndarray, out_path: Path, title: str, measured: list[dict] | None = None,
            zones=PRIOR_ZONES, levels=LEVELS, key: str = "rssi", smooth_px: float = 5.0) -> Path:
     """The plan with use zones (translucent), contour lines with labels, the router and the measured points."""
-    base = Image.open(plan.image).convert("RGB")
+    base = Image.open(plan.display_image or plan.image).convert("RGB")
     layer = np.asarray(base).astype(float)
     if smooth_px:  # display only: the raster wall count gives jagged shadow edges; diffraction softens them anyway
         known = ~np.isnan(values)
@@ -258,10 +326,9 @@ def render(plan: Plan, values: np.ndarray, out_path: Path, title: str, measured:
             draw.text((x + 6, y - 6), f"{r[key]:.0f}", fill=(0, 0, 160) if test else (0, 0, 0), font=small)
     draw.rectangle([0, 0, img.width, 24], fill=(255, 255, 255))
     draw.text((8, 4), title, fill=(0, 0, 0), font=bold)
-    if zones:
-        x = 8
-        y = img.height - 22
-        draw.rectangle([0, y - 4, img.width, img.height], fill=(255, 255, 255))
+    if zones:  # legend under the title, clear of the plan and its scale bar
+        x, y = 8, 28
+        draw.rectangle([0, 24, img.width, 46], fill=(255, 255, 255))
         for threshold, name, color in zones:
             draw.rectangle([x, y, x + 14, y + 14], fill=color)
             text = f"{name} (≥ {threshold:.0f})" if threshold > -199 else name

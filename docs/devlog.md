@@ -241,3 +241,17 @@ Same day: a question guide and ports. `docs/device_questions.md` lists the quest
 
 Same day, from the user's review of the guide: "can I run a document question?" is the agent's view, not the user's. A user asks "what can I do now?", "can I edit 4K video?", "can I play a demanding game?". The performance agent now answers these from the loads measured with the workload set (memory, mean system power, peak chip power for nine kinds of work) against the present state: a problem such as a held GPU rules out heavy work, memory available against what the work needs, and on battery the time the battery would last at that work's power. "How long can I game on battery?" goes to the performance agent although it names the battery. The guide was rewritten to say first, for each part of the system, what the agent can read, how often and how it judges it, and only then to give example questions.
 
+
+## 2026-11-18 — Stage 8: network agent, coverage walk 1
+
+- Network agent: "why is my Wi-Fi slow?" answered hop by hop (radio link, Wi-Fi segment, internet, DNS) from
+  10 s of measurement, 30 s for calls and games; AWDL named as the cause of latency spikes on the evidence of W2;
+  verdicts per use from measured latency, loss and speed. Router: a network word decides against performance.
+- Coverage tools: walls extracted from the floor plan, multi-wall path-loss model, walk and report scripts. The
+  floor plan was redrawn by hand in English without the listing's watermark, in two versions at the same pixel
+  coordinates: a measurement map (points, routers, door tests) and a plain base for the contour maps, from which
+  the walls are also taken.
+- Walk 1 (router on the floor, 5 GHz link, 25 points): link adaptation measured from MCS 9 to MCS 1; latency held
+  until SNR 7; per-direction rate adaptation seen. The multi-wall model failed its gate (held-out RMSE 13.8 dB);
+  the walls differ too much for one loss per wall. Beacons and Bluetooth were not usable and were fixed (named
+  scans, BLE). The home turned out to have three routers.

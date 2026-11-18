@@ -38,6 +38,15 @@ TOPICS = {
         r"사진\s*편집", r"라이트룸", r"lightroom", r"photo edit", r"video edit", r"edit(ing)? (4k )?video", r"화상\s*(통화|회의)", r"video call",
     ],
 }
+TOPICS["network"] = [
+    r"와이파이", r"와이 파이", r"(?<![a-z])wi-?fi(?![a-z])", r"인터넷", r"네트워크", r"공유기", r"라우터", r"(?<![가-힣])핑", r"레이턴시",
+    r"끊겨", r"끊김", r"끊기", r"끊어", r"신호\s*(세기|강도)?", r"채널", r"블루투스", r"에어팟", r"에어드롭", r"(?<![a-z])dns(?![a-z])",
+    r"온라인\s*게임", r"다운로드\s*속도", r"업로드\s*속도", r"인터넷\s*속도", r"통신",
+    r"(?<![a-z])internet(?![a-z])", r"(?<![a-z])network(?![a-z])", r"(?<![a-z])router(?![a-z])", r"(?<![a-z])ping(?![a-z])",
+    r"latency", r"jitter", r"packet loss", r"(?<![a-z])signal(?![a-z])", r"(?<![a-z])channel(?![a-z])", r"bluetooth", r"airpods", r"airdrop",
+    r"online gam", r"download speed", r"upload speed", r"connection",
+    r"화상\s*(통화|회의)", r"video call", r"(?<![a-z])zoom(?![a-z])", r"facetime", r"페이스타임",
+]
 # A keyword alone is not enough when the question asks about a subject in general ("explain how
 # batteries work", "the memory chip market"): such a question goes to the general agent loop,
 # unless it also points at this machine. Run D1: qwen3:1.7b sent "explain the chemistry of
@@ -48,20 +57,21 @@ THIS_MACHINE = [r"내\s", r"내가", r"맥", r"노트북", r"컴퓨터", r"지�
 
 ROUTE_SCHEMA = {
     "type": "object",
-    "properties": {"topic": {"type": "string", "enum": ["battery", "performance", "none"]}},
+    "properties": {"topic": {"type": "string", "enum": ["battery", "performance", "network", "none"]}},
     "required": ["topic"],
 }
 ROUTE_PROMPT = """Classify a question to a MacBook assistant.
 battery: battery health, charge, charging, power adapter, energy mode, how long the battery lasts.
 performance: the Mac is slow or hot, fans, CPU, GPU, memory, storage, whether a job can run now.
+network: Wi-Fi, the internet connection, the router, latency, Bluetooth devices.
 none: anything else (not about this computer's hardware).
 Question: {question}
-Answer with JSON: {{"topic": "battery" | "performance" | "none"}}"""
+Answer with JSON: {{"topic": "battery" | "performance" | "network" | "none"}}"""
 
 
 @dataclass
 class Route:
-    topic: str | None  # "battery", "performance" or None
+    topic: str | None  # "battery", "performance", "network" or None
     method: str        # "rules", "model", "rules-tie" or "none"
     matches: dict
     seconds: float
@@ -82,6 +92,10 @@ def route(question: str, llm=None) -> Route:
         return Route(None, "rules-general", matches, time.perf_counter() - started)
     if len(hit) == 1:
         return Route(hit[0], "rules", matches, time.perf_counter() - started)
+    # "Can I play an online game on this Wi-Fi?": a network word decides against performance (the work is
+    # about the connection); with battery words it stays a tie for the model.
+    if "network" in hit and "battery" not in hit:
+        return Route("network", "rules-network", matches, time.perf_counter() - started)
     # "How long can I game on battery?": a kind of work named with battery words is a question for the
     # performance agent, which gives the time on battery for that work.
     from .diagnosis import work_from_question

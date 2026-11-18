@@ -38,6 +38,11 @@ KOREAN_TERMS = (
     ("of one core", "한 코어의 시간 기준 (200% = 코어 두 개가 꽉 참; 전체 CPU 사용률에는 쓰지 말 것)"),
     ("not measured", "측정하지 않음"), ("not handled", "다루지 않음 (사용자 설정에 맡김)"),
     ("resident", "실제 점유 (공유 메모리는 프로세스마다 중복 집계)"), ("unified memory", "통합 메모리"), ("memory bandwidth", "메모리 대역폭"),
+    ("signal", "신호 세기"), ("noise", "잡음"), ("SNR", "신호 대 잡음비(SNR)"), ("link rate", "링크 속도"),
+    ("latency to the router", "공유기까지 지연 시간"), ("latency to the internet", "인터넷까지 지연 시간"), ("jitter", "지터(지연의 흔들림)"),
+    ("p95", "상위 5% 지연"), ("loss", "패킷 손실"), ("AWDL", "AWDL (AirDrop·Handoff용 무선 기능)"), ("channel utilisation", "채널 사용률"),
+    ("DNS lookup", "DNS 조회 시간"), ("latency under load", "부하 중 지연"), ("spatial streams", "공간 스트림 수"),
+    ("with care", "주의하면 가능"), ("not now", "지금은 어려움"),
 )
 
 

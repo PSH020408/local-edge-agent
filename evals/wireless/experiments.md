@@ -149,3 +149,47 @@ predictions.
 
 **Door test.** Three points in line with the router room's door (D1-D3), measured with the door open and
 closed: the loss of a closed door.
+
+## Walk 1: router on the floor, Mac on its 5 GHz network (2026-11-18)
+
+25 points in ascending order, the Mac linked to its own router (5 GHz, channel 44, 80 MHz) throughout: its link
+signal at point 19 was -63.5 dBm while another home router in that room was heard at -32 dBm, and the width stayed
+80 MHz. **The home has three routers of the same model** (AC1200, Wi-Fi 5, Realtek), one per bedroom, all on the
+floor; this was learned during the walk.
+
+**Valid:** the link at 24 points (signal, SNR, MCS, rate, latency) and three download tests.
+**Not valid, and why:**
+- Router beacons: the compiled helper's scan returned no network names, so "the router's beacon" was the
+  strongest unnamed network at each point (often another home router). Fixed: scans through the Swift
+  interpreter return the names (check of 2026-11-18: 9 of 9 named, against 0 of 6), and every home network is
+  recorded by name.
+- Bluetooth: macOS gives no signal for a connected classic-audio speaker. Fixed: a Bluetooth LE scan follows a
+  device that advertises (an iPhone next to the router, heard at -37 dBm).
+- Point 22: the Mac switched to a 2.4 GHz network and lost the link. Fixed: a point where the Mac leaves its
+  network is marked invalid and can be measured again (`--redo`).
+- The link rate from CoreWLAN (72 Mb/s at MCS 6) did not match the MCS; wdutil's rate (263 Mb/s) does and is used.
+
+**Link adaptation measured.**
+
+| Signal dBm | SNR dB | MCS (Mac to router) | Rate Mb/s | Router p95 ms | Points |
+|---|---|---|---|---|---|
+| -37 to -60 | 33-56 | 9 (256-QAM 5/6) | 433 | 3.4-6.4 | 8 |
+| -61 to -67 | 27-32 | 7-8 | 292-390 | 4.0-6.4 | 6 |
+| -70 to -71 | 22-23 | 5-6 | 234-263 | 3.8-4.3 | 3 |
+| -78 to -82 | 12-15 | 1-2 | 58-97 | 5.5-46 | 5 |
+| -87 | 7 | 1 | 30 | 243 | 1 |
+
+The modulation steps down with the signal, while the latency stays near 3-7 ms down to MCS 1 and breaks only at
+SNR 7 (a balcony): a messenger or a call keeps working almost to the edge of coverage, while the speed falls much
+earlier (download 362, 270, 193 and 73 Mb/s at four points from the router outwards). Rate adaptation is per
+direction: at point 20 the Mac sent at MCS 1 (65 Mb/s) while the download reached 73 Mb/s, and next to the router
+the download (362 Mb/s) exceeded what one spatial stream at 433 Mb/s carries, so the router sends with two
+streams while the Mac sends with one.
+
+**Gate: not passed.** Multi-wall model fitted on 20 points: n = 3.09, 4.5 dB per wall; held-out RMSE 13.8 dB
+(4 points), worse than interpolation (7.2 dB) and free space (10.4 dB); with interpolated residuals, 11.7 dB. The
+walls are not alike: through the wall behind the router the kitchen was -70 dBm at 1.25 m, while the dining area,
+reached past the open door, was -55 dBm at 2.7 m. One loss per wall cannot hold both. As decided before the walk,
+the map is drawn by interpolation, and the model is not used for predictions. Next: the walks with all three
+routers' beacons give six signals at the same points, enough to test wall classes (structural against partition)
+by leave-one-out error before the held-out points are scored.

@@ -61,9 +61,67 @@ def watch(root: Path, hz: float, seconds: float) -> list[dict]:
     return parse_lines(out)
 
 
-def scan(root: Path) -> list[dict]:
-    out = subprocess.run([str(helper(root)), "scan"], capture_output=True, text=True, timeout=60).stdout
+def scan(root: Path, named: bool = True) -> list[dict]:
+    """Nearby networks. Walk 1 (2026-11-18): the compiled helper's scan returned no names (0 of 6) and the same
+    source run through the Swift interpreter returned all of them (9 of 9), so the interpreter is used when the
+    names matter (about 25 s instead of 13). Neither gives BSSIDs without Location Services."""
+    command = ["swift", str(HELPER_SOURCE), "scan"] if named else [str(helper(root)), "scan"]
+    out = subprocess.run(command, capture_output=True, text=True, timeout=120).stdout
     return [r for r in parse_lines(out) if "error" not in r]
+
+
+class ScanServer:
+    """One Swift interpreter for a whole walk (`wifi_helper serve`): each scan then takes about 13 s instead of 25.
+    Falls back to a one-shot named scan if the server does not answer."""
+
+    def __init__(self):
+        import queue
+        import threading
+        self.lines: "queue.Queue[str]" = queue.Queue()
+        self.process = subprocess.Popen(["swift", str(HELPER_SOURCE), "serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self):
+        for line in self.process.stdout:
+            self.lines.put(line)
+
+    def scan(self, root: Path, timeout: float = 90) -> list[dict]:
+        import queue
+        import time as _time
+        try:
+            self.process.stdin.write("scan\n")
+            self.process.stdin.flush()
+            out, end = [], _time.monotonic() + timeout
+            while _time.monotonic() < end:
+                line = self.lines.get(timeout=max(0.1, end - _time.monotonic()))
+                if line.strip() == "END":
+                    return [r for r in parse_lines("".join(out)) if "error" not in r]
+                out.append(line)
+        except (OSError, queue.Empty, BrokenPipeError):
+            pass
+        return scan(root)
+
+    def stop(self):
+        try:
+            self.process.stdin.write("quit\n")
+            self.process.stdin.flush()
+        except OSError:
+            pass
+        self.process.terminate()
+
+
+def home_beacons(nets: list[dict], prefix: str) -> dict:
+    """The strongest reading of each of the home's networks (names starting with `prefix`, any case)."""
+    out: dict[str, dict] = {}
+    for n in nets:
+        name = (n.get("ssid") or "").strip()
+        if name.lower().startswith(prefix.lower()):
+            key = name.lower()
+            if key not in out or n["rssi_dbm"] > out[key]["rssi_dbm"]:
+                out[key] = {"rssi_dbm": n["rssi_dbm"], "band_ghz": n.get("band_ghz"), "channel": n.get("channel"),
+                            "width_mhz": n.get("width_mhz")}
+    return out
 
 
 # ---------------------------------------------------------------- wdutil

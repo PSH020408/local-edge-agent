@@ -21,6 +21,7 @@ from .diagnosis import BUS_QUESTION, TRANSFER_QUESTION, Report, battery_report, 
 from .readings import by_name
 from .router import Route, route
 from .sources import battery, load, memory, models, storage
+from . import network
 
 
 @dataclass
@@ -58,6 +59,16 @@ class DeviceAgent:
             return result
         self.on_event(f"device: {chosen.topic} ({chosen.method})")
         measure_started = time.perf_counter()
+        if chosen.topic == "network":
+            self.on_event("device: measuring the Wi-Fi link and the path to the internet")
+            measured = network.measure(self.shell, self._wifi_helper(), question)
+            result.report = network.report(measured, question, network.baseline_from_store(self.store))
+            result.timings["measure"] = round(time.perf_counter() - measure_started, 3)
+            result.readings = {"link samples": (len(measured.link), "", "ok"), "router": (measured.router, "", "ok"),
+                               "internet": (measured.internet, "", "ok"), "awdl": (measured.awdl, "", "ok"),
+                               "dns_ms": (measured.dns_ms, "", "ok"), "driver": (measured.driver, "", "ok"),
+                               "throughput": (measured.throughput, "", "ok")}
+            return self._write(result, question, started)
         if chosen.topic == "battery":
             view = capture(self.shell, seconds=self.battery_seconds, with_chip=False, sleep=self.sleep)
             profile = {r.name: r.value for r in battery.read_profile(self.shell) if r.ok}
@@ -85,6 +96,9 @@ class DeviceAgent:
             extra = disk
         result.timings["measure"] = round(time.perf_counter() - measure_started, 3)
         result.readings = self._snapshot(view, extra)
+        return self._write(result, question, started)
+
+    def _write(self, result: DeviceResult, question: str, started: float) -> DeviceResult:
         self.on_event(f"device: findings {', '.join(result.report.codes())}")
         written = writer.write(result.report, question, self.writer_llm)
         result.answer, result.method, result.unsupported = written.text, written.method, written.unsupported
@@ -92,6 +106,17 @@ class DeviceAgent:
         result.timings["answer"] = round(written.seconds, 3)
         result.timings["total"] = round(time.perf_counter() - started, 3)
         return result
+
+    def _wifi_helper(self) -> str:
+        """The compiled CoreWLAN helper (logs/bin/wifi_helper), built on first use; a fixture shell ignores the path."""
+        if self.bench_folder is None:
+            return "wifi_helper"
+        try:
+            from .sources import wifi
+            return str(wifi.helper(Path(self.bench_folder).parent))
+        except Exception as exc:  # noqa: BLE001 - no Swift compiler: the link readings stay empty
+            self.on_event(f"device: Wi-Fi helper unavailable ({exc})")
+            return "wifi_helper"
 
     def _top(self) -> list[tuple[str, float]]:
         values = by_name(load.read_top(self.shell))

@@ -10,7 +10,7 @@ from pathlib import Path
 from agent.device.router import route
 
 GUIDE = Path(__file__).resolve().parent.parent / "docs" / "device_questions.md"
-MARK = re.compile(r"<!-- agent: (battery|performance|none) -->")
+MARK = re.compile(r"<!-- agent: (battery|performance|network|none) -->")
 QUESTION = re.compile(r"^- `([^`]+)`", re.M)
 
 
@@ -33,7 +33,7 @@ class GuideTests(unittest.TestCase):
         for question, agent in rows:
             result = route(question)  # no model: the rules alone must decide
             got = result.topic or "none"
-            if got != agent or result.method not in ("rules", "rules-general", "rules-work"):
+            if got != agent or result.method not in ("rules", "rules-general", "rules-work", "rules-network"):
                 wrong.append(f"{question!r}: {got} by {result.method}, guide says {agent}")
         self.assertEqual(wrong, [])
 

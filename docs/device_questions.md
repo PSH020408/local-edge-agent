@@ -1,7 +1,8 @@
 # User guide: asking about this Mac
 
 The device agent answers questions about this MacBook from its own sensors: battery, charging, processor,
-graphics, heat, memory, storage, ports and the work the machine can take on now. Ask in plain language, in
+graphics, heat, memory, storage, ports, the work the machine can take on now, and its Wi-Fi, network and
+Bluetooth connections. Ask in plain language, in
 English or Korean; the answer comes in the language of the question.
 
 ```bash
@@ -11,7 +12,8 @@ you> How is my battery health?
 ```
 
 Battery questions are answered in about 5 seconds; questions about performance take about 15 seconds, because
-the agent first measures the processor, graphics, power and heat for 10 seconds.
+the agent first measures the processor, graphics, power and heat for 10 seconds. Network questions take 15-40
+seconds (the pings run for 10 or 30 seconds; a speed test adds about 20).
 
 ---
 
@@ -144,7 +146,27 @@ On battery, the time each would last. Also the local AI's own jobs.
 - `Can I run a document question now?`
 - `Can I run an image analysis now?`
 
-## 12. Out of scope
+## 12. Wi-Fi, network and Bluetooth
+<!-- agent: network -->
+
+**Covers:** where a slow connection comes from, hop by hop: the radio link (signal, noise, SNR, modulation),
+the Wi-Fi segment (latency, spikes and loss to the router, and AirDrop's radio, AWDL, which causes latency spikes
+on this Mac), the internet beyond the router, and DNS. Verdicts for games, video calls, 4K streaming, browsing
+and messaging from the measured latency, loss and speed, not from the signal alone. Throughput and latency under
+load, nearby networks on the same channel, and the signal of connected Bluetooth devices, when asked.
+Questions about a game or a call measure for 30 s; others for 10 s.
+
+**Example questions**
+- `Why is my Wi-Fi slow?`
+- `Is the problem my Wi-Fi or my internet provider?`
+- `What is my ping?`
+- `Can I play an online game on this Wi-Fi now?`
+- `Is my internet connection good enough for a video call?`
+- `How fast is my internet? Can I stream 4K?`
+- `Is my Wi-Fi channel crowded?`
+- `Is my Bluetooth speaker signal ok?`
+
+## 13. Out of scope
 <!-- agent: performance -->
 
 **Not measured** (no public interface on this Mac) and **left to the user's settings**. The agent says so
@@ -164,8 +186,8 @@ General-knowledge questions are answered by the general assistant, not by the de
 
 ## How an answer is made
 
-1. Keyword rules send the question to the battery or the performance agent (a small model decides only when
-   the rules tie).
+1. Keyword rules send the question to the battery, performance or network agent (a small model decides only
+   when the rules tie).
 2. The agent takes its readings.
 3. **Code** makes the diagnosis from thresholds and rules; no language model judges the machine.
 4. A small local model writes the findings as a few sentences. Every number in the answer is checked against the

@@ -342,3 +342,65 @@ id = "L06"
 question = "저장공간 얼마나 남았어?"
 scenario = "live"
 route = "performance"
+
+# Stage 8: network agent, live on this Mac (run `sudo -v` first so the driver readings are included).
+[[case]]
+id = "N01"
+question = "와이파이 왜 이렇게 느려?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "N02"
+question = "Why is my Wi-Fi slow?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "N03"
+question = "지금 온라인 게임 해도 돼?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "N04"
+question = "화상 통화 해도 괜찮을까?"
+scenario = "live"
+route = "network"
+note = "'Video call' is also a kind of work for the performance agent; without battery words a call goes to the network agent."
+
+[[case]]
+id = "N05"
+question = "인터넷 속도 어때? 4K 스트리밍 돼?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "N06"
+question = "와이파이 채널 혼잡해?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "N07"
+question = "블루투스 스피커 신호 괜찮아?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "N08"
+question = "핑 몇이야?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "N09"
+question = "Is my internet connection good enough for a video call?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "R05"
+question = "와이파이 원리 설명해줘"
+scenario = "recorded"
+route = "none"

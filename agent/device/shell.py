@@ -56,16 +56,17 @@ class LiveShell:
     def __init__(self, timeout: float = 10.0) -> None:
         self.timeout = timeout
 
-    def run(self, name: str, command: list[str] | None = None) -> Output:
+    def run(self, name: str, command: list[str] | None = None, timeout: float | None = None) -> Output:
         """Runs COMMANDS[name], or `command` when a reader needs other arguments (a capture of n seconds)."""
         command = command or COMMANDS[name]
         started = time.monotonic()
+        timeout = timeout or self.timeout
         try:
-            done = subprocess.run(command, capture_output=True, text=True, timeout=self.timeout)
+            done = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
         except FileNotFoundError:
             return Output(name, "", False, time.monotonic() - started, "command not found")
         except subprocess.TimeoutExpired:
-            return Output(name, "", False, time.monotonic() - started, f"timed out after {self.timeout:.0f} s")
+            return Output(name, "", False, time.monotonic() - started, f"timed out after {timeout:.0f} s")
         seconds = time.monotonic() - started
         if done.returncode != 0:
             return Output(name, done.stdout, False, seconds, done.stderr.strip()[:200] or f"exit code {done.returncode}")
@@ -80,7 +81,7 @@ class FixtureShell:
         self.overrides = overrides or {}  # name -> text, to test unusual outputs
         self.calls: list[str] = []
 
-    def run(self, name: str, command: list[str] | None = None) -> Output:
+    def run(self, name: str, command: list[str] | None = None, timeout: float | None = None) -> Output:
         self.calls.append(name)
         if name in self.overrides:
             text = self.overrides[name]

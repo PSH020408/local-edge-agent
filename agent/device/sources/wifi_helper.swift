@@ -7,6 +7,9 @@
 //   wifi_helper link                 one JSON line: the current link
 //   wifi_helper watch <hz> <seconds> one JSON line per reading
 //   wifi_helper scan                 one JSON line per network seen (takes about 13 s)
+//   wifi_helper serve                reads commands from stdin: "scan" prints the networks and then END; "quit" stops.
+//                                    Run through the Swift interpreter, it names the networks (the compiled helper does
+//                                    not) and pays the interpreter's start-up once per walk instead of once per scan.
 
 import CoreWLAN
 import Foundation
@@ -40,6 +43,22 @@ func link() -> [String: Any] {
     return record
 }
 
+func scanAll() -> Bool {
+    do {
+        for n in try wifi.scanForNetworks(withSSID: nil) {
+            var record: [String: Any] = ["rssi_dbm": n.rssiValue, "noise_dbm": n.noiseMeasurement, "ssid": n.ssid ?? "",
+                                         "bssid": n.bssid ?? "", "beacon_ms": n.beaconInterval,
+                                         "open": n.supportsSecurity(.none)]
+            for (key, value) in channel(n.wlanChannel) { record[key] = value }
+            emit(record)
+        }
+        return true
+    } catch {
+        emit(["error": "\(error)"])
+        return false
+    }
+}
+
 let args = CommandLine.arguments
 switch args.count > 1 ? args[1] : "link" {
 case "watch":
@@ -51,17 +70,15 @@ case "watch":
         Thread.sleep(forTimeInterval: 1.0 / hz)
     }
 case "scan":
-    do {
-        for n in try wifi.scanForNetworks(withSSID: nil) {
-            var record: [String: Any] = ["rssi_dbm": n.rssiValue, "noise_dbm": n.noiseMeasurement, "ssid": n.ssid ?? "",
-                                         "bssid": n.bssid ?? "", "beacon_ms": n.beaconInterval,
-                                         "open": n.supportsSecurity(.none)]
-            for (key, value) in channel(n.wlanChannel) { record[key] = value }
-            emit(record)
+    if !scanAll() { exit(1) }
+case "serve":
+    while let line = readLine() {
+        if line == "quit" { break }
+        if line == "scan" {
+            _ = scanAll()
+            print("END")
+            fflush(stdout)
         }
-    } catch {
-        emit(["error": "\(error)"])
-        exit(1)
     }
 default:
     emit(link())
