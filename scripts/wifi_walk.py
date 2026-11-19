@@ -279,8 +279,10 @@ def main() -> None:
                 if ask("  Move the Mac about 30 cm (same height), press Enter ") == "q":
                     break
                 placements.append(placement(gateway, bt_name))
-            print("  scanning (about 15 s) ...", flush=True)
-            nets = scanner.scan(ROOT)
+            # Walk 2 (2026-11-19): one scan heard 2-6 of the home's 6 networks (4.2 on average), even the Mac's own
+            # router's 2.4 GHz network at 1 m was missing once; two scans are merged (the strongest reading of each).
+            print("  scanning twice (about 30 s) ...", flush=True)
+            nets = scanner.scan(ROOT) + scanner.scan(ROOT)
             done_drv = sudo_n("wdutil", "info")
             driver = wifi.parse_wdutil(done_drv.stdout) if done_drv.returncode == 0 else {}
             row = summarise(pid, plan, placements, nets, driver, routers, closed, prefix, own, monitor)

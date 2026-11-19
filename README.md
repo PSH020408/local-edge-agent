@@ -62,7 +62,7 @@ answer comes in the language of the question. Session commands: `/tools`, `/rese
 | [Images](#2-images) | Describes an image; reads text, formulas and charts in it | 10-60 s |
 | [Documents](#3-documents-pdf-and-powerpoint) | Answers from PDFs and slides with page citations; equations, tables, financial statements, charts | 1-2 min |
 | [This Mac](#4-this-mac) | Battery, charging, energy mode, CPU, GPU, heat, memory, storage, ports, transfer speeds, which work fits now | 5-15 s |
-| [Wi-Fi and Bluetooth](#5-coming-next) | Stage 8, in development | |
+| [Wi-Fi, network and Bluetooth](#5-wi-fi-network-and-bluetooth) | Where a slow connection comes from; verdicts for games, calls and streaming; coverage of the home's routers | 15-40 s |
 
 ### 1. Engineering math and time
 
@@ -162,13 +162,55 @@ because the answer model wrote out its reasoning. In the sixth run (D6): 29 righ
 routing 40 of 40; live battery answers in 4.7 s, live performance answers in 14.7 s. Details:
 [evals/device/results.md](evals/device/results.md).
 
-### 5. Coming next
+### 5. Wi-Fi, network and Bluetooth
 
-- **Stage 8, Wi-Fi and Bluetooth:** `Why is my Wi-Fi slow?` (the Wi-Fi link, the router or the internet?),
-  `Is my connection good enough for a video call?`, the least crowded channel, a coverage map of a home from a
-  few measured points, the signal of connected Bluetooth devices.
-- **Stage 9, iPhone:** ask the Mac's agent from an iPhone (Shortcuts and Siri); a battery-time model fitted on
-  logged discharge sessions.
+**Covers:** where a slow connection comes from, hop by hop: the radio link (signal, noise, SNR, modulation), the
+Wi-Fi segment to the router (latency, spikes, loss), the internet beyond it, and DNS. Verdicts for games, video
+calls, 4K streaming, browsing and messaging come from measured latency, loss and speed, not from the signal alone.
+
+**Example questions**
+- `Why is my Wi-Fi slow?`
+- `Is the problem my Wi-Fi or my internet provider?`
+- `Can I play an online game on this Wi-Fi now?`
+- `Is my internet connection good enough for a video call?`
+- `How fast is my internet? Can I stream 4K?`
+- `Is my Bluetooth speaker signal ok?`
+
+**What the measurements found on this Mac**
+- **Latency spikes come from AirDrop's radio (AWDL).** With AWDL switched off and on in 8 random-order pairs, the
+  spikes to the router were lower with it off in 7 of 8 pairs; where it stayed off, the 95th-percentile latency
+  fell from 60-170 ms to about 3 ms. The agent names it as the cause only when AWDL is active.
+- **Measuring time is set by experiment:** 10 s gives the median latency within 0.4 ms; the 95th percentile needs
+  30 s, so questions about games and calls measure for 30 s.
+
+**Coverage survey of a home with three routers** (25 points, the Mac on a chair, all routers on the floor)
+
+| Measurement map | Strongest router on 5 GHz |
+|---|---|
+| ![Measurement map](docs/images/wifi/measurement-map.png) | ![Combined 5 GHz](docs/images/wifi/combined-5ghz.png) |
+
+- **Link adaptation, measured:** the modulation stepped down with the signal, from MCS 9 (256-QAM) above about
+  -60 dBm to MCS 1 near -80 dBm. Every point at or above -68 dBm met the game and call criterion (p95 latency
+  50 ms or less); below it, latency spikes appeared at some points (77-120 ms) and the first walk's weakest point
+  (SNR 7) reached 243 ms. Messaging keeps working almost to the edge of coverage, while speed falls much earlier
+  (download 433, 390, 298, 150 and 81 Mb/s from the router outwards).
+- **Where the Wi-Fi drops:** the places where the Mac's own 5 GHz network cuts out in daily use (Room C, the
+  entry, a bathroom) are all in another router's area, whose signal is 20-28 dB stronger there.
+- **Two routers share their channels** on both bands (5 GHz 44, 2.4 GHz 11), so they take turns where both reach.
+- **Repeatability:** the same points measured on two days differed by 3.0 dB RMS, which bounds how precisely any
+  map can be checked.
+- **A path-loss model did not pass its gate:** one loss per wall gave 12-14 dB error on held-out points, because
+  the walls differ too much (a wall behind the router cost about 30 dB, others a few). The maps are therefore
+  interpolated, not modelled.
+
+Wi-Fi coverage maps use inverse-distance weighting (IDW) to interpolate detected beacon RSSI separately for each
+AP and band, using 7–24 readings from 25 survey points.
+
+All maps (each router and band, both bands combined, and Bluetooth LE from an iPhone): [docs/images/wifi/](docs/images/wifi/).
+Experiments and decisions: [evals/wireless/experiments.md](evals/wireless/experiments.md).
+
+**Next, Stage 9:** ask the Mac's agent from an iPhone (Shortcuts and Siri); a battery-time model fitted on logged
+discharge sessions.
 
 ### Limits
 
@@ -276,8 +318,8 @@ The full history, with dates and every run: [docs/devlog.md](docs/devlog.md).
 | 3 | Images: question planner, two-reading text check | Done |
 | 4-6 | Documents: cited answers, equations, tables, statements and charts | Done (one holdout pending) |
 | 7 | This Mac: sensors, battery and performance agents, energy policy, workloads, power controller | Done |
-| 8 | Wi-Fi diagnosis, coverage map, Bluetooth | Next |
-| 9 | iPhone client, battery-time model | Planned |
+| 8 | Network agent, Wi-Fi experiments (W1-W3), coverage survey of three routers, Bluetooth LE | Done (11-19) |
+| 9 | iPhone client, battery-time model | Next |
 | 10 | Results, plots, demo | Planned |
 
 Dates and "done when" criteria: [docs/roadmap.md](docs/roadmap.md).
@@ -286,7 +328,8 @@ Dates and "done when" criteria: [docs/roadmap.md](docs/roadmap.md).
 
 | Document | Content |
 |---|---|
-| [docs/device_questions.md](docs/device_questions.md) | User guide for questions about the Mac |
+| [docs/device_questions.md](docs/device_questions.md) | User guide for questions about the Mac, its network and Bluetooth |
+| [evals/wireless/experiments.md](evals/wireless/experiments.md) | Wi-Fi and Bluetooth experiments: predictions, results, decisions |
 | [docs/development.md](docs/development.md) | Tools, profiles, code layout, all test commands |
 | [docs/devlog.md](docs/devlog.md) | Development log: decisions, runs, fixes |
 | [docs/guardrails.md](docs/guardrails.md) | Every rule enforced in code, with the run that motivated it |

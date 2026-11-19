@@ -193,3 +193,31 @@ reached past the open door, was -55 dBm at 2.7 m. One loss per wall cannot hold 
 the map is drawn by interpolation, and the model is not used for predictions. Next: the walks with all three
 routers' beacons give six signals at the same points, enough to test wall classes (structural against partition)
 by leave-one-out error before the held-out points are scored.
+
+## Bluetooth LE pre-test (2026-11-19, `scripts/ble_pretest.py`)
+
+The iPhone that the walk follows (advertising, Settings > Bluetooth open, screen on), 1 m from the Mac on a desk,
+60 s: 96 packets (1.6 per second), longest silence 3.5 s; median -41 dBm, SD 2.4 dB (the Wi-Fi link: 1.15 dB),
+range -49 to -38. Means of 5 s windows were within 3.2 dB of the whole, 10 s within 2.7 dB, 20 s within 0.8 dB
+(two windows only). The walk's 20 s per point (two placements of 10 s, about 30 packets) is kept; the packet count
+is recorded per point, and a point with very few packets marks the edge of Bluetooth range.
+
+## Walk 2: router on the floor, Mac on its 5 GHz network, with all home networks and Bluetooth (2026-11-19)
+
+25 points again, with named scans and the iPhone advertising next to AP-A.
+
+- **Repeatability:** the link signal at the 24 points measured in both walks differed by -0.9 dB on average,
+  RMS 3.0 dB, at most 8.0 dB (point 19). This is the measurement's own noise: no model can be checked to better
+  than about 3 dB at single points.
+- **Channels: two routers share both channels.** AP-A (Room A) and AP-B (Primary bedroom) are both on channel 44
+  (80 MHz) on 5 GHz and on channel 11 (40 MHz) on 2.4 GHz; AP-C (Room B) is on 149 and 2. Where both are heard
+  (the living area: -55 to -62 dBm from each), they take turns on the same air.
+- **Scans are incomplete:** one scan heard 2-6 of the 6 home networks (4.2 on average); AP-A's 2.4 GHz network
+  was missing at 1 m. From walk 3 on, two scans per point are merged.
+- **Bluetooth LE:** 19-40 packets per point down to about -95 dBm; 8 packets at -97 dBm (Room C); none at the
+  Entry, the far side of the Primary bedroom, the Dressing room, Bath 2 and Balcony 1. The iPhone on the floor next
+  to AP-A reaches through about two walls.
+- **Point 22 (Bath 2):** the Mac left AP-A's 5 GHz network again (-89 dBm on 2.4 GHz, then no link): it is beyond
+  AP-A's 5 GHz coverage, recorded as out of range rather than measured again.
+- The network names on 5 GHz carry a " 5g" suffix, so the Mac's own router's beacons were not matched in this
+  walk; they are in the all-networks record and the plan now names them exactly.
