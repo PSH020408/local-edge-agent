@@ -154,6 +154,9 @@ the Wi-Fi segment (latency, spikes and loss to the router, and AirDrop's radio, 
 on this Mac), the internet beyond the router, and DNS. Verdicts for games, video calls, 4K streaming, browsing
 and messaging from the measured latency, loss and speed, not from the signal alone. Throughput and latency under
 load, nearby networks on the same channel, and the signal of connected Bluetooth devices, when asked.
+Which of the networks this Mac has joined before is best at the current place: SNR and SINR from one scan and
+the link rate expected from the rate measured on this Mac; "about equal" when the difference is within the
+measurement's 5 dB spread (then `scripts/wifi_trial.py` tests each one for about a minute).
 Questions about a game or a call measure for 30 s; others for 10 s.
 
 **Example questions**
@@ -164,6 +167,8 @@ Questions about a game or a call measure for 30 s; others for 10 s.
 - `Is my internet connection good enough for a video call?`
 - `How fast is my internet? Can I stream 4K?`
 - `Is my Wi-Fi channel crowded?`
+- `Which Wi-Fi should I use here?`
+- `여기서 어느 와이파이에 연결하는 게 좋아?`
 - `Is my Bluetooth speaker signal ok?`
 
 ## 13. Out of scope

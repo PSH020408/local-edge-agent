@@ -70,6 +70,22 @@ def scan(root: Path, named: bool = True) -> list[dict]:
     return [r for r in parse_lines(out) if "error" not in r]
 
 
+def current_ssid(root: Path) -> str | None:
+    """Name of the joined network: wdutil (sudo) first, then the helper run through the Swift interpreter
+    (the compiled helper gets no names without Location Services)."""
+    out = subprocess.run(["sudo", "-n", "wdutil", "info"], capture_output=True, text=True, timeout=30)
+    if out.returncode == 0:
+        name = parse_wdutil(out.stdout).get("ssid")
+        if name:
+            return name
+    try:
+        records = parse_lines(subprocess.run(["swift", str(HELPER_SOURCE), "link"], capture_output=True, text=True,
+                                             timeout=90).stdout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return (records[0].get("ssid") or None) if records else None
+
+
 class ScanServer:
     """One Swift interpreter for a whole walk (`wifi_helper serve`): each scan then takes about 13 s instead of 25.
     Falls back to a one-shot named scan if the server does not answer."""
@@ -140,6 +156,8 @@ def parse_wdutil(text: str) -> dict:
     out = {"rssi_dbm": number("RSSI"), "noise_dbm": number("Noise"), "cca_percent": number("CCA"),
            "tx_mbps": number("Tx Rate"), "mcs": number("MCS Index"), "nss": number("NSS"),
            "guard_ns": number("Guard Interval"), "phy": field("PHY Mode"), "security": field("Security")}
+    ssid = field("SSID")
+    out["ssid"] = None if not ssid or "redacted" in ssid.lower() else ssid
     m = re.match(r"(\d)g(\d+)/(\d+)", field("Channel") or "")
     if m:
         out.update(band_ghz={"2": "2.4", "5": "5", "6": "6"}[m.group(1)], channel=int(m.group(2)), width_mhz=int(m.group(3)))

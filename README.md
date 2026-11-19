@@ -167,6 +167,7 @@ routing 40 of 40; live battery answers in 4.7 s, live performance answers in 14.
 **Covers:** where a slow connection comes from, hop by hop: the radio link (signal, noise, SNR, modulation), the
 Wi-Fi segment to the router (latency, spikes, loss), the internet beyond it, and DNS. Verdicts for games, video
 calls, 4K streaming, browsing and messaging come from measured latency, loss and speed, not from the signal alone.
+Which of the home's networks to use at the current place, from SNR and SINR.
 
 **Example questions**
 - `Why is my Wi-Fi slow?`
@@ -174,6 +175,7 @@ calls, 4K streaming, browsing and messaging come from measured latency, loss and
 - `Can I play an online game on this Wi-Fi now?`
 - `Is my internet connection good enough for a video call?`
 - `How fast is my internet? Can I stream 4K?`
+- `Which Wi-Fi should I use here?`
 - `Is my Bluetooth speaker signal ok?`
 
 **What the measurements found on this Mac**
@@ -196,18 +198,28 @@ calls, 4K streaming, browsing and messaging come from measured latency, loss and
   (download 433, 390, 298, 150 and 81 Mb/s from the router outwards).
 - **Where the Wi-Fi drops:** the places where the Mac's own 5 GHz network cuts out in daily use (Room C, the
   entry, a bathroom) are all in another router's area, whose signal is 20-28 dB stronger there.
-- **Two routers share their channels** on both bands (5 GHz 44, 2.4 GHz 11), so they take turns where both reach.
+- **SNR and SINR:** two routers share their channels on both bands (5 GHz 44, 2.4 GHz 11). Counting the other
+  router as noise gives a SINR near 0 dB in the living area, yet the Mac used 64-QAM to 256-QAM there: the routers
+  hear each other and take turns (CSMA/CA), so the cost is airtime, not SINR. The agent therefore adds to the noise
+  only networks heard below the 802.11 CCA level (-82 dBm).
+- **Which network to use:** ranked from one scan (SINR, then the link rate expected from the measured
+  rate-against-SNR table); a short test of each candidate when the difference is within the 5 dB spread of the
+  measurement. Replayed on the survey, every point with latency spikes was advised to switch and no point advised
+  to stay had them.
 - **Repeatability:** the same points measured on two days differed by 3.0 dB RMS, which bounds how precisely any
   map can be checked.
 - **A path-loss model did not pass its gate:** one loss per wall gave 12-14 dB error on held-out points, because
-  the walls differ too much (a wall behind the router cost about 30 dB, others a few). The maps are therefore
-  interpolated, not modelled.
+  the walls differ too much (a wall behind the router cost about 30 dB, others a few) and their materials are not
+  known from a floor plan. The maps are therefore interpolated from the measurements, not modelled.
+- **RSSI** is read as macOS reports it, in dBm converted by the chip's driver and not calibrated: absolute values
+  are approximate, comparisons on the same Mac are reliable.
 
 Wi-Fi coverage maps use inverse-distance weighting (IDW) to interpolate detected beacon RSSI separately for each
 AP and band, using 7–24 readings from 25 survey points.
 
 All maps (each router and band, both bands combined, and Bluetooth LE from an iPhone): [docs/images/wifi/](docs/images/wifi/).
-Experiments and decisions: [evals/wireless/experiments.md](evals/wireless/experiments.md).
+Method, assumptions and results: [docs/wifi_method.md](docs/wifi_method.md). Experiments and decisions:
+[evals/wireless/experiments.md](evals/wireless/experiments.md).
 
 **Next, Stage 9:** ask the Mac's agent from an iPhone (Shortcuts and Siri); a battery-time model fitted on logged
 discharge sessions.

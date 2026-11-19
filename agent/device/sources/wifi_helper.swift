@@ -40,6 +40,7 @@ func link() -> [String: Any] {
                                  "noise_dbm": wifi.noiseMeasurement(), "tx_mbps": wifi.transmitRate(),
                                  "phy": wifi.activePHYMode().rawValue, "power_on": wifi.powerOn()]
     for (key, value) in channel(wifi.wlanChannel()) { record[key] = value }
+    if let name = wifi.ssid() { record["ssid"] = name }   // nil in the compiled helper without Location Services
     return record
 }
 

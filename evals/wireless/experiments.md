@@ -221,3 +221,48 @@ is recorded per point, and a point with very few packets marks the edge of Bluet
   AP-A's 5 GHz coverage, recorded as out of range rather than measured again.
 - The network names on 5 GHz carry a " 5g" suffix, so the Mac's own router's beacons were not matched in this
   walk; they are in the all-networks record and the plan now names them exactly.
+
+## Review with a professor of wireless communications (2026-11-19)
+
+Points raised and how they were checked:
+
+- **"RSSI is a relative value in dB, not dBm."** True of the 802.11 standard, where RSSI is a vendor-defined index.
+  macOS reports `rssiValue` in dBm (Apple's documentation), converted by the chip maker's driver and not
+  calibrated. Decision: absolute values are treated as approximate, comparisons on the same Mac as reliable, and
+  only one source is used in any calculation. Written into [docs/wifi_method.md](../../docs/wifi_method.md).
+- **"SINR, not only SNR."** Added, with the CCA rule of 802.11: co-channel networks heard above -82 dBm take turns
+  (shared airtime), weaker ones add to the noise. Walk 2: in the living area the worst-case SINR (AP-B as noise)
+  is -9 to 14 dB, yet the Mac used MCS 6-9; AP-A and AP-B hear each other at -53 to -62 dBm, so they take turns
+  instead of interfering. Where the interferer was just below -82 dBm (Entry, Room C), SINR fell 7-11 dB below the
+  SNR and both points had latency spikes (p95 77-78 ms).
+- **"Behind a repeater the modulation of the hop between routers is not visible."** The three routers are
+  connected by cable, so the Mac-to-router link is the only wireless hop. The MCS read on the Mac is the Mac's
+  side only because that is all wdutil shows; the router's side is seen through the download speed.
+- **Walls:** take the measured values as the basis; which walls are load-bearing is not known and a MacBook alone
+  cannot find it. Matches the rejected wall model (held-out 12-14 dB): the maps stay interpolated from
+  measurements.
+
+## Network choice: replay of walk 2 (2026-11-19, `scripts/wifi_choice_check.py`)
+
+Rule ([agent/device/wifi_choice.py](../../agent/device/wifi_choice.py)), from the scan only: SINR per network, the link
+rate expected at that SINR from the walks' rate-against-SNR table; switch when another network is better by more
+than 5 dB SINR and at least 10% faster, test both when within 5 dB, else stay. Replayed on the beacons recorded at
+each point, against the latency of the network actually joined (AP-A 5 GHz):
+
+| Advice | Points without spikes (p95 <= 50 ms) | Points with spikes or loss |
+|---|---|---|
+| stay | 12 | 0 |
+| try | 1 | 0 |
+| switch | 6 | 5 |
+| own network not heard | 0 | 1 |
+
+- All 5 points with spikes, and the point where the link was lost, were advised to leave AP-A; no point advised to
+  stay had spikes.
+- Bath 1, the Entry and Room C, the places where the Wi-Fi drops in daily use, were advised to switch to AP-C.
+- Not independent: the rate table comes from the same walks. It shows that AP-A was poor where a switch was
+  advised, not that the advised network is better there.
+
+**Next, W4 (trial):** at three places advised to switch (Entry, Room C, Primary bedroom) and one "try" place
+(Living area, west), join each candidate for about a minute (`scripts/wifi_trial.py`) and compare download, upload
+and p95 with the ranking. Gate, written before the run: at the switch places, the advised network has a higher
+download than AP-A and a p95 of 50 ms or less in at least 2 of 3; the try place is reported, not graded.

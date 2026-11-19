@@ -255,3 +255,21 @@ Same day, from the user's review of the guide: "can I run a document question?" 
   until SNR 7; per-direction rate adaptation seen. The multi-wall model failed its gate (held-out RMSE 13.8 dB);
   the walls differ too much for one loss per wall. Beacons and Bluetooth were not usable and were fixed (named
   scans, BLE). The home turned out to have three routers.
+
+## 2026-11-19 — Stage 8: walk 2, review, SINR and the choice of network
+
+- Walk 2 (25 points, named scans of all six home networks, BLE from an iPhone next to the router): repeat points
+  differ by 3.0 dB RMS from walk 1; two routers share both channels; the places where the Wi-Fi drops in daily use
+  are in a third router's area. Coverage maps for each router and band, interpolated (IDW) because the wall model
+  had failed; drawings of the floor plan and maps finalised by hand.
+- Review of the method with a professor of wireless communications. RSSI in the 802.11 standard is a relative,
+  vendor-defined index; macOS reports it in dBm through the chip's driver, uncalibrated, so absolute values are
+  read as approximate and only comparisons on one source are used. Walls: the measured values are the basis,
+  since the walls' materials cannot be known from a MacBook. The routers are linked by cable, so the Mac-to-router
+  link is the only wireless hop.
+- SINR added beside SNR. Counting the co-channel router as noise gave about 0 dB in the living area where the Mac
+  used MCS 6-9: the routers hear each other and take turns. Rule adopted from 802.11's CCA level: co-channel
+  networks above -82 dBm share airtime, weaker ones add to the noise.
+- "Which Wi-Fi should I use here?": ranked from one scan (SINR, rate expected from the measured table), a short
+  join-and-measure test when the difference is within the 5 dB spread (`scripts/wifi_trial.py`). Replayed on walk 2:
+  all points with latency spikes advised to switch, none advised to stay had them. Next: trial W4 on the Mac.

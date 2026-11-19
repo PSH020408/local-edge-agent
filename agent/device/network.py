@@ -32,6 +32,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from . import wifi_choice
 from .diagnosis import Finding, Report
 from .sources import bluetooth, wifi
 
@@ -51,7 +52,8 @@ USE_WORDS = [
 ]
 OVERVIEW = r"뭘\s*할\s*수|뭐\s*할\s*수|어떤\s*(것|거|작업)|what can i do"
 SPEED_WORDS = r"속도|빠르|다운로드|업로드|대역폭|몇\s*메가|speed|download|upload|mbps|throughput|4k|스트리밍|stream"
-SCAN_WORDS = r"채널|혼잡|붐비|주변\s*(와이파이|네트워크)|다른\s*와이파이|어떤\s*와이파이|channel|crowded|nearby networks|which wi-?fi"
+SCAN_WORDS = (r"채널|혼잡|붐비|주변\s*(와이파이|네트워크)|다른\s*와이파이|(어떤|어느|무슨)\s*와이파이|와이파이.{0,12}(바꿔|바꿀|추천|골라)"
+              r"|channel|crowded|nearby networks|which (wi-?fi|network)|best (wi-?fi|network)|switch (wi-?fi|network)")
 BT_WORDS = r"블루투스|에어팟|이어폰|헤드폰|스피커|마우스|키보드|bluetooth|airpods|headphones?|earbuds|speaker"
 
 
@@ -75,6 +77,7 @@ class Measurement:
     driver: dict = field(default_factory=dict)
     throughput: dict = field(default_factory=dict)
     scan: list[dict] = field(default_factory=list)
+    known: set[str] = field(default_factory=set)     # networks this Mac has joined before
     bluetooth: list[dict] | None = None
     seconds: float = 10.0
     notes: list[str] = field(default_factory=list)
@@ -134,7 +137,10 @@ def measure(shell, helper: str, question: str = "", ping_seconds: float | None =
         except ValueError:
             m.notes.append("throughput test failed")
     if re.search(SCAN_WORDS, q):
-        m.scan = wifi.parse_lines(shell.run("wifi_scan", [helper, "scan"], timeout=60).text)
+        # Through the Swift interpreter: the compiled helper's scan has no network names (walk 1).
+        m.scan = [n for n in wifi.parse_lines(shell.run("wifi_scan", ["swift", str(wifi.HELPER_SOURCE), "scan"], timeout=120).text)
+                  if "error" not in n]
+        m.known = wifi_choice.parse_preferred(shell.run("preferred", ["networksetup", "-listpreferredwirelessnetworks", "en0"]).text)
     if re.search(BT_WORDS, q):
         m.bluetooth = bluetooth.parse(shell.run("bluetooth", ["system_profiler", "SPBluetoothDataType", "-json"], timeout=20).text)
     return m
@@ -299,6 +305,7 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
                                 "Another strong network shares this channel." if strong else "No strong network shares this channel.",
                                 {"other networks on this channel": f["other networks on this channel"], "signal": f["signal"]},
                                 "A different channel on the router would help." if strong else "No channel change needed."))
+        _network_choice(m, first, findings, f)
     if m.bluetooth is not None:
         if not m.bluetooth:
             f["Bluetooth devices connected"] = "none"
@@ -316,6 +323,35 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
     order = {"problem": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda x: order[x.severity])
     return r
+
+
+def _network_choice(m: Measurement, first: dict, findings: list, f: dict) -> None:
+    """Which of the networks this Mac has joined is best here (agent/device/wifi_choice.py)."""
+    named = [n for n in m.scan if (n.get("ssid") or "").strip()]
+    if not named:
+        return
+    current = m.driver.get("ssid") if m.driver else None
+    cands = wifi_choice.candidates(m.scan, first.get("noise_dbm") or -93, first.get("width_mhz") or 80, m.known or None, current)
+    if not cands:
+        return
+    choice = wifi_choice.decide(cands)
+    for c in cands[:4]:
+        f[f"network '{c.ssid}'"] = (f"{c.band_ghz} GHz channel {c.channel}, signal {c.signal:.0f} dBm, SNR {c.snr:.0f} dB, "
+                                    f"SINR {c.sinr:.0f} dB, expected link rate {c.rate:.0f} Mb/s" + (" (joined)" if c.current else ""))
+    keys = {f"network '{c.ssid}'": f[f"network '{c.ssid}'"] for c in cands[:2]}
+    best = choice.best
+    if choice.action == "switch":
+        findings.append(Finding("network_switch", "warning", f"'{best.ssid}' is clearly better here than the joined network.", keys,
+                                f"Join '{best.ssid}' from the Wi-Fi menu ({choice.reason})."))
+    elif choice.action == "try":
+        findings.append(Finding("network_try", "info", f"'{best.ssid}' and the joined network are about equal here.", keys,
+                                "The difference is within the measurement's spread; a short test of both decides "
+                                "(scripts/wifi_trial.py, about 1 minute per network, drops the connection briefly)."))
+    elif choice.action == "stay":
+        findings.append(Finding("network_stay", "info", "The joined network is the best choice here.", keys, choice.reason[0].upper() + choice.reason[1:] + "."))
+    elif choice.action == "rank":
+        findings.append(Finding("network_rank", "info", f"'{best.ssid}' has the best expected rate here.", keys,
+                                "The joined network's name was not readable (wdutil needs the administrator password)."))
 
 
 def baseline_from_store(store) -> dict | None:

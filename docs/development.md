@@ -99,6 +99,14 @@ python scripts/measure_job_energy.py --job heavy           # one job in each ene
 python scripts/run_workloads.py --tier 2                   # synthetic everyday workloads
 python scripts/run_controller_test.py                      # the power controller holding training at a set power (5 min)
 python scripts/profile_calls.py                            # where the time of the model calls went
+
+# Wi-Fi and Bluetooth (Stage 8; `sudo -v` first)
+python scripts/wifi_experiment.py                          # W1: how long to measure
+python scripts/wifi_walk.py --plan logs/home/plan.json     # coverage walk at the floor plan's points
+python scripts/coverage_report.py                          # coverage maps and the model check
+python scripts/wifi_trial.py --label PLACE --rank-only     # which home network is best here (no disconnection)
+python scripts/wifi_trial.py --label PLACE                 # ... and a join-and-measure test of the candidates
+python scripts/wifi_choice_check.py WALK.jsonl --current SSID   # replay a walk through the network choice
 ```
 
 Long test-set runs start with the speed check and stop with a warning if the Mac is far below its normal speed

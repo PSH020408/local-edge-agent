@@ -42,6 +42,7 @@ KOREAN_TERMS = (
     ("latency to the router", "공유기까지 지연 시간"), ("latency to the internet", "인터넷까지 지연 시간"), ("jitter", "지터(지연의 흔들림)"),
     ("p95", "상위 5% 지연"), ("loss", "패킷 손실"), ("AWDL", "AWDL (AirDrop·Handoff용 무선 기능)"), ("channel utilisation", "채널 사용률"),
     ("DNS lookup", "DNS 조회 시간"), ("latency under load", "부하 중 지연"), ("spatial streams", "공간 스트림 수"),
+    ("SINR", "신호 대 간섭·잡음비(SINR)"), ("expected link rate", "예상 링크 속도"),
     ("with care", "주의하면 가능"), ("not now", "지금은 어려움"),
 )
 
