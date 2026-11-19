@@ -266,3 +266,30 @@ each point, against the latency of the network actually joined (AP-A 5 GHz):
 (Living area, west), join each candidate for about a minute (`scripts/wifi_trial.py`) and compare download, upload
 and p95 with the ranking. Gate, written before the run: at the switch places, the advised network has a higher
 download than AP-A and a p95 of 50 ms or less in at least 2 of 3; the try place is reported, not graded.
+
+## Through the walls or around them? (2026-11-19, `scripts/coverage_paths.py`)
+
+Question from the review: in an apartment of reinforced concrete, does the signal reach other rooms through the
+walls or around them, through doors and corridors, bending at door frames? Two geometries per point from the
+base drawing: the straight line with the walls it crosses, and the shortest route through open space and open
+doors (Dijkstra on the floor grid, pulled taut; `coverage.DoorPaths`) with its bends in right angles.
+
+| AP-A link, held-out points (5, 9, 12, 18) | Walk 1 | Walk 2 |
+|---|---|---|
+| Straight line, one loss per wall | 13.7 dB | 11.9 dB |
+| IDW interpolation | 7.2 dB | 6.2 dB |
+| Door path, loss per bend | **3.1 dB** | **4.4 dB** |
+| Both paths, power sum | 6.6 dB | 5.5 dB |
+
+- Leave-one-out on all 24 points: 4.7 and 5.4 dB for the door path, 10.0 for the wall model.
+- Fitted: n 2.9-3.3, 10-12 dB per right-angle bend; the through-wall path, when fitted beside it, about 30 dB per
+  wall (so it adds almost nothing).
+- Bath 1 (below Room A): measured -78.5 / -80.3 dBm; door path -76.7 / -79.5; through the wall -64.3 / -65.9.
+  Kitchen behind the router's wall (1.2 m): measured -69.9 / -70.8; door path -69.8 / -73.6; through the wall
+  -45.6 / -48.9.
+- Not the same for every router: for AP-B and AP-C (beacons, 13-23 points) the door path did not beat the wall
+  model, and the fitted wall loss was 4-16 dB: some walls around them are lighter partitions. "Ignore the walls"
+  holds around AP-A, not everywhere.
+- Caveats: the door-path model was proposed after the walks, so this is not a pre-registered pass; 4 held-out
+  points; the Entry's opening is closed in the drawing (its route snaps 1.1 m). Next check: the points of a new walk
+  or of the trial W4.

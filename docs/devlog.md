@@ -273,3 +273,8 @@ Same day, from the user's review of the guide: "can I run a document question?" 
 - "Which Wi-Fi should I use here?": ranked from one scan (SINR, rate expected from the measured table), a short
   join-and-measure test when the difference is within the 5 dB spread (`scripts/wifi_trial.py`). Replayed on walk 2:
   all points with latency spikes advised to switch, none advised to stay had them. Next: trial W4 on the Mac.
+- Through the walls or around them: routing AP-A's signal along the shortest way through open space and doors,
+  with about 10-12 dB per right-angle bend, predicts the held-out points to 3-4 dB, against 12-14 dB for one loss
+  per wall on the straight line. The bathroom below the router's room is 3.7 m away through concrete but 6.4 m and
+  two bends around it, which is why it gets almost nothing. Not true of the other two routers, whose walls are
+  lighter. Found after the walks, so the next walk is the real test.

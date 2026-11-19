@@ -104,6 +104,7 @@ python scripts/profile_calls.py                            # where the time of t
 python scripts/wifi_experiment.py                          # W1: how long to measure
 python scripts/wifi_walk.py --plan logs/home/plan.json     # coverage walk at the floor plan's points
 python scripts/coverage_report.py                          # coverage maps and the model check
+python scripts/coverage_paths.py logs/home/walk_*.jsonl    # through the walls or around them: four models compared
 python scripts/wifi_trial.py --label PLACE --rank-only     # which home network is best here (no disconnection)
 python scripts/wifi_trial.py --label PLACE                 # ... and a join-and-measure test of the candidates
 python scripts/wifi_choice_check.py WALK.jsonl --current SSID   # replay a walk through the network choice

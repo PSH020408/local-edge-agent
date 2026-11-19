@@ -208,9 +208,11 @@ Which of the home's networks to use at the current place, from SNR and SINR.
   to stay had them.
 - **Repeatability:** the same points measured on two days differed by 3.0 dB RMS, which bounds how precisely any
   map can be checked.
-- **A path-loss model did not pass its gate:** one loss per wall gave 12-14 dB error on held-out points, because
-  the walls differ too much (a wall behind the router cost about 30 dB, others a few) and their materials are not
-  known from a floor plan. The maps are therefore interpolated from the measurements, not modelled.
+- **The signal goes around the walls, not through them:** a model with one loss per wall on the straight line
+  gave 12-14 dB error on held-out points. Routing the signal instead along the shortest way through open space and
+  doors, with a loss per bend, gave 3-4 dB, better than interpolating the measurements (6-7 dB). It explains why
+  the bathroom right below the router's room gets almost nothing: through the concrete wall it is 3.7 m away,
+  around it 6.4 m with two bends. The maps stay interpolated from the measurements, as decided before the walks.
 - **RSSI** is read as macOS reports it, in dBm converted by the chip's driver and not calibrated: absolute values
   are approximate, comparisons on the same Mac are reliable.
 

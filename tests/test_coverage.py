@@ -56,6 +56,17 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(self.plan.geometry((300, 300))["doors"], ["router room"])
         self.assertEqual(self.plan.geometry((300, 60))["doors"], [])
 
+    def test_door_path_goes_around_walls(self):
+        routes = cv.DoorPaths(self.plan, self.plan.router)
+        same_room = routes.route((160, 120))
+        self.assertEqual(same_room["bends"], 0)
+        below = routes.route((100, 300))            # below the router room's bottom wall: out through the door gap
+        self.assertGreater(below["path_m"], self.plan.distance_m((100, 300)) + 0.5)
+        self.assertGreaterEqual(below["bends"], 1)
+        self.assertLess(below["snapped_m"], 0.1)
+        closed = routes.route((300, 60))           # a room without a door: no open way, the nearest open place is used
+        self.assertGreater(closed["snapped_m"], 0.5)
+
     def test_distance_includes_height(self):
         self.assertAlmostEqual(self.plan.distance_m((100, 100)), 0.35, places=2)
         self.assertAlmostEqual(self.plan.distance_m((200, 100)), math.hypot(2.0, 0.35), places=3)

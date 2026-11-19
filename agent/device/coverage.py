@@ -127,6 +127,85 @@ class Plan:
         return other
 
 
+# ---------------------------------------------------------------- the path through open doors
+
+class DoorPaths:
+    """Shortest route from the router to each place through open space and open doors, never through a wall
+    (Dijkstra on the floor grid, then pulled taut so it bends only at corners and door frames).
+
+    Walk 2 showed why: where a concrete wall stands between them, a place reached through a door at twice the
+    distance had a stronger signal than one right behind the wall; the signal travels along rooms and corridors
+    and bends (diffraction, reflection) at door frames. Each bend costs signal; the total turn is measured in
+    right angles (90 degrees = 1)."""
+
+    def __init__(self, plan: "Plan", router, step: int = 2, clearance: int = 2):
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import dijkstra
+        self.plan, self.step = plan, step
+        free = plan.floor & ~ndimage.binary_dilation(plan.walls, iterations=clearance)
+        self.free = free
+        grid = free[::step, ::step]
+        h, w = grid.shape
+        index = -np.ones((h, w), dtype=np.int64)
+        index[grid] = np.arange(int(grid.sum()))
+        rows, cols, costs = [], [], []
+        for dy, dx in ((0, 1), (1, 0), (1, 1), (1, -1)):
+            if dx >= 0:
+                a, b = index[0:h - dy, 0:w - dx], index[dy:h, dx:w]
+            else:
+                a, b = index[0:h - dy, -dx:w], index[dy:h, 0:w + dx]
+            ok = (a >= 0) & (b >= 0)
+            rows.append(a[ok]); cols.append(b[ok]); costs.append(np.full(int(ok.sum()), math.hypot(dx, dy)))
+        n = int(grid.sum())
+        graph = coo_matrix((np.concatenate(costs), (np.concatenate(rows), np.concatenate(cols))), shape=(n, n)).tocsr()
+        self.index, self.cells = index, np.argwhere(grid)          # cells: (row, col) of each node
+        self.source = self._node(router)
+        self.dist, self.pred = dijkstra(graph, directed=False, indices=self.source, return_predecessors=True)
+
+    def _node(self, xy) -> int:
+        """The reachable grid cell nearest to xy (a router stands against a wall, so its own pixel is not free)."""
+        reach = getattr(self, "dist", None)
+        ok = np.arange(len(self.cells)) if reach is None else np.flatnonzero(np.isfinite(reach))
+        cells = self.cells[ok]
+        k = int(np.argmin((cells[:, 1] * self.step - xy[0]) ** 2 + (cells[:, 0] * self.step - xy[1]) ** 2))
+        return int(ok[k])
+
+    def _visible(self, a, b) -> bool:
+        n = max(1, int(math.dist(a, b)))
+        xs = np.rint(np.linspace(a[0], b[0], n + 1)).astype(int)
+        ys = np.rint(np.linspace(a[1], b[1], n + 1)).astype(int)
+        return bool(self.free[ys, xs].all())
+
+    def route(self, xy) -> dict:
+        """Length (m, with the height difference), number of bends, total turn in right angles, the taut route."""
+        node, chain = self._node(xy), []
+        r0, c0 = self.cells[node]
+        snapped = math.dist((c0 * self.step, r0 * self.step), xy) * self.plan.m_per_px   # > 0.5 m: no open way there
+        while node >= 0:
+            r, c = self.cells[node]
+            chain.append((int(c) * self.step, int(r) * self.step))
+            node = int(self.pred[node]) if node != self.source else -1
+        chain.reverse()
+        taut, i = [chain[0]], 0
+        while i < len(chain) - 1:
+            j = len(chain) - 1
+            while j > i + 1 and not self._visible(chain[i], chain[j]):
+                j -= 1
+            taut.append(chain[j])
+            i = j
+        turns = []
+        for a, b, c in zip(taut, taut[1:], taut[2:]):
+            v1, v2 = np.subtract(b, a), np.subtract(c, b)
+            cos = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+            angle = math.degrees(math.acos(max(-1.0, min(1.0, cos))))
+            if angle > 15:
+                turns.append(angle)
+        flat = sum(math.dist(a, b) for a, b in zip(taut, taut[1:])) * self.plan.m_per_px
+        height = self.plan.device_height_m - self.plan.router_height_m
+        return {"path_m": round(max(0.3, math.hypot(flat, height)), 2), "bends": len(turns),
+                "turn": round(sum(turns) / 90, 2), "route": taut, "snapped_m": round(snapped, 2)}
+
+
 # ---------------------------------------------------------------- the model
 
 @dataclass

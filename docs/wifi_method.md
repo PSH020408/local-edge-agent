@@ -46,8 +46,8 @@ is connected; the Mac only listened, without connecting to the iPhone.
 
 | Effect | Why it matters indoors | Seen in | Assumption | How it was handled |
 |---|---|---|---|---|
-| Distance loss | Walls and obstacles make the signal fall faster than in free space (n = 2) | RSSI | The signal comes along the straight line from the router | Distance per point from the floor plan (scale from a measured 3 m room width); the rate fitted to the measurements: n ≈ 3 |
-| Walls | A home is divided by walls; one wall can cost more than metres of distance | RSSI | None: the measured values are used directly | A model with one loss per wall failed its held-out test (12-14 dB error against a 5 dB gate): walls differ by tens of dB and their materials are not known from a floor plan. **The maps interpolate the measurements (IDW)** instead of predicting through walls; this was reviewed with a professor of wireless communications, who agreed that measured values are the right basis when the walls are unknown |
+| Distance loss | Walls and obstacles make the signal fall faster than in free space (n = 2) | RSSI | Distance is counted along the way the signal travels (below) | Distances from the floor plan (scale from a measured 3 m room width); the rate fitted to the measurements: n ≈ 3 |
+| Walls: through or around? | Apartment walls are largely reinforced concrete; signal can pass through a wall or go around it through doors and corridors, bending at door frames (diffraction, reflection) | RSSI | Around AP-A, signal through the concrete walls is negligible | Through the walls: one loss per wall failed its held-out test (12-14 dB against a 5 dB gate). Around them: the shortest route through open space and open doors, with a loss per bend, passed it (section 3). The maps still interpolate the measurements (IDW), as decided before the walks; a professor of wireless communications agreed that measured values are the right basis when the walls are unknown |
 | Fast fading | Reflections make the signal change within centimetres | RSSI fluctuation | Averaging in time and over two placements removes it | 10 Hz for 10 s at two placements 30 cm apart (the 5 GHz wavelength is 6 cm); at a fixed place, 10 s means stayed within ±0.3 dB |
 | Thermal noise | The floor of reception: the signal must exceed it by enough SNR to be decoded at a given MCS | Noise | The chip's noise value is correct | Theory: −174 dBm/Hz + 10·log10(80 MHz) ≈ −95 dBm, plus a few dB of receiver noise; measured −92 to −94 dBm |
 | Co-channel interference | Two of the three routers use the same channels (5 GHz channel 44, 2.4 GHz channel 11) | Scan (other networks' beacons), CCA | Interferers below −82 dBm add to the noise; stronger ones share airtime | SINR computed per network and per point (section 3); shared networks counted |
@@ -56,7 +56,7 @@ is connected; the Mac only listened, without connecting to the iPhone.
 
 | Effect | Why it matters indoors | Status | Alternative |
 |---|---|---|---|
-| Reflection and diffraction as separate paths | A room can be reached more strongly through an open door than through the wall | Included in the measured RSSI; not modelled | Not needed while the maps use measurements |
+| Which walls are concrete | Light partitions let signal through; concrete stops it | Around AP-A the walls cost about 30 dB each; around AP-B and AP-C the fits give 4-16 dB, so some of their walls are lighter | The building's structural drawings |
 | Router-to-Mac modulation | The router picks its own MCS for what it sends | Not readable on the Mac (wdutil shows the Mac's side only) | Measured indirectly through the download speed; a packet capture could read it from frame headers (not tried) |
 | Airtime actually used by the other networks | Shared airtime only costs when the other network is busy | CCA was 0-5% with the home idle | Measure under load |
 
@@ -110,6 +110,25 @@ Where an interferer was just below −82 dBm, SINR and SNR part (both from the s
 
 Room C is the one point where an SNR above 25 dB still had latency spikes; its SINR was lower. Two points are a
 hint, not a result.
+
+**Through the walls or around them?** For AP-A, four models were fitted to the link signal and scored on the
+points held out before the walks ([scripts/coverage_paths.py](../scripts/coverage_paths.py)):
+
+| Model | Held-out RMSE, walk 1 | Walk 2 |
+|---|---|---|
+| Straight line, one loss per wall | 13.7 dB | 11.9 dB |
+| Interpolation of the measurements (IDW) | 7.2 dB | 6.2 dB |
+| **Door path:** shortest route through open space and doors, a loss per bend | **3.1 dB** | **4.4 dB** |
+| Both paths (power sum) | 6.6 dB | 5.5 dB |
+
+Door path fitted: n ≈ 3, about 10-12 dB per right-angle bend; the through-wall part, where fitted, cost about
+30 dB per wall, so little passes through them. This explains Bath 1, directly below Room A: through the wall it
+is 3.7 m away and would get about −65 dBm; around it, out of Room A's door, along the hall and in through the
+bathroom door, it is 6.4 m with almost two right-angle bends, predicted −79 dBm; measured −80 dBm. The kitchen
+right behind the router's wall (1.2 m) is the same case: −71 dBm measured, −74 predicted, −49 through the wall.
+Limits: the model was chosen after seeing the walks, the held-out set has 4 points, and for AP-B and AP-C it did
+not help (their walls are lighter: 4-16 dB each). The Entry's opening is drawn closed in the base drawing, so
+its route there is approximate.
 
 **Latency to the router** (ping, the Wi-Fi segment)
 - Strong signal (most points): median about 3 ms, 95th percentile 3-6 ms, no reply above 50 ms, no loss.
@@ -178,5 +197,6 @@ advised, not yet that the other network is better there; the trial (W4) tests th
 | Repeat measurements differ by 3 dB RMS | Co-channel networks above −82 dBm take turns | Router-to-Mac modulation (only through download speed) |
 | Noise floor −92 to −94 dBm | The router radiates equally in all directions | Interference under load (CCA was 0-5% idle) |
 | AWDL causes the latency spikes | The signal varies smoothly between points (maps) | Whether the advised network is faster (trial W4) |
+| AP-A's signal goes around walls, not through them | | The door-path model at new points (it was chosen after the walks) |
 | Two routers share their channels | | Whether −68 dBm holds at other times |
 | The routers are linked by cable | | |
