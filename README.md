@@ -1,9 +1,10 @@
 # Local Edge Agent
 
 A personal AI agent that runs entirely on a MacBook Pro (Apple M4 Pro, 24 GB unified memory). It answers
-questions about your documents and images, does engineering math, and diagnoses the Mac it runs on from its
-own battery, power, thermal, memory and storage sensors. Every model runs locally through Ollama; nothing is
-sent to a cloud service.
+questions about your documents and images, does engineering math, diagnoses the Mac it runs on from its own
+battery, power, thermal, memory and storage sensors, and judges its wireless links: which Wi-Fi to use where,
+whether the connection is good enough for a game, a call or 4K, and why Bluetooth cuts out. Every model runs
+locally through Ollama; nothing is sent to a cloud service.
 
 Author: PARK, SEHO
 
@@ -164,98 +165,92 @@ routing 40 of 40; live battery answers in 4.7 s, live performance answers in 14.
 
 ### 5. Wi-Fi, network and Bluetooth
 
-**Covers:** where a slow connection comes from, hop by hop: the radio link (signal, noise, SNR, modulation), the
-Wi-Fi segment to the router (latency, spikes, loss), the internet beyond it, and DNS. Verdicts for games, video
-calls, 4K streaming, browsing and messaging come from measured latency, loss and speed, not from the signal alone.
-Which of the home's networks to use at the current place, from SNR and SINR.
+**In short:** ask in your own words whether the connection is good enough for what you want to do here. The
+agent measures for 10-60 seconds and answers in plain words: what works, why it doesn't, and what to change.
+Behind each verdict is the full radio chain the Mac's chip reports, and every rule was set by an experiment in
+this home.
 
 **Example questions**
-- `Why is my Wi-Fi slow?`
-- `Is the problem my Wi-Fi or my internet provider?`
-- `Can I play an online game on this Wi-Fi now?`
-- `Is my internet connection good enough for a video call?`
-- `How fast is my internet? Can I stream 4K?`
-- `Which Wi-Fi should I use here?`
-- `롤 지금 해도 돼? 핑이 가끔 튀어`
-- `Is my Bluetooth speaker signal ok?`
+- `여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어?` / `Which Wi-Fi should I use here and what can I do?`
+- `게임 해도 돼?`, `배그 핑 괜찮아?`, `Can I play games now?` (any online game by name, or games in general)
+- `화상 통화 해도 괜찮을까?`, `인터넷 속도 어때? 4K 스트리밍 돼?`
+- `와이파이 왜 이렇게 느려?`, `Is the problem my Wi-Fi or my internet provider?`
+- `에어팟 자꾸 끊겨`, `블루투스 스피커 신호 괜찮아?`
+- Add `자세히` (in detail) to any of them for the engineering view.
 
-**What the measurements found on this Mac**
-- **Latency spikes come from AirDrop's radio (AWDL).** With AWDL switched off and on in 8 random-order pairs, the
-  spikes to the router were lower with it off in 7 of 8 pairs; where it stayed off, the 95th-percentile latency
-  fell from 60-170 ms to about 3 ms. The agent names it as the cause only when AWDL is active.
-- **Measuring time is set by experiment:** 10 s gives the median latency within 0.4 ms; the 95th percentile needs
-  30 s, so questions about games and calls measure for 30 s.
+**What you get** (a measured place two rooms from the router, shortened)
 
-**Coverage survey of a home with three routers** (25 points, the Mac on a chair, all routers on the floor)
+```
+와이파이: curi6 5g · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s
+핑: 평소 13 ms, 가끔 튐 (30초에 1번)
+게임 ⚠️ 가끔 끊길 수 있음   화상회의 ✅   메신저 ✅   4K ✅   10 GB 받기 약 11분
+핑이 튀는 이유: 맥이 근처 애플 기기(아이폰 등)와 연결하려고 와이파이를 잠깐씩 비워서 그래요
+추천: "curi"로 바꾸면 더 빨라요 (신호 매우 좋음, 최대 약 433 Mb/s)
+```
+
+With `자세히`, the same card shows the evidence:
+
+```
+지금: curi6 5g, 신호 -69 dBm → SNR 25 dB (SINR 17) → 64-QAM 3/4 (MCS 6) → 링크 263 Mb/s
+측정: 다운 120 / 업 40 Mb/s, 평소 핑 13 ms, 스파이크 1회(와이파이 구간), 손실 0%
+병목: 와이파이 구간 (공유기까지 구간에서 이미 핑이 튐)
+다른 와이파이:
+  curi (5 GHz ch 149): -44 dBm, SINR 50 dB, 예상 256-QAM 5/6, 링크 약 433 Mb/s
+```
+
+Asked about a game, the card adds one line when needed, e.g. `게임 팁: AirDrop을 끄세요`. Asked about Bluetooth, it
+lists connected and paired devices with their battery, which ones are in range, and why audio or a mouse may
+cut out (low battery, weak signal, or Wi-Fi on 2.4 GHz sharing the band).
+
+**How it works**
+
+```
+radio (CoreWLAN, wdutil, scan, CoreBluetooth, system_profiler)
+   signal, noise -> SNR; other routers on the channel -> SINR (802.11 CCA rule, -82 dBm)
+   -> modulation (MCS) -> link rate
+application view (ping to the router and to the internet at 10-20 Hz, networkQuality)
+   usual ping, spikes over the usual, share of late pings, loss, download and upload
+verdict per use, from published requirements
+   games: spikes over the player's usual ping | calls: Microsoft Teams (RTT < 100 ms, jitter < 30 ms,
+   loss < 1%, 1.5 Mb/s each way) | 4K: Netflix (15 Mb/s) | large files: minutes for 10 GB
+diagnosis and advice (code)
+   bottleneck: Wi-Fi link or beyond the router | better network here | AirDrop before a game
+explanation (local model, numbers checked against the measurements)
+```
+
+The radio values explain and predict; the verdicts come from what the application feels. That split is what lets
+the agent say "the signal is excellent, but the ping is not steady, and here is why".
+
+**What the experiments in this home found**
+
+| Experiment | Finding | What the agent does with it |
+|---|---|---|
+| W1: measuring time | Median ping settles in 10 s, the 95th percentile needs 30 s | 10 s for a quick check, 30 s for games and calls |
+| Walks 1-2: 25 points, 3 routers | Modulation steps down with SNR: 256-QAM from about 33 dB, QPSK below 15 dB; spikes start below about -68 dBm (Cisco's voice guideline: -67 dBm) | Rate table for predicting other networks; signal labels in the card |
+| Walks: where it drops | The places where the Wi-Fi cuts out are another router's area, 20-28 dB stronger there | "Which Wi-Fi here": ranking from one scan, a short join-and-measure test when it is close |
+| SINR | Two routers share a channel; counted as noise, SINR is about 0 dB, yet 256-QAM was used: they take turns (CSMA/CA) | Only co-channel networks below -82 dBm are added to the noise |
+| Propagation | Through-the-wall model: 12-14 dB error; shortest route through doors with a loss per bend: 3-4 dB | Explains the dead spot under the router's room; maps stay measured |
+| W2: AirDrop's radio (AWDL) | 8 random-order pairs: spikes lower with it down in 7 | Names it as the cause when the spikes start on the Wi-Fi link |
+| C1: four Continuity features, one at a time (twice) | AirDrop set to Everyone: 26% of pings 20-90 ms late; Handoff, iPhone widgets, AirPlay Receiver: no effect | Settings read before a game |
+| G1: six real LoL matches | AirDrop on: 13.7% of pings late, router p99 87 ms; AirDrop off: 0%, p99 4 ms, whatever else was on | `게임 팁: AirDrop을 끄세요`, the rest left on |
+
+**Coverage survey** (25 points, the Mac on a chair, all routers on the floor)
 
 | Measurement map | Strongest router on 5 GHz |
 |---|---|
 | ![Measurement map](docs/images/wifi/measurement-map.png) | ![Combined 5 GHz](docs/images/wifi/combined-5ghz.png) |
 
-- **Link adaptation, measured:** the modulation stepped down with the signal, from MCS 9 (256-QAM) above about
-  -60 dBm to MCS 1 near -80 dBm. Every point at or above -68 dBm met the game and call criterion (p95 latency
-  50 ms or less); below it, latency spikes appeared at some points (77-120 ms) and the first walk's weakest point
-  (SNR 7) reached 243 ms. Messaging keeps working almost to the edge of coverage, while speed falls much earlier
-  (download 433, 390, 298, 150 and 81 Mb/s from the router outwards).
-- **Where the Wi-Fi drops:** the places where the Mac's own 5 GHz network cuts out in daily use (Room C, the
-  entry, a bathroom) are all in another router's area, whose signal is 20-28 dB stronger there.
-- **SNR and SINR:** two routers share their channels on both bands (5 GHz 44, 2.4 GHz 11). Counting the other
-  router as noise gives a SINR near 0 dB in the living area, yet the Mac used 64-QAM to 256-QAM there: the routers
-  hear each other and take turns (CSMA/CA), so the cost is airtime, not SINR. The agent therefore adds to the noise
-  only networks heard below the 802.11 CCA level (-82 dBm).
-- **One card per place, in everyday words:** "Which Wi-Fi should I use here and what can I do?" measures for
-  about a minute and answers in a fixed format anyone can read; adding "자세히" (in detail) shows the radio chain
-  behind it (signal, SNR and SINR, modulation, link rate, the bottleneck) for review. `scripts/wifi_here.py` joins
-  the strong networks in turn and compares their measured values side by side.
-
-  ```
-  와이파이: curi6 5g · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s
-  핑: 평소 13 ms, 가끔 튐 (30초에 1번)
-  게임 ⚠️ 가끔 끊길 수 있음   화상회의 ✅   메신저 ✅   4K ✅   10 GB 받기 약 11분
-  핑이 튀는 이유: 맥이 근처 애플 기기(아이폰 등)와 연결하려고 와이파이를 잠깐씩 비워서 그래요
-  추천: "curi"로 바꾸면 더 빨라요 (신호 매우 좋음, 최대 약 433 Mb/s)
-  ```
-
-  In detail:
-
-  ```
-  지금: curi6 5g, 신호 -69 dBm → SNR 25 dB (SINR 17) → 64-QAM 3/4 (MCS 6) → 링크 263 Mb/s
-  측정: 다운 120 / 업 40 Mb/s, 평소 핑 13 ms, 스파이크 1회(와이파이 구간), 손실 0%
-  병목: 와이파이 구간 (공유기까지 구간에서 이미 핑이 튐)
-  다른 와이파이:
-    curi (5 GHz ch 149): -44 dBm, SINR 50 dB, 예상 256-QAM 5/6, 링크 약 433 Mb/s
-  ```
-- **Games and Apple's Continuity features:** day to day AirDrop, Handoff, iPhone widgets and AirPlay Receiver stay
-  on. Asked about a game, the agent checks them: in experiment C1, AirDrop set to "Everyone" delayed a quarter of
-  the pings for minutes while the other three showed no effect, and six real LoL matches (G1) confirmed it, so
-  the tip is simply "turn AirDrop off", the rest left on.
-- **Criteria from the applications' makers:** calls from Microsoft Teams' network requirements (round trip under
-  100 ms, jitter under 30 ms, loss under 1%, 1.5 Mb/s each way), 4K from Netflix (15 Mb/s, with headroom),
-  downloads as a time. Verdicts come from what the application feels; the radio values explain and predict.
-- **Games: spikes, not the average.** A player at 10-15 ms who jumps to 40-50 ms for a moment loses fights, yet
-  no reply passes 50 ms. The game verdict now counts rises of 20 ms over the player's usual ping, 10 pings a
-  second, and says whether each rose on the Wi-Fi link or beyond the router. `scripts/game_watch.py` runs during a
-  game and reports every spike with its cause (AWDL, Wi-Fi link, or the line).
-- **Which network to use:** ranked from one scan (SINR, then the link rate expected from the measured
-  rate-against-SNR table); a short test of each candidate when the difference is within the 5 dB spread of the
-  measurement. Replayed on the survey, every point with latency spikes was advised to switch and no point advised
-  to stay had them.
-- **Repeatability:** the same points measured on two days differed by 3.0 dB RMS, which bounds how precisely any
-  map can be checked.
-- **The signal goes around the walls, not through them:** a model with one loss per wall on the straight line
-  gave 12-14 dB error on held-out points. Routing the signal instead along the shortest way through open space and
-  doors, with a loss per bend, gave 3-4 dB, better than interpolating the measurements (6-7 dB). It explains why
-  the bathroom right below the router's room gets almost nothing: through the concrete wall it is 3.7 m away,
-  around it 6.4 m with two bends. The maps stay interpolated from the measurements, as decided before the walks.
-- **RSSI** is read as macOS reports it, in dBm converted by the chip's driver and not calibrated: absolute values
-  are approximate, comparisons on the same Mac are reliable.
-
 Wi-Fi coverage maps use inverse-distance weighting (IDW) to interpolate detected beacon RSSI separately for each
 AP and band, using 7–24 readings from 25 survey points.
 
-All maps (each router and band, both bands combined, and Bluetooth LE from an iPhone): [docs/images/wifi/](docs/images/wifi/).
-Method, assumptions and results: [docs/wifi_method.md](docs/wifi_method.md). Experiments and decisions:
-[evals/wireless/experiments.md](evals/wireless/experiments.md).
+**Honest limits.** RSSI is what macOS reports in dBm, converted by the chip's driver and not calibrated: absolute
+values are approximate, comparisons on the same Mac are reliable. Repeat measurements of the same point differed
+by 3 dB RMS between days. The Mac shows only its own transmit modulation; the router's side is seen through the
+download speed. The game rule (+20 ms over the usual ping) is calibrated on one player and one game.
+
+All maps (each router and band, both bands, Bluetooth LE from an iPhone): [docs/images/wifi/](docs/images/wifi/).
+Method, assumptions and results: [docs/wifi_method.md](docs/wifi_method.md). Every experiment with its prediction
+and gate: [evals/wireless/experiments.md](evals/wireless/experiments.md).
 
 **Next, Stage 9:** ask the Mac's agent from an iPhone (Shortcuts and Siri); a battery-time model fitted on logged
 discharge sessions.
@@ -273,13 +268,13 @@ discharge sessions.
 ```
 question --> router (keyword rules; a small model only if the rules tie)
                |
-   +-----------+------------+----------------+------------------+
-   v           v            v                v                  v
- tools       image        document         battery          performance
- (math,      planner      planner          agent            agent
-  time)      (vision)     (pages, cites)   (sensors)        (sensors, 10 s capture)
-   |           |            |                |                  |
-   +-----------+------------+-------+--------+------------------+
+   +-----------+------------+----------------+------------------+-----------------+
+   v           v            v                v                  v                 v
+ tools       image        document         battery          performance       network
+ (math,      planner      planner          agent            agent             agent
+  time)      (vision)     (pages, cites)   (sensors)        (sensors, 10 s    (radio, pings,
+   |           |            |                |                capture)          speed, Bluetooth)
+   +-----------+------------+-------+--------+------------------+-----------------+
                                     v
             code does the exact work: computes, reads twice and compares, checks citations,
             diagnoses from thresholds and rules
@@ -366,7 +361,7 @@ The full history, with dates and every run: [docs/devlog.md](docs/devlog.md).
 | 3 | Images: question planner, two-reading text check | Done |
 | 4-6 | Documents: cited answers, equations, tables, statements and charts | Done (one holdout pending) |
 | 7 | This Mac: sensors, battery and performance agents, energy policy, workloads, power controller | Done |
-| 8 | Network agent, Wi-Fi experiments (W1-W3), coverage survey of three routers, Bluetooth LE | Done (11-19) |
+| 8 | Network agent: radio chain to per-use verdicts, network choice, game advice, Bluetooth; experiments W1-W3, two coverage walks, C1, G1 | Done (11-21) |
 | 9 | iPhone client, battery-time model | Next |
 | 10 | Results, plots, demo | Planned |
 

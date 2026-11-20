@@ -404,3 +404,45 @@ id = "R05"
 question = "와이파이 원리 설명해줘"
 scenario = "recorded"
 route = "none"
+
+# Stage 8 wrap-up: the connection card, games of any name, Bluetooth, and the detail mode.
+[[case]]
+id = "N10"
+question = "게임 해도 돼?"
+scenario = "live"
+route = "network"
+keys = ["게임"]
+
+[[case]]
+id = "N11"
+question = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어?"
+scenario = "live"
+route = "network"
+keys = ["와이파이", "추천"]
+
+[[case]]
+id = "N12"
+question = "에어팟 자꾸 끊겨"
+scenario = "live"
+route = "network"
+keys = ["블루투스"]
+
+[[case]]
+id = "N13"
+question = "배그 핑 괜찮아?"
+scenario = "live"
+route = "network"
+
+[[case]]
+id = "N14"
+question = "와이파이로 뭐 할 수 있어? 자세히"
+scenario = "live"
+route = "network"
+keys = ["SNR"]
+
+[[case]]
+id = "N15"
+question = "게임 돌려도 돼?"
+scenario = "live"
+route = "performance"
+note = "Running a game is the Mac's load, not the connection."

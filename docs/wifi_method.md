@@ -200,3 +200,19 @@ advised, not yet that the other network is better there; the trial (W4) tests th
 | AP-A's signal goes around walls, not through them | | The door-path model at new points (it was chosen after the walks) |
 | Two routers share their channels | | Whether −68 dBm holds at other times |
 | The routers are linked by cable | | |
+
+## 7. Games, Apple's Continuity features and the connection card (added 2026-11-21)
+
+- **Games are judged by steadiness, not the average.** A spike is a ping 20 ms or more above the player's usual
+  ping; the share of late pings catches a steady pattern that merges into one long event. Pings at 10 Hz in the
+  agent, 20 Hz during a game (`scripts/game_watch.py`), to the router and the internet at once, so each spike is
+  placed on the Wi-Fi link or beyond the router.
+- **AirDrop is the only Continuity setting that matters for the ping** (C1 twice without a game, G1 six real LoL
+  matches): set to Everyone, 13-26% of the pings arrived 20-100 ms late and the router's p99 rose from 4-5 ms to
+  87 ms; Handoff, iPhone widgets and AirPlay Receiver showed no effect. Day to day the four stay on; before a game
+  the agent says to turn AirDrop off.
+- **The card** speaks plain words by default (signal "excellent / good / fair / weak" from the SNR bands of the
+  walks, "1 in 4 pings late", "may stutter") and shows the radio chain and the evidence on request ("자세히").
+- **Bluetooth:** on or off, connected and paired devices, battery, in range (a paired device macOS reports a
+  signal for), and three causes of dropouts the agent checks: battery 20% or less, signal below -80 dBm, and the
+  Mac's Wi-Fi on 2.4 GHz, the band Bluetooth uses.

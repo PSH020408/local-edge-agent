@@ -93,7 +93,8 @@ class Measurement:
     ssid: str | None = None                           # the joined network's name, when wdutil hides it
     awdl_timeline: list[tuple[float, bool]] = field(default_factory=list)   # sampled every 0.5 s during the pings
     continuity: dict[str, bool | None] = field(default_factory=dict)        # AirDrop, Handoff, widgets, AirPlay
-    bluetooth: list[dict] | None = None
+    bluetooth: list[dict] | None = None       # connected devices
+    bt: dict = field(default_factory=dict)      # on/off, chip, connected and paired devices
     seconds: float = 10.0
     notes: list[str] = field(default_factory=list)
 
@@ -179,7 +180,8 @@ def measure(shell, helper: str, question: str = "", ping_seconds: float | None =
             named = wifi.parse_lines(shell.run("wifi_link_named", ["swift", str(wifi.HELPER_SOURCE), "link"], timeout=90).text)
             m.ssid = (named[0].get("ssid") or None) if named else None
     if re.search(BT_WORDS, q):
-        m.bluetooth = bluetooth.parse(shell.run("bluetooth", ["system_profiler", "SPBluetoothDataType", "-json"], timeout=20).text)
+        m.bt = bluetooth.parse_all(shell.run("bluetooth", ["system_profiler", "SPBluetoothDataType", "-json"], timeout=20).text)
+        m.bluetooth = m.bt["connected"]
     return m
 
 
@@ -326,12 +328,66 @@ def _one_in(share: float) -> str:
     return f"{n}번 중 1번"
 
 
+KIND_KO = {"mouse": "마우스", "keyboard": "키보드", "trackpad": "트랙패드", "headset": "헤드셋", "headphones": "헤드폰",
+           "speaker": "스피커", "gamepad": "게임패드", "audio": "오디오"}
+BATTERY_KO = {"main": "", "left": "왼쪽 ", "right": "오른쪽 ", "case": "케이스 "}
+
+
+def bt_lines(m: Measurement, korean: bool, detail: bool = False) -> list[str]:
+    """Bluetooth in the card: on or off, what is connected (with battery), what is paired and in range, and why
+    audio or input may cut out."""
+    if not m.bt:
+        return []
+    if m.bt.get("on") is False:
+        return ["블루투스: 꺼져 있어요 → 제어 센터에서 켜세요" if korean else "Bluetooth: off; turn it on in Control Centre"]
+
+    def describe(d: dict, connected: bool) -> str:
+        kind = (KIND_KO.get(d["kind"].lower(), d["kind"]) if korean else d["kind"].lower()) or ("기기" if korean else "device")
+        extra = []
+        if d.get("battery"):
+            extra.append(("배터리 " + " · ".join(f"{BATTERY_KO.get(k, k + ' ')}{v}%" for k, v in d["battery"].items())) if korean
+                         else "battery " + ", ".join(f"{k} {v}%" for k, v in d["battery"].items()))
+        if not connected and d["rssi_dbm"] is not None:
+            extra.append("근처에 있음" if korean else "in range")
+        if detail and d["rssi_dbm"] is not None:
+            extra.append(f"{d['rssi_dbm']} dBm")
+        return f"{d['name']} ({kind}{', ' + ', '.join(extra) if extra else ''})"
+
+    head = "블루투스: 켜짐" if korean else "Bluetooth: on"
+    if detail and m.bt.get("chip"):
+        head += f" ({m.bt['chip']})"
+    lines = [head]
+    conn = m.bt.get("connected") or []
+    lines.append(("  연결됨: " if korean else "  Connected: ") + (", ".join(describe(d, True) for d in conn) or ("없음" if korean else "none")))
+    paired = m.bt.get("paired") or []
+    if paired:
+        lines.append(("  연결 안 됨: " if korean else "  Paired, not connected: ") + ", ".join(describe(d, False) for d in paired[:5]))
+    low = [d["name"] for d in conn if d.get("battery") and min(d["battery"].values()) <= 20]
+    if low:
+        lines.append(f"끊김 주의: {', '.join(low)} 배터리가 부족해요 → 충전하세요" if korean else f"May cut out: {', '.join(low)} low on battery")
+    weak = [d["name"] for d in conn if d["rssi_dbm"] is not None and d["rssi_dbm"] < -80]
+    if weak:
+        lines.append(f"끊김 주의: {', '.join(weak)} 신호가 약해요 → 맥 가까이 두세요" if korean else f"May cut out: {', '.join(weak)} signal weak; bring it closer")
+    sharing = [d for d in conn if d["kind"].lower() in bluetooth.AUDIO | bluetooth.INPUT]
+    if sharing and str((m.link[0] if m.link else {}).get("band_ghz")) == "2.4":
+        lines.append("끊김 주의: 맥이 2.4 GHz 와이파이를 써서 블루투스와 같은 전파 대역을 나눠 써요 → 5 GHz 와이파이로 바꾸세요" if korean
+                     else "May cut out: the Wi-Fi is on 2.4 GHz, the band Bluetooth uses; join the 5 GHz network")
+    return lines
+
+
 def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | None = None, game_asked: bool = False,
-         detail: bool = False) -> str:
+         detail: bool = False, bt_only: bool = False) -> str:
     """The connection card: everyday words by default, the radio chain and the evidence on request."""
-    if detail:
-        return card_detail(m, r, korean, choice, game_asked)
-    return card_simple(m, korean, choice, game_asked)
+    if bt_only:
+        rssi = [x["rssi_dbm"] for x in m.link if x.get("rssi_dbm")]
+        noise = (m.link[0] if m.link else {}).get("noise_dbm")
+        snr = statistics.fmean(rssi) - noise if rssi and noise else None
+        band = (m.link[0] if m.link else {}).get("band_ghz")
+        wifi_line = (f"와이파이: {band} GHz · 신호 {signal_label(snr, True)}" if korean else f"Wi-Fi: {band} GHz, signal {signal_label(snr, False)}") if rssi else ""
+        return "\n".join(([wifi_line] if wifi_line else []) + bt_lines(m, korean, detail))
+    body = card_detail(m, r, korean, choice, game_asked) if detail else card_simple(m, korean, choice, game_asked)
+    extra = bt_lines(m, korean, detail)
+    return body + ("\n" + "\n".join(extra) if extra else "")
 
 
 def card_simple(m: Measurement, korean: bool, choice: wifi_choice.Choice | None = None, game_asked: bool = False) -> str:
@@ -690,6 +746,28 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
             if dev["rssi_dbm"] is not None and dev["rssi_dbm"] < -80:
                 findings.append(Finding("bt_weak", "warning", f"The Bluetooth {dev['kind'] or 'device'} has a weak signal and may cut out.",
                                         {f"Bluetooth {dev['kind'] or 'device'} '{dev['name']}'": value}, "Bring it closer to the Mac or remove obstacles."))
+            if dev.get("battery"):
+                f[f"battery of '{dev['name']}'"] = ", ".join(f"{k} {v}%" for k, v in dev["battery"].items())
+                low = min(dev["battery"].values())
+                if low <= 20:
+                    findings.append(Finding("bt_battery_low", "warning", f"'{dev['name']}' is low on battery.",
+                                            {f"battery of '{dev['name']}'": f[f"battery of '{dev['name']}'"]},
+                                            "Charge it: a low battery makes Bluetooth audio and input cut out."))
+        if m.bt.get("on") is False:
+            f["Bluetooth"] = "off"
+            findings.append(Finding("bt_off", "problem", "Bluetooth is off.", {"Bluetooth": "off"},
+                                    "Turn it on in Control Centre or System Settings > Bluetooth."))
+        paired = m.bt.get("paired") or []
+        if paired:
+            f["paired, not connected"] = ", ".join(d["name"] + (" (in range)" if d["rssi_dbm"] is not None else "") for d in paired)
+        # Bluetooth and 2.4 GHz Wi-Fi share the band; one radio chip takes turns between them, so audio and input
+        # devices cut out more when the Mac is on 2.4 GHz Wi-Fi.
+        sharing = [d for d in m.bluetooth if d["kind"].lower() in bluetooth.AUDIO | bluetooth.INPUT]
+        band = str((m.link[0] if m.link else {}).get("band_ghz"))
+        if sharing and band == "2.4":
+            f["Wi-Fi band"] = "2.4 GHz (shared with Bluetooth)"
+            findings.append(Finding("bt_shares_band", "warning", "The Mac's Wi-Fi is on 2.4 GHz, the band Bluetooth uses.",
+                                    {"Wi-Fi band": f["Wi-Fi band"]}, "Join the 5 GHz network of the router: Bluetooth gets the band to itself."))
     for note in m.notes:
         f.setdefault("not measured", note)
     if not [x for x in findings if x.severity in ("warning", "problem")]:
@@ -697,10 +775,11 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
                                 {"signal": f["signal"], "latency to the internet": f.get("latency to the internet", "")}, "No action needed."))
     order = {"problem": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda x: order[x.severity])
-    if uses_from_question(question) or m.throughput or choice:
+    if uses_from_question(question) or m.throughput or choice or m.bt:
         asked = [k for k, pattern in USE_WORDS if re.search(pattern, question.lower())]
+        bt_only = bool(m.bt) and not asked and not m.throughput and not choice and not re.search(OVERVIEW, question.lower())
         r.card = card(m, r, bool(re.search(r"[가-힣]", question)), choice, game_asked="game" in asked,
-                      detail=bool(re.search(DETAIL_WORDS, question.lower())))
+                      detail=bool(re.search(DETAIL_WORDS, question.lower())), bt_only=bt_only)
     return r
 
 

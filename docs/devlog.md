@@ -306,3 +306,6 @@ Same day, from the user's review of the guide: "can I run a document question?" 
 - AirDrop set to Everyone delayed 13% of the pings by 20-100 ms through whole matches (router p99 87 ms); with it
   off, whatever else was on (Handoff, iPhone widgets, AirPlay Receiver), 0% and p99 4-5 ms, the same as all off.
   The pre-registered gate passed. The game advice now rests on C1 and G1.
+- Stage 8 closed: any game question goes to the network agent; Bluetooth answers list connected and paired
+  devices with battery and the causes of dropouts; README section rewritten for anyone first, engineers second;
+  six new live cases (N10-N15) for the final run.

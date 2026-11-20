@@ -34,13 +34,13 @@ def series(base, n, spike_share=0.0, loss=0.0, seed=1):
     return out
 
 
-def watch(rssi, noise=-94, n=50):
-    return "\n".join(json.dumps({"t": i, "rssi_dbm": rssi, "noise_dbm": noise, "tx_mbps": 433.0, "phy": 5, "channel": 44,
-                                 "band_ghz": "5", "width_mhz": 80, "power_on": True}) for i in range(n))
+def watch(rssi, noise=-94, n=50, band="5"):
+    return "\n".join(json.dumps({"t": i, "rssi_dbm": rssi, "noise_dbm": noise, "tx_mbps": 433.0, "phy": 5, "channel": 44 if band == "5" else 11,
+                                 "band_ghz": band, "width_mhz": 80 if band == "5" else 20, "power_on": True}) for i in range(n))
 
 
-def shell(rssi=-46, router=None, internet=None, awdl=AWDL_ON, dns=8, cca=2, mcs=9, noise=-94, extra=None, n=50):
-    overrides = {"route": ROUTE, "awdl": awdl, "wifi_watch": watch(rssi, noise) if rssi else "",
+def shell(rssi=-46, router=None, internet=None, awdl=AWDL_ON, dns=8, cca=2, mcs=9, noise=-94, extra=None, n=50, band="5"):
+    overrides = {"route": ROUTE, "awdl": awdl, "wifi_watch": watch(rssi, noise, band=band) if rssi else "",
                  "ping_router": ping_text(router or series(3.6, n), n), "ping_internet": ping_text(internet or series(12, n, seed=2), n),
                  "dns_0": f";; Query time: {dns} msec", "dns_1": f";; Query time: {dns} msec",
                  "wdutil": WDUTIL.format(rssi=rssi, cca=cca, mcs=mcs)}
@@ -242,3 +242,34 @@ class PlainCardTests(unittest.TestCase):
         self.assertIn("와이파이: curi6 5g · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s", card)
         self.assertIn("게임 ⚠️ 가끔 끊길 수 있음", card)
         self.assertIn('추천: "curi"로 바꾸면 더 빨라요', card)
+
+
+class BluetoothCardTests(unittest.TestCase):
+    BT = {"SPBluetoothDataType": [{"controller_properties": {"controller_state": "attrib_on", "controller_chipset": "BCM_4388C2"},
+          "device_connected": [{"JP_Mouse": {"device_minorType": "Mouse"}},
+                               {"AirPods Pro": {"device_minorType": "Headphones", "device_batteryLevelLeft": "80%",
+                                                "device_batteryLevelRight": "15%", "device_rssi": "-62"}}],
+          "device_not_connected": [{"EMBERTON": {"device_minorType": "Speaker"}}, {"Parker": {"device_rssi": "-53"}}]}]}
+
+    def ask(self, q, bt, **kw):
+        sh = shell(awdl=AWDL_OFF, extra={"bluetooth": json.dumps(bt)}, **kw)
+        return network.report(network.measure(sh, "wifi_helper", q), q)
+
+    def test_devices_battery_and_in_range(self):
+        r = self.ask("에어팟 자꾸 끊겨", self.BT)
+        self.assertIn("bt_battery_low", r.codes())
+        self.assertIn("연결됨: JP_Mouse (마우스), AirPods Pro (헤드폰, 배터리 왼쪽 80% · 오른쪽 15%)", r.card)
+        self.assertIn("Parker (기기, 근처에 있음)", r.card)
+        self.assertIn("AirPods Pro 배터리가 부족해요", r.card)
+        self.assertNotIn("게임", r.card)                      # a Bluetooth question gets a short card
+
+    def test_bluetooth_off(self):
+        bt = {"SPBluetoothDataType": [{"controller_properties": {"controller_state": "attrib_off"}}]}
+        r = self.ask("블루투스 왜 안 돼?", bt)
+        self.assertIn("bt_off", r.codes())
+        self.assertIn("블루투스: 꺼져 있어요", r.card)
+
+    def test_shared_band_on_2_4_ghz(self):
+        r = self.ask("마우스가 버벅여 블루투스 문제야?", self.BT, band="2.4")
+        self.assertIn("bt_shares_band", r.codes())
+        self.assertIn("5 GHz 와이파이로 바꾸세요", r.card)

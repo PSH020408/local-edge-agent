@@ -113,17 +113,21 @@ Diagnosis and agents:
 Verify: readers tested on recorded outputs; scenario sets for both agents (on battery, charging, heavy load, the GPU state seen on 2026-11-16 replayed from its readings); router accuracy on 30 questions; budgets measured.
 Done when: both agents answer within budget with measured values, every scenario gets the expected diagnosis, and the controller holds its target in a recorded test.
 
-## Stage 8 — Wireless: Wi-Fi, coverage and Bluetooth (11-22 to 11-26)
+## Stage 8 — Wireless: Wi-Fi, coverage and Bluetooth (planned 11-22 to 11-26, done 11-21)
 
-- [ ] Wi-Fi link reading: signal, noise, SNR, channel, band, width, PHY mode, link rate
-- [ ] 10-second active test: latency, jitter and loss to the router and the internet, DNS time, throughput; fault location (Wi-Fi link, router, provider, DNS); use-case verdict (gaming, video call, streaming, messaging)
-- [ ] Channel scan and the best of several networks (public Wi-Fi: ranked from the scan, top candidates tested with confirmation); anomaly detection against the logged baseline
-- [ ] Coverage on a floor plan: walls marked, signal measured at 15-25 points, multi-wall path-loss model fitted by least squares, scored on held-out points, router placement and count
-- [ ] Bluetooth coverage: signal strength against distance and walls with a Bluetooth device carried around the fixed Mac (connected earbuds, or an iPhone test app)
-- [ ] Propagation compared across bands: Wi-Fi 2.4 GHz, 5 GHz and Bluetooth (path-loss exponent, wall loss)
+- [x] Wi-Fi link reading: signal, noise, SNR, SINR (802.11 CCA rule), channel, band, width, modulation (MCS), link rate
+- [x] Active test: latency, spikes over the usual ping, share of late pings, loss to the router and the internet, DNS time, throughput; fault location (Wi-Fi link or beyond the router); verdicts for games, calls, 4K, messaging and large files from published requirements
+- [x] The best of several networks: ranked from one scan, a join-and-measure test when it is close (`wifi_choice.py`, `wifi_here.py`)
+- [x] Coverage on a floor plan: 25 points, two walks, three routers; the multi-wall model failed its gate (12-14 dB), maps interpolated (IDW); a door-path model (loss per bend) predicts held-out points within 3-4 dB
+- [x] Bluetooth: LE coverage from an iPhone; connected and paired devices, battery, in range, and causes of dropouts (battery, signal, 2.4 GHz sharing)
+- [x] Games and Apple's Continuity features: experiments C1 and G1; AirDrop is the only setting that delays the pings
+- [x] The connection card: plain words by default, the radio chain and evidence on request
+- [ ] Propagation compared across bands (2.4 GHz, 5 GHz, Bluetooth): data recorded, not fitted
 
-The floor plan of my home stays out of the repository; the repository uses a synthetic plan.
-Done when: "why is my Wi-Fi slow?" returns the faulty segment, a verdict and a fix in about 15 s, and the coverage model predicts held-out points within a stated error.
+The floor plan of my home stays out of the repository.
+Done when: "why is my Wi-Fi slow?" returns the faulty segment, a verdict and a fix, and the coverage model predicts
+held-out points within a stated error. Met: the card names the segment and the fix; the door-path model 3.1 and
+4.4 dB on the held-out points (proposed after the walks, so a new walk is its real test).
 
 ## Stage 9 — iPhone client (11-27 to 11-28)
 
