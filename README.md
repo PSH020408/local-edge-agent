@@ -203,21 +203,32 @@ Which of the home's networks to use at the current place, from SNR and SINR.
   router as noise gives a SINR near 0 dB in the living area, yet the Mac used 64-QAM to 256-QAM there: the routers
   hear each other and take turns (CSMA/CA), so the cost is airtime, not SINR. The agent therefore adds to the noise
   only networks heard below the 802.11 CCA level (-82 dBm).
-- **One card per place:** "Which Wi-Fi should I use here and what can I do?" measures for about a minute and
-  answers in a fixed format: the radio chain (signal → SNR/SINR → modulation → link rate), download and upload,
-  usual ping and spikes, a verdict for games, calls, messaging and 4K, the time for 10 GB, the bottleneck (the
-  Wi-Fi link or the line beyond the router), and the other networks heard here with their expected modulation and
-  link rate. `scripts/wifi_here.py` joins the strong ones in turn and compares their measured values side by side.
+- **One card per place, in everyday words:** "Which Wi-Fi should I use here and what can I do?" measures for
+  about a minute and answers in a fixed format anyone can read; adding "자세히" (in detail) shows the radio chain
+  behind it (signal, SNR and SINR, modulation, link rate, the bottleneck) for review. `scripts/wifi_here.py` joins
+  the strong networks in turn and compares their measured values side by side.
+
+  ```
+  와이파이: curi6 5g · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s
+  핑: 평소 13 ms, 가끔 튐 (30초에 1번)
+  게임 ⚠️ 가끔 끊길 수 있음   화상회의 ✅   메신저 ✅   4K ✅   10 GB 받기 약 11분
+  핑이 튀는 이유: 맥이 근처 애플 기기(아이폰 등)와 연결하려고 와이파이를 잠깐씩 비워서 그래요
+  추천: "curi"로 바꾸면 더 빨라요 (신호 매우 좋음, 최대 약 433 Mb/s)
+  ```
+
+  In detail:
 
   ```
   지금: curi6 5g, 신호 -69 dBm → SNR 25 dB (SINR 17) → 64-QAM 3/4 (MCS 6) → 링크 263 Mb/s
   측정: 다운 120 / 업 40 Mb/s, 평소 핑 13 ms, 스파이크 1회(와이파이 구간), 손실 0%
-  게임 ⚠️ (와이파이 구간에서 튐)   화상회의 ✅   메신저 ✅   4K ✅   10 GB 다운 약 11분
   병목: 와이파이 구간 (공유기까지 구간에서 이미 핑이 튐)
   다른 와이파이:
     curi (5 GHz ch 149): -44 dBm, SINR 50 dB, 예상 256-QAM 5/6, 링크 약 433 Mb/s
-  → "curi"로 바꾸면 신호 -44 dBm, 예상 256-QAM 5/6, 링크 약 433 Mb/s
   ```
+- **Games and Apple's Continuity features:** day to day AirDrop, Handoff, iPhone widgets and AirPlay Receiver stay
+  on. Asked about a game, the agent checks them: in experiment C1, AirDrop set to "Everyone" delayed a quarter of
+  the pings for minutes while the other three showed no effect, so the tip is "AirDrop to Contacts Only, leave
+  the rest on", with AirDrop's radio switched off during the game as the fallback.
 - **Criteria from the applications' makers:** calls from Microsoft Teams' network requirements (round trip under
   100 ms, jitter under 30 ms, loss under 1%, 1.5 Mb/s each way), 4K from Netflix (15 Mb/s, with headroom),
   downloads as a time. Verdicts come from what the application feels; the radio values explain and predict.

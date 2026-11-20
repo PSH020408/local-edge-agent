@@ -130,6 +130,15 @@ class DiagnosisTests(unittest.TestCase):
         self.assertIn("worse_than_usual", r.codes())
 
 
+class GameRouteTests(unittest.TestCase):
+    def test_any_game_question_about_playing_goes_to_the_network(self):
+        from agent.device.router import route
+        for q in ("게임 해도 돼?", "지금 게임해도 괜찮아?", "배그 해도 돼?", "피파 온라인 해도 돼?", "메이플 해도 돼?",
+                  "오버워치 렉 걸려", "Can I play games now?", "게임 중에 핑 튀어"):
+            self.assertEqual(route(q).topic, "network", q)
+            self.assertIn("game", network.uses_from_question(q), q)
+
+
 class RouteTests(unittest.TestCase):
     def test_network_questions(self):
         for q in ["와이파이 왜 이렇게 느려?", "롤 할 때 핑 괜찮아?", "온라인 게임 해도 돼?", "인터넷이 자꾸 끊겨",
@@ -138,6 +147,8 @@ class RouteTests(unittest.TestCase):
 
     def test_not_network(self):
         self.assertEqual(route("Can I play a demanding game now?").topic, "performance")
+        self.assertEqual(route("게임 돌려도 돼?").topic, "performance")         # running it: the Mac's load
+        self.assertEqual(route("게임하면 발열 심해?").topic, "performance")
         self.assertEqual(route("쇼핑하다가 맥이 느려졌어").topic, "performance")
         self.assertIsNone(route("Explain how Wi-Fi works").topic)
 
@@ -159,7 +170,7 @@ class ConnectionCardTests(unittest.TestCase):
         wd = WDUTIL.format(rssi=-69, cca=3, mcs=6).replace("433", "263") + "    SSID : curi6 5g\n"
         sh = shell(rssi=-69, internet=internet, router=router, n=300, extra={
             "wifi_scan": scan, "wdutil": wd, "networkquality": nq, "preferred": "Preferred networks on en0:\n\tcuri6 5g\n\tcuri\n\tcuri4 5g\n"})
-        q = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어?"
+        q = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어? 자세히"
         m = network.measure(sh, "wifi_helper", q)
         return m, network.report(m, q)
 
@@ -207,7 +218,7 @@ class RoomATests(unittest.TestCase):
         sh = shell(rssi=-50, awdl=AWDL_ON, internet=internet, router=router, n=300, extra={
             "wifi_scan": scan, "networkquality": nq, "wifi_link_named": None,
             "preferred": "Preferred networks on en0:\n\tcuri6 5G\n\tcuri5\n"})
-        q = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어?"
+        q = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어? 자세히"
         r = network.report(network.measure(sh, "wifi_helper", q), q)
         card = r.card
         self.assertIn("지금: curi6 5G", card)                   # found by channel and signal
@@ -217,3 +228,17 @@ class RoomATests(unittest.TestCase):
         self.assertIn("원인: AirDrop 무선(AWDL)", card)
         self.assertIn("게임 ⚠️", card)
         self.assertIn("→ 지금 와이파이 유지", card)
+
+
+class PlainCardTests(unittest.TestCase):
+    """The default card is for anyone: no SNR, modulation or AWDL, and the advice in plain words."""
+
+    def test_room_c_in_plain_words(self):
+        m, _ = ConnectionCardTests().room_c()
+        q = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어?"
+        card = network.report(m, q).card
+        for jargon in ("SNR", "SINR", "QAM", "MCS", "AWDL", "병목", "링크"):
+            self.assertNotIn(jargon, card)
+        self.assertIn("와이파이: curi6 5g · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s", card)
+        self.assertIn("게임 ⚠️ 가끔 끊길 수 있음", card)
+        self.assertIn('추천: "curi"로 바꾸면 더 빨라요', card)

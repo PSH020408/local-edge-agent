@@ -4,6 +4,7 @@ everything on each, and compare them side by side.
     sudo -v
     python scripts/wifi_here.py --label "Room C" --quick     # the joined network measured, the others predicted
     python scripts/wifi_here.py --label "Room C"             # join and measure the strong networks (about 1 min each)
+    python scripts/wifi_here.py --label "Room C" --detail    # the same with SNR, modulation, link rate and evidence
 
 For each network: signal -> SNR (SINR) -> modulation (MCS) -> link rate; download and upload; the usual ping, spikes
 of 20 ms or more and where they start; a verdict for games, calls, messaging, 4K and the time for 10 GB
@@ -57,8 +58,17 @@ def score(r: dict) -> tuple:
     return (sum(SCORE[r["verdicts"][u]] for u in USES), -(r["spikes"] or 0), r["down"] or 0)
 
 
-def table(rows: list[dict]) -> str:
+def table(rows: list[dict], detail: bool = False) -> str:
     mark = network.VERDICT_MARK
+    if not detail:
+        head = f"{'와이파이':12} {'신호':8} {'받기/보내기 Mb/s':>16} {'핑':>5} {'튐':>4}  게임 화상 메신저 4K  10GB 받기"
+        lines = [head, "-" * len(head)]
+        for r in rows:
+            speed = f"{r['down']:.0f}/{r['up']:.0f}" if r["down"] is not None else "-"
+            v = r["verdicts"]
+            lines.append(f"{r['ssid'][:12]:12} {network.signal_label(r['snr'], True):8} {speed:>16} {r['ping'] or 0:>4.0f}ms {r['spikes'] or 0:>4}   "
+                         f"{mark[v['game']]}   {mark[v['video_call']]}   {mark[v['messaging']]}   {mark[v['streaming']]}  {r['ten_gb_min']}분")
+        return "\n".join(lines)
     head = f"{'와이파이':12} {'신호':>6} {'SNR':>4} {'변조 (MCS)':18} {'링크':>5} {'다운/업 Mb/s':>12} {'핑':>4} {'스파이크':>6}  게임 화상 메신저 4K  10GB"
     lines = [head, "-" * len(head)]
     for r in rows:
@@ -78,6 +88,7 @@ def main():
     ap.add_argument("--max", type=int, default=3, help="networks to measure at most, the joined one included")
     ap.add_argument("--return", dest="go_back", action="store_true", help="go back to the starting network at the end")
     ap.add_argument("--awdl", choices=["leave", "off"], default="leave", help="keep AWDL down while measuring")
+    ap.add_argument("--detail", action="store_true", help="show the radio chain (SNR, modulation, link rate) and the evidence")
     args = ap.parse_args()
 
     if sudo_n("true").returncode != 0:
@@ -88,8 +99,9 @@ def main():
         awdl.__enter__()
     try:
         print("지금 연결된 와이파이 측정 중 (약 1분: 핑 30초, 속도 테스트, 주변 스캔) ...", flush=True)
-        m0 = network.measure(shell, helper, FULL_QUESTION)
-        r0 = network.report(m0, FULL_QUESTION)
+        question = FULL_QUESTION + (" 자세히" if args.detail else "")
+        m0 = network.measure(shell, helper, question)
+        r0 = network.report(m0, question)
         print("\n" + r0.card + "\n", flush=True)
         start = (m0.driver or {}).get("ssid")
         rows = [row(start or "joined", m0)]
@@ -111,7 +123,7 @@ def main():
                 print(f"  {seconds:.0f}초 만에 연결, 측정 중 (약 1분) ...", flush=True)
                 m = network.measure(shell, helper, MEASURE_QUESTION)
                 rows.append(row(c.ssid, m))
-            print("\n" + table(rows))
+            print("\n" + table(rows, args.detail))
             best = max(rows, key=score)
             print(f"\n추천: {best['ssid']} (게임 {network.VERDICT_KO[best['verdicts']['game']]}, 화상회의 "
                   f"{network.VERDICT_KO[best['verdicts']['video_call']]}, 4K {network.VERDICT_KO[best['verdicts']['streaming']]}, "

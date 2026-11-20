@@ -51,7 +51,10 @@ USES = {
 }
 USE_WORDS = [
     ("game", r"게임|(?<![a-z])gam(e|es|ing)(?![a-z])|(?<![가-힣])롤(?!백|러|링|케)|리그\s*오브\s*레전드|배그|배틀\s*그라운드|발로란트|오버워치"
-             r"|(?<![a-z])lol(?![a-z])|league of legends|valorant|(?<![a-z])pubg(?![a-z])|overwatch"),
+             r"|(?<![a-z])lol(?![a-z])|league of legends|valorant|(?<![a-z])pubg(?![a-z])|overwatch"
+             r"|피파|fc\s*온라인|메이플|로스트\s*아크|서든\s*어택|스타크래프트|에이펙스|포트나이트|카운터\s*스트라이크|도타|마인크래프트"
+             r"|던파|던전\s*앤\s*파이터|이터널\s*리턴|롤토체스|원신|디아블로|철권|(?<![a-z])apex(?![a-z])|fortnite|(?<![a-z])cs2(?![a-z])"
+             r"|counter-?strike|(?<![a-z])dota|minecraft|genshin|diablo|tekken|(?<![a-z])play(ing)?\s+(a\s+)?(games?|online)"),
     ("video_call", r"화상\s*(통화|회의)|줌|zoom|facetime|페이스타임|video call|meeting|통화"),
     ("streaming", r"스트리밍|유튜브|넷플릭스|4k|영상\s*(시청|보기)|youtube|netflix|stream"),
     ("browsing", r"웹\s*서핑|검색|브라우징|browsing|web"),
@@ -267,8 +270,157 @@ CARD_USES = [("game", "게임", "Games"), ("video_call", "화상회의", "Calls"
 VERDICT_KO = {"yes": "가능", "with care": "주의", "not now": "불가", "not measured": "측정 안 함"}
 
 
-def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | None = None) -> str:
-    """Fixed-format summary: the radio chain, what was measured, a verdict per use, the bottleneck, other networks."""
+def game_advice(m: Measurement, snr: float | None, korean: bool) -> list[str]:
+    """What to change before a game, in the order the evidence supports. Day to day the Continuity features stay on
+    (they are what makes the Mac and the iPhone work together), so they are only touched when a game is asked about
+    and the Wi-Fi link itself is fine but the ping is not steady.
+
+    Evidence (experiments.md): C1 - AirDrop set to Everyone delayed 26% of the pings to the router for 3 minutes;
+    Contacts Only, Handoff, iPhone widgets and AirPlay Receiver showed no effect; W2 and Room A - AWDL kept down
+    removed most spikes."""
+    it = m.internet or {}
+    verdict, _ = _verdict("game", m)
+    if verdict == "yes":
+        return ["게임 조언: 지금 설정 그대로 괜찮음" if korean else "Game: fine as it is"]
+    rose_on_wifi = it_rose_on_wifi(m) or ((it.get("rise_share") or 0) > 0.02 and (m.router or {}).get("rise_events"))
+    if not rose_on_wifi:
+        if it.get("rise_events"):
+            return ["게임 조언: 공유기 너머에서 튐 → 집 안 다른 기기의 큰 다운로드·업로드를 멈추기 (와이파이 설정으로는 해결 안 됨)" if korean
+                    else "Game: the spikes are beyond the router; pause large transfers on other devices (Wi-Fi settings will not help)"]
+        return []
+    if snr is not None and snr < 25:
+        return ["게임 조언: 신호가 약함 → 공유기 가까이 가거나 아래의 더 강한 와이파이로" if korean
+                else "Game: the signal is weak; move closer to the router or join a stronger network below"]
+    states = m.continuity or {}
+    path_ko, path_en = continuity.SETTINGS_PATH_KO, continuity.SETTINGS_PATH
+    fallback_ko = "그래도 튀면 게임하는 동안만 AWDL 끄기: python scripts/game_watch.py --awdl off (끝나면 다시 켜짐)"
+    fallback_en = "if it still spikes, keep AWDL down while playing: python scripts/game_watch.py --awdl off (back on at the end)"
+    if states.get("airdrop_everyone"):
+        keep = [continuity.FEATURES_KO[k] if korean else continuity.FEATURES[k] for k in ("handoff", "widgets", "airplay") if states.get(k)]
+        keep_txt = (f" 켜 둬도 되는 것: {', '.join(keep)}." if korean else f" {', '.join(keep)} can stay on.") if keep else ""
+        return [f"게임 조언: AirDrop '모든 사람' → '연락처만'으로 바꾸기 ({path_ko}). 실험 C1에서 핑 26%를 늦춘 원인.{keep_txt}" if korean
+                else f"Game: set AirDrop from Everyone to Contacts Only ({path_en}); in C1 it delayed 26% of the pings.{keep_txt}",
+                ("  " + fallback_ko) if korean else ("  " + fallback_en.capitalize())]
+    on = continuity.on_list(states)
+    if on:
+        names = ", ".join((continuity.FEATURES_KO if korean else continuity.FEATURES)[k] for k in on)
+        return [f"게임 조언: 켜진 기능({names})은 실험 C1에서 영향이 안 보였음 → 그대로 두고, {fallback_ko}" if korean
+                else f"Game: {names} showed no effect in C1, leave them; {fallback_en}"]
+    return [f"게임 조언: 연속성 기능은 다 꺼져 있음 → {fallback_ko}" if korean else f"Game: Continuity features are all off; {fallback_en}"]
+
+
+DETAIL_WORDS = r"자세히|상세|기술적|전문|detail|technical"
+
+
+def signal_label(snr: float | None, korean: bool) -> str:
+    """The signal in everyday words, from the SNR thresholds measured in the walks (MCS 9 from about 33 dB)."""
+    bands = [(40, "매우 좋음", "excellent"), (30, "좋음", "good"), (20, "보통", "fair"), (10, "약함", "weak")]
+    for limit, ko, en in bands:
+        if snr is not None and snr >= limit:
+            return ko if korean else en
+    return "매우 약함" if korean else "very weak"
+
+
+def _one_in(share: float) -> str:
+    n = max(2, round(1 / share)) if share > 0 else 0
+    return f"{n}번 중 1번"
+
+
+def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | None = None, game_asked: bool = False,
+         detail: bool = False) -> str:
+    """The connection card: everyday words by default, the radio chain and the evidence on request."""
+    if detail:
+        return card_detail(m, r, korean, choice, game_asked)
+    return card_simple(m, korean, choice, game_asked)
+
+
+def card_simple(m: Measurement, korean: bool, choice: wifi_choice.Choice | None = None, game_asked: bool = False) -> str:
+    """The same content for anyone: what the signal and speed are like, what works, and what to do."""
+    rssi = [x["rssi_dbm"] for x in m.link if x.get("rssi_dbm")]
+    if not rssi:
+        return ""
+    first, d, it, t = m.link[0], m.driver or {}, m.internet or {}, m.throughput or {}
+    noise = first.get("noise_dbm")
+    snr = statistics.fmean(rssi) - noise if noise else None
+    current = next((c for c in (choice.candidates if choice else []) if c.current), None)
+    name = d.get("ssid") or m.ssid or (current.ssid if current else None)
+    lines = []
+    head = [f"와이파이: {name}" if korean and name else ("지금 와이파이" if korean else (f"Wi-Fi: {name}" if name else "Current Wi-Fi")),
+            (f"신호 {signal_label(snr, True)}" if korean else f"signal {signal_label(snr, False)}")]
+    if t.get("down_mbps") is not None:
+        head.append(f"인터넷 속도 받기 {t['down_mbps']:.0f} / 보내기 {t['up_mbps']:.0f} Mb/s" if korean
+                    else f"speed {t['down_mbps']:.0f} down / {t['up_mbps']:.0f} up Mb/s")
+    lines.append(" · ".join(head))
+    if it.get("received"):
+        late, rises = (it.get("rise_share") or 0), it.get("rise_events", 0)
+        if late >= 0.02:
+            steady = f"자주 튐 ({_one_in(late)}은 늦게 옴)" if korean else f"often jumps (1 in {max(2, round(1 / late))} late)"
+        elif rises:
+            steady = f"가끔 튐 ({m.seconds:.0f}초에 {rises}번)" if korean else f"jumps now and then ({rises} in {m.seconds:.0f} s)"
+        else:
+            steady = "안정적" if korean else "steady"
+        lines.append(f"핑: 평소 {it['median_ms']:.0f} ms, {steady}" if korean else f"Ping: usually {it['median_ms']:.0f} ms, {steady}")
+    words = {"yes": ("✅", "✅"), "with care": ("⚠️ 가끔 끊길 수 있음", "⚠️ may stutter"), "not now": ("❌ 어려움", "❌ not now")}
+    verdicts = []
+    for use, ko, en in CARD_USES:
+        v, _ = _verdict(use, m)
+        if v in words:
+            verdicts.append(f"{ko if korean else en} {words[v][0 if korean else 1]}")
+    if t.get("down_mbps"):
+        minutes = transfer_minutes(10, t["down_mbps"])
+        verdicts.append(f"10 GB 받기 약 {minutes}분" if korean else f"10 GB in about {minutes} min")
+    if verdicts:
+        lines.append("   ".join(verdicts))
+
+    rose_on_wifi = it_rose_on_wifi(m) or ((it.get("rise_share") or 0) > 0.02 and (m.router or {}).get("rise_events"))
+    rate = d.get("tx_mbps") or first.get("tx_mbps")
+    where, _, _ = bottleneck(m, rate, snr)
+    states = m.continuity or {}
+    path = continuity.SETTINGS_PATH_KO if korean else continuity.SETTINGS_PATH
+    if game_asked and _verdict("game", m)[0] == "yes":
+        lines.append("게임: 지금 그대로 괜찮아요" if korean else "Games: fine as it is")
+    elif rose_on_wifi and (snr is None or snr >= 25):
+        lines.append("핑이 튀는 이유: 맥이 근처 애플 기기(아이폰 등)와 연결하려고 와이파이를 잠깐씩 비워서 그래요" if korean
+                     else "Why it jumps: the Mac briefly leaves the Wi-Fi to talk to nearby Apple devices (your iPhone)")
+        if game_asked:
+            if states.get("airdrop_everyone"):
+                lines.append(f"게임 팁: AirDrop을 '모든 사람' → '연락처만'으로 바꾸세요 ({path}). 다른 기능은 그대로 둬도 돼요" if korean
+                             else f"Game tip: set AirDrop from Everyone to Contacts Only ({path}); leave the rest on")
+            lines.append("그래도 끊기면: 게임할 때만 이 연결을 꺼 두세요 → python scripts/game_watch.py --awdl off (끝나면 다시 켜져요)" if korean
+                         else "Still stuttering: switch it off while playing → python scripts/game_watch.py --awdl off (back on afterwards)")
+        else:
+            lines.append("게임하려면 \"게임 해도 돼?\"처럼 물어보세요. 바꿀 설정을 알려 드려요" if korean
+                         else "Ask about a game to get the settings to change")
+    elif where == "wifi" and snr is not None and snr < 25:
+        lines.append("느린 이유: 공유기와 멀어서 신호가 약해요 → 공유기 가까이 가거나 아래 와이파이로" if korean
+                     else "Why it is slow: the router is far, the signal is weak; move closer or join a network below")
+    elif where == "line":
+        lines.append("느린 이유: 와이파이는 괜찮고, 인터넷 회선이나 집 안 다른 기기 사용 때문이에요 (와이파이를 바꿔도 같아요)" if korean
+                     else "Why it is slow: the Wi-Fi is fine; the internet line or other devices at home are the limit")
+    elif game_asked and it.get("rise_events"):
+        lines.append("게임 팁: 집 안 다른 기기의 큰 다운로드를 잠시 멈추세요 (와이파이 설정 문제는 아니에요)" if korean
+                     else "Game tip: pause large downloads on other devices (not a Wi-Fi setting problem)")
+
+    if choice and choice.candidates:
+        b = choice.best
+        if choice.action == "switch" and b:
+            lines.append(f"추천: \"{b.ssid}\"로 바꾸면 더 빨라요 (신호 {signal_label(b.sinr, True)}, 최대 약 {b.rate:.0f} Mb/s)" if korean
+                         else f"Tip: \"{b.ssid}\" is faster here (signal {signal_label(b.sinr, False)}, up to about {b.rate:.0f} Mb/s)")
+        elif choice.action == "try" and b:
+            lines.append(f"추천: \"{b.ssid}\"도 비슷해요. 직접 비교 → python scripts/wifi_here.py" if korean
+                         else f"Tip: \"{b.ssid}\" is about as good; compare → python scripts/wifi_here.py")
+        elif choice.action == "stay":
+            lines.append("추천: 지금 와이파이가 여기서 제일 좋아요" if korean else "Tip: the current Wi-Fi is the best here")
+        unsaved = [c.ssid for c in choice.candidates if not c.saved and not c.current and c.sinr >= 20][:3]
+        if unsaved:
+            lines.append(f"(비밀번호가 저장 안 된 와이파이는 비교에서 빠져요: {', '.join(unsaved)})" if korean
+                         else f"(networks without a saved password are left out: {', '.join(unsaved)})")
+    return "\n".join(lines)
+
+
+def card_detail(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | None = None, game_asked: bool = False) -> str:
+    """Fixed-format summary for review: the radio chain, what was measured, a verdict per use, the bottleneck,
+    other networks with their expected modulation, and the game advice with its evidence."""
     rssi = [s["rssi_dbm"] for s in m.link if s.get("rssi_dbm")]
     if not rssi:
         return ""
@@ -324,13 +476,11 @@ def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | N
     if verdicts:
         lines.append("   ".join(verdicts))
 
-    on = continuity.on_list(m.continuity)
-    if on:
-        names = ", ".join((continuity.FEATURES_KO if korean else continuity.FEATURES)[k] for k in on)
-        lines.append(f"켜진 연속성 기능: {names}" if korean else f"Continuity features on: {names}")
-    if it.get("rise_events") and "with AWDL active" in _rise_where(m):
-        lines.append("원인: AirDrop 무선(AWDL) → 게임할 땐 python scripts/game_watch.py --awdl off 로 꺼 두기 (이 맥 실험 W2·Room A에서 대부분 사라짐)"
-                     if korean else "Cause: AirDrop's radio (AWDL); for a game run python scripts/game_watch.py --awdl off (removed most spikes in W2 and Room A)")
+    if game_asked:
+        lines.extend(game_advice(m, snr, korean))
+    elif it.get("rise_events") and "with AWDL active" in _rise_where(m):
+        lines.append("핑이 튀는 원인: AirDrop 무선(AWDL). 게임하려면 \"게임 해도 돼?\"라고 물어보면 바꿀 설정을 알려 줌" if korean
+                     else "Spikes come from AirDrop's radio (AWDL); ask about a game for the settings to change")
     where, why_en, why_ko = bottleneck(m, rate, snr)
     if where:
         label = {"wifi": ("병목: 와이파이 구간", "Bottleneck: the Wi-Fi link"), "line": ("병목: 공유기 너머 (회선·다른 트래픽)", "Bottleneck: beyond the router")}[where]
@@ -549,7 +699,9 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
     order = {"problem": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda x: order[x.severity])
     if uses_from_question(question) or m.throughput or choice:
-        r.card = card(m, r, bool(re.search(r"[가-힣]", question)), choice)
+        asked = [k for k, pattern in USE_WORDS if re.search(pattern, question.lower())]
+        r.card = card(m, r, bool(re.search(r"[가-힣]", question)), choice, game_asked="game" in asked,
+                      detail=bool(re.search(DETAIL_WORDS, question.lower())))
     return r
 
 

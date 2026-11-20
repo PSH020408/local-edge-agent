@@ -168,7 +168,9 @@ Questions about a game or a call measure for 30 s; others for 10 s.
 - `How fast is my internet? Can I stream 4K?`
 - `Is my Wi-Fi channel crowded?`
 - `Which Wi-Fi should I use here?`
-- `여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어?` (the connection card: about 1 minute)
+- `여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어?` (the connection card in everyday words: about 1 minute)
+- `여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어? 자세히` (the same with SNR, modulation, link rate and the bottleneck)
+- `게임 해도 돼?` / `배그 해도 돼?` / `Can I play games now?` (any game by name, or games in general)
 - `롤 지금 해도 돼? 핑이 가끔 튀어` (spikes of 20 ms or more over your usual ping in 30 s, and whether the Wi-Fi caused them)
 - `여기서 어느 와이파이에 연결하는 게 좋아?`
 - `Is my Bluetooth speaker signal ok?`

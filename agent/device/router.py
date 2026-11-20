@@ -42,7 +42,14 @@ TOPICS["network"] = [
     r"와이파이", r"와이 파이", r"(?<![a-z])wi-?fi(?![a-z])", r"인터넷", r"네트워크", r"공유기", r"라우터", r"(?<![가-힣])핑", r"레이턴시",
     r"끊겨", r"끊김", r"끊기", r"끊어", r"신호\s*(세기|강도)?", r"채널", r"블루투스", r"에어팟", r"에어드롭", r"(?<![a-z])dns(?![a-z])",
     r"온라인\s*게임", r"(?<![가-힣])롤(?!백|러|링|케)", r"리그\s*오브\s*레전드", r"발로란트", r"배그", r"배틀\s*그라운드", r"오버워치",
-    r"(?<![a-z])lol(?![a-z])", r"league of legends", r"valorant", r"(?<![a-z])pubg(?![a-z])", r"overwatch", r"다운로드\s*속도", r"업로드\s*속도", r"인터넷\s*속도", r"통신",
+    r"(?<![a-z])lol(?![a-z])", r"league of legends", r"valorant", r"(?<![a-z])pubg(?![a-z])", r"overwatch",
+    # Online games by name, and asking whether to play now: a question about the connection (the Mac's own load
+    # stays with the performance agent: "게임 돌려도 돼?", "게임하면 발열 심해?").
+    r"피파\s*온라인", r"(?<![a-z])fc\s*온라인", r"메이플", r"로스트\s*아크", r"서든\s*어택", r"스타크래프트", r"에이펙스", r"포트나이트",
+    r"카운터\s*스트라이크", r"도타", r"마인크래프트", r"던전\s*앤\s*파이터", r"던파", r"이터널\s*리턴", r"롤토체스", r"원신", r"디아블로", r"철권",
+    r"(?<![a-z])apex(?![a-z])", r"fortnite", r"(?<![a-z])cs2(?![a-z])", r"counter-?strike", r"(?<![a-z])dota", r"minecraft", r"genshin", r"diablo", r"tekken",
+    r"게임\s*(해도|할\s*수|하기|하려|할까|해\s*도|중에?\s*(핑|렉|끊))", r"(?<![a-z])play(ing)?\s+(a\s+)?(games?|online)",
+    r"다운로드\s*속도", r"업로드\s*속도", r"인터넷\s*속도", r"통신",
     r"(?<![a-z])internet(?![a-z])", r"(?<![a-z])network(?![a-z])", r"(?<![a-z])router(?![a-z])", r"(?<![a-z])ping(?![a-z])",
     r"latency", r"jitter", r"packet loss", r"(?<![a-z])signal(?![a-z])", r"(?<![a-z])channel(?![a-z])", r"bluetooth", r"airpods", r"airdrop",
     r"online gam", r"download speed", r"upload speed", r"connection",

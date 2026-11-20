@@ -30,6 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent.device import game_watch as gw  # noqa: E402
 from agent.device.network import awdl_active  # noqa: E402
+from agent.device.shell import LiveShell  # noqa: E402
+from agent.device.sources import continuity  # noqa: E402
 from agent.device.sources import wifi  # noqa: E402
 from wifi_walk import AwdlOff, router_ip, sudo_n  # noqa: E402
 
@@ -111,6 +113,10 @@ def main():
     router = Pinger(gateway, interval, use_sudo) if gateway else None
     internet = Pinger(args.target, interval, use_sudo, Live(args.rise, interval, router))
     stop, awdl, rssi = threading.Event(), [], []
+    settings = continuity.features(continuity.read(LiveShell()))
+    mode = "Everyone" if settings.get("airdrop_everyone") else ("Contacts Only" if settings.get("airdrop") else "No One")
+    print("Settings: AirDrop " + mode + ", " + ", ".join(
+        f"{continuity.FEATURES[k]} {'on' if settings.get(k) else 'off'}" for k in ("handoff", "widgets", "airplay")), flush=True)
     print(f"Watching: router {gateway}, internet {args.target}, {1 / interval:.0f} pings/s each, spikes of +{args.rise:.0f} ms. "
           f"AWDL {'kept down' if args.awdl == 'off' else 'left as it is'}. Ctrl+C to stop.", flush=True)
 
@@ -146,7 +152,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({
         "label": args.label, "target": args.target, "gateway": gateway, "interval_s": interval, "rise_ms": args.rise,
-        "awdl_mode": args.awdl, "summary": s,
+        "awdl_mode": args.awdl, "settings": settings, "summary": s,
         "spikes": [{**e.__dict__, "rise_ms": e.rise_ms} for e in events],
         "internet": internet.series.samples, "router": router.series.samples if router else [],
         "awdl": awdl, "rssi": rssi}))

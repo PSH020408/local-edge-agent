@@ -399,3 +399,18 @@ features shown to wake AWDL stay in that advice.
   -b); the columns are now found from the header.
 - A game's ping display averages: 74% of replies at about 4 ms and 26% at about 50 ms reads as 15-20 ms, close to
   the 10-15 ms the player sees in LoL with occasional jumps.
+
+**G1 revised (2026-11-20).** Five minutes is too short for LoL: the game gets heavy later. Each condition is a full
+custom game on Summoner's Rift, from loading in to about 25 minutes, same champion and setup, `game_watch.py` left
+running (AWDL not forced down). Conditions follow the agent's advice, not every C1 round: (1) everyday setting,
+all four on with AirDrop set to Everyone; (2) the same with AirDrop set to Contacts Only (the advice); (3) all four
+off. After each game: the in-game ping usually seen, the highest seen, and moments that felt laggy.
+Gate: late replies (share of pings +20 ms over the usual) in (2) at most a fifth of (1), and (2) within 1 point
+of (3).
+
+**Agent flow adopted.** Day to day the four features stay on (they make the Mac and the iPhone work together),
+so an everyday question only names the cause of the spikes. A question about a game gets "game advice" in the
+card: nothing when the game verdict is clean; when the Wi-Fi link is strong but the ping is not steady, AirDrop
+from Everyone to Contacts Only first, the other features left on, and AWDL kept down during the game
+(`game_watch.py --awdl off`) as the fallback; a weak signal points to a closer or stronger network instead, and
+spikes beyond the router to other traffic in the home.

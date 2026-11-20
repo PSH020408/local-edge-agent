@@ -294,3 +294,9 @@ Same day, from the user's review of the guide: "can I run a document question?" 
   decides each verdict. Calls judged by Teams' published requirements, 4K by Netflix's, downloads as a time for
   10 GB. The bottleneck is placed on the Wi-Fi link or beyond the router, and the other networks heard here are
   listed with their expected modulation. `wifi_here.py` joins the strong ones and compares measured values.
+- Continuity features and games (C1, two runs): AirDrop set to Everyone delayed 26% of the pings to the router
+  for 3 minutes; Contacts Only, Handoff, iPhone widgets and AirPlay Receiver showed no effect. Day to day the
+  features stay on; a game question gets "AirDrop to Contacts Only, leave the rest". The count of spikes missed a
+  steady pattern of delays, so the share of late pings was added.
+- The card now speaks everyday words by default (signal "good", "jumps 1 in 4 times", "may stutter", why, what to
+  do); "in detail" keeps the radio chain and the evidence for review.
