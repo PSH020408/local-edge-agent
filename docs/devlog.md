@@ -300,3 +300,9 @@ Same day, from the user's review of the guide: "can I run a document question?" 
   steady pattern of delays, so the share of late pings was added.
 - The card now speaks everyday words by default (signal "good", "jumps 1 in 4 times", "may stutter", why, what to
   do); "in detail" keeps the radio chain and the evidence for review.
+
+## 2026-11-21 — G1: six real LoL matches
+
+- AirDrop set to Everyone delayed 13% of the pings by 20-100 ms through whole matches (router p99 87 ms); with it
+  off, whatever else was on (Handoff, iPhone widgets, AirPlay Receiver), 0% and p99 4-5 ms, the same as all off.
+  The pre-registered gate passed. The game advice now rests on C1 and G1.

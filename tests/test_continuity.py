@@ -69,7 +69,7 @@ class ContinuityTests(unittest.TestCase):
         q = "롤 지금 해도 돼?"
         card = network.report(network.measure(sh, "wifi_helper", q), q).card
         self.assertIn("핑: 평소 5 ms, 자주 튐 (4번 중 1번은 늦게 옴)", card)
-        self.assertIn("게임 팁: AirDrop을 '모든 사람' → '연락처만'으로 바꾸세요", card)
+        self.assertIn("게임 팁: AirDrop을 '모든 사람' → '연락처만'이나 '없음'으로 바꾸세요", card)
         self.assertNotIn("AWDL 끄기", card)
         self.assertNotIn("C1", card)
 

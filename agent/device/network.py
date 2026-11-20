@@ -384,8 +384,8 @@ def card_simple(m: Measurement, korean: bool, choice: wifi_choice.Choice | None 
                      else "Why it jumps: the Mac briefly leaves the Wi-Fi to talk to nearby Apple devices (your iPhone)")
         if game_asked:
             if states.get("airdrop_everyone"):
-                lines.append(f"게임 팁: AirDrop을 '모든 사람' → '연락처만'으로 바꾸세요 ({path}). 다른 기능은 그대로 둬도 돼요" if korean
-                             else f"Game tip: set AirDrop from Everyone to Contacts Only ({path}); leave the rest on")
+                lines.append(f"게임 팁: AirDrop을 '모든 사람' → '연락처만'이나 '없음'으로 바꾸세요 ({path}). 다른 기능은 그대로 둬도 돼요 (실제 롤 6판으로 확인)" if korean
+                             else f"Game tip: set AirDrop from Everyone to Contacts Only or No One ({path}); leave the rest on (checked in six real matches)")
             lines.append("그래도 끊기면: 게임할 때만 이 연결을 꺼 두세요 → python scripts/game_watch.py --awdl off (끝나면 다시 켜져요)" if korean
                          else "Still stuttering: switch it off while playing → python scripts/game_watch.py --awdl off (back on afterwards)")
         else:

@@ -414,3 +414,27 @@ card: nothing when the game verdict is clean; when the Wi-Fi link is strong but 
 from Everyone to Contacts Only first, the other features left on, and AWDL kept down during the game
 (`game_watch.py --awdl off`) as the fallback; a weak signal points to a closer or stronger network instead, and
 spikes beyond the router to other traffic in the home.
+
+## G1 result: six real LoL matches (2026-11-21 00:54-03:15, Room A)
+
+Ranked play with a friend, Discord on the iPhone in every match, `game_watch.py` for the first 10 minutes after
+loading in (about 11,200 pings each to the router and to the internet, 20 a second), AWDL left alone. The settings
+were read by the script at the start of each match and matched the plan every time.
+
+| Match | Settings | Pings late by +20 ms (router / internet) | Router p99 | Router max | Spike events (on the Wi-Fi link) |
+|---|---|---|---|---|---|
+| 1 | all four on, AirDrop Everyone | **13.1% / 13.7%** | **87 ms** | 97 ms | 16 (16) |
+| 2 | AirDrop Everyone only | **13.2% / 13.7%** | **88 ms** | 98 ms | 19 (19) |
+| 3 | Handoff only | 0.0% / 0.0% | 4 ms | 12 ms | 1 (0, beyond the router) |
+| 4 | iPhone widgets only | 0.0% / 0.0% | 4 ms | 14 ms | 0 |
+| 5 | AirPlay Receiver only | 0.0% / 0.0% | 4 ms | 9 ms | 0 |
+| 6 | all off | 0.0% / 0.0% | 5 ms | 18 ms | 0 |
+
+- AirDrop set to Everyone accounts for all of it: matches 1 and 2 are the same within 0.1 point, so the other
+  three features add nothing; matches 3-6 are clean (p99 to the router 4-5 ms, usual ping 2.8 ms against 3.6 ms).
+  Every spike in matches 1-2 started on the Wi-Fi link with AWDL active.
+- Same pattern as C1 (26% late with no game running, 13% here: the game's own traffic is the larger share of the
+  Mac's sending, and AWDL's absences delay a smaller part of it).
+- Gate (written before): the advised setting removes at least four fifths of the late pings and matches all-off
+  within 1 point. Met: 13.7% -> 0.0%, equal to all off. The advice "AirDrop to Contacts Only or No One, leave the
+  rest on" stands; Contacts Only was clean in C1 (0.2%) but was not one of the six matches.
