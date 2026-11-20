@@ -54,8 +54,15 @@ class DecisionTests(unittest.TestCase):
     def test_only_known_networks_and_unnamed_interferers(self):
         scan = [net("curi6 5g", -50), net("neighbour", -40, 149), net("", -60)]
         cands = wc.candidates(scan, -93, known={"curi6 5g"}, current="curi6 5g")
-        self.assertEqual([c.ssid for c in cands], ["curi6 5g"])
-        self.assertEqual(cands[0].shared, 1)    # the unnamed network on channel 44
+        self.assertEqual([(c.ssid, c.saved) for c in cands], [("neighbour", False), ("curi6 5g", True)])
+        self.assertEqual(cands[1].shared, 1)    # the unnamed network on channel 44
+        self.assertEqual(wc.decide(cands).action, "stay")      # a stronger network that is not saved is not advised
+
+    def test_wifi_direct_is_interference_not_a_choice(self):
+        scan = [net("curi5", -48, 1, "2.4", 40), net("DIRECT-18 C56x Series", -60, 1, "2.4", 20)]
+        cands = wc.candidates(scan, -93, current="curi5")
+        self.assertEqual([c.ssid for c in cands], ["curi5"])
+        self.assertEqual(cands[0].shared, 1)
 
     def test_unknown_current_network_only_ranks(self):
         self.assertEqual(wc.decide(wc.candidates([net("curi", -50, 149)], -93)).action, "rank")

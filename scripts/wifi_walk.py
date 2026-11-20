@@ -57,7 +57,8 @@ def router_ip() -> str:
 
 
 class AwdlOff:
-    """AWDL down for the walk; a watcher takes it down again when macOS brings it back (W2, pairs 7 and 8)."""
+    """AWDL down for the walk; a watcher takes it down again within 0.5 s when macOS brings it back (W2, pairs 7
+    and 8; idle game-watch runs of 2026-11-20: woken 3 times in 2 minutes)."""
 
     def __enter__(self):
         self.stop, self.reenabled = threading.Event(), 0
@@ -66,7 +67,7 @@ class AwdlOff:
         return self
 
     def _watch(self):
-        while not self.stop.wait(2):
+        while not self.stop.wait(0.5):    # each wake costs a burst of spikes: take it down again quickly
             out = subprocess.run(["ifconfig", "awdl0"], capture_output=True, text=True).stdout
             if "status: active" in out:
                 self.reenabled += 1

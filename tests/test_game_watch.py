@@ -45,7 +45,7 @@ class GameWatchTests(unittest.TestCase):
     def test_where_each_spike_came_from(self):
         internet, router = session(wifi_at=(40, 100), beyond_at=(150,))
         events = gw.spikes(internet)
-        awdl = [(0.0, True), (120.0, False)]
+        awdl = [(float(t), 30 <= t <= 50 or 105 <= t <= 106) for t in range(180)]   # woken twice; the second wake seen 5 s late
         gw.attribute(events, router, awdl=awdl)
         self.assertEqual([e.segment for e in events], ["wifi", "wifi", "beyond router"])
         self.assertEqual([e.awdl for e in events], [True, True, False])

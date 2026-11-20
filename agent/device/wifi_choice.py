@@ -116,6 +116,7 @@ class Candidate:
     shared: int
     rate: float
     current: bool = False
+    saved: bool = True        # joined before on this Mac (macOS keeps its password); only saved ones are recommended
 
     @property
     def mcs(self) -> int:
@@ -133,38 +134,49 @@ class Choice:
 
 def candidates(scan: list[dict], noise: float, link_width: int = 80, known: set[str] | None = None,
                current: str | None = None) -> list[Candidate]:
-    """Rank the networks in `known` (all named networks if None) heard in `scan`, best first."""
+    """Rank the named networks heard in `scan`, best first; those not in `known` are kept but marked unsaved."""
     known_l = {k.lower() for k in known} if known is not None else None
     strongest: dict[str, dict] = {}
     for n in scan:
         name = (n.get("ssid") or "").strip()
-        if not name or n.get("rssi_dbm") is None:
-            continue
+        if not name or n.get("rssi_dbm") is None or name.upper().startswith("DIRECT-"):
+            continue     # DIRECT-...: a printer's or TV's Wi-Fi Direct, no internet behind it (still counted as interference)
         if name.lower() not in strongest or n["rssi_dbm"] > strongest[name.lower()]["rssi_dbm"]:
             strongest[name.lower()] = n
     out = []
     for key, n in strongest.items():
-        if known_l is not None and key not in known_l:
-            continue
         band, channel, width = str(n.get("band_ghz")), n.get("channel"), int(n.get("width_mhz") or 20)
         others = [o["rssi_dbm"] for k, o in strongest.items()
                   if k != key and str(o.get("band_ghz")) == band and o.get("channel") == channel]
-        # Unnamed networks on the same channel interfere too.
-        others += [o["rssi_dbm"] for o in scan if not (o.get("ssid") or "").strip() and o.get("rssi_dbm") is not None
+        # Unnamed and Wi-Fi Direct networks on the same channel interfere too.
+        others += [o["rssi_dbm"] for o in scan if (not (o.get("ssid") or "").strip() or (o.get("ssid") or "").upper().startswith("DIRECT-"))
+                   and o.get("rssi_dbm") is not None
                    and str(o.get("band_ghz")) == band and o.get("channel") == channel]
         floor = noise + 10 * math.log10(width / link_width)
         q = sinr(n["rssi_dbm"], floor, others)
         out.append(Candidate((n.get("ssid") or "").strip(), band, channel, width, n["rssi_dbm"], q["snr"], q["sinr"],
                              q["sinr_worst"], q["shared"], expected_rate(q["sinr"], width, band),
-                             current is not None and key == current.lower()))
+                             current is not None and key == current.lower(), known_l is None or key in known_l))
     out.sort(key=lambda c: (c.rate, c.sinr, -c.shared), reverse=True)
     return out
 
 
+def mark_current(cands: list[Candidate], channel, band, signal: float, tolerance_db: float = 10.0) -> Candidate | None:
+    """When the joined network's name is not readable: the network heard on the link's channel and band whose beacon
+    is closest to the link's signal (within `tolerance_db`)."""
+    same = [c for c in cands if c.channel == channel and c.band_ghz == str(band) and abs(c.signal - signal) <= tolerance_db]
+    if not same:
+        return None
+    c = min(same, key=lambda c: abs(c.signal - signal))
+    c.current = True
+    return c
+
+
 def decide(cands: list[Candidate], margin: float = MARGIN_DB) -> Choice:
-    if not cands:
-        return Choice("none", None, None, cands, "none of the known networks was heard")
-    best = cands[0]
+    pool = [c for c in cands if c.saved or c.current]
+    if not pool:
+        return Choice("none", None, None, cands, "none of the networks saved on this Mac was heard")
+    best = pool[0]
     cur = next((c for c in cands if c.current), None)
     if cur is None:
         return Choice("rank", best, None, cands, "the joined network is not among those heard, or its name is unknown")

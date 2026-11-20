@@ -90,8 +90,10 @@ class DiagnosisTests(unittest.TestCase):
     def test_game_verdicts(self):
         # 300 pings: 30 s at 10 a second
         bad = diagnose("온라인 게임 해도 돼?", router=series(3.6, 300, 0.08), internet=series(12, 300, 0.08, seed=2), n=300)
-        self.assertIn("use_not_now", bad.codes())
-        self.assertIn("Turning AirDrop", next(f.advice for f in bad.findings if f.code == "use_not_now"))
+        self.assertIn("use_care", bad.codes())          # spikes alone: "with care" until experiment G1 calibrates
+        self.assertIn("Turning AirDrop", next(f.advice for f in bad.findings if f.code == "use_care"))
+        lost = diagnose("온라인 게임 해도 돼?", awdl=AWDL_OFF, internet=series(12, 300, loss=0.05, seed=2), n=300)
+        self.assertIn("use_not_now", lost.codes())
         good = diagnose("온라인 게임 해도 돼?", awdl=AWDL_OFF, n=300)
         self.assertIn("use_yes", good.codes())
 
@@ -191,3 +193,27 @@ class ConnectionCardTests(unittest.TestCase):
         self.assertEqual(verdict, "yes")
         self.assertIn("10 GB in about 4.4 min down", why)
         self.assertEqual(network.transfer_minutes(10, 120), 11)
+
+
+class RoomATests(unittest.TestCase):
+    """The first real run (Room A, 2026-11-20): wdutil hid the name, AWDL was active, other routers not saved."""
+
+    def test_name_hidden_awdl_active_unsaved_networks(self):
+        def net(ssid, rssi, channel=44, band="5", width=80):
+            return {"ssid": ssid, "rssi_dbm": rssi, "channel": channel, "band_ghz": band, "width_mhz": width}
+        scan = "\n".join(json.dumps(n) for n in [net("curi6 5G", -46), net("curi4 5g", -83), net("curi", -70, 149)])
+        internet, router = series(8, 300, 0.2, seed=2), series(3, 300, 0.2, seed=2)
+        nq = json.dumps({"dl_throughput": 194e6, "ul_throughput": 204e6, "responsiveness": 900.0, "base_rtt": 8.0})
+        sh = shell(rssi=-50, awdl=AWDL_ON, internet=internet, router=router, n=300, extra={
+            "wifi_scan": scan, "networkquality": nq, "wifi_link_named": None,
+            "preferred": "Preferred networks on en0:\n\tcuri6 5G\n\tcuri5\n"})
+        q = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어?"
+        r = network.report(network.measure(sh, "wifi_helper", q), q)
+        card = r.card
+        self.assertIn("지금: curi6 5G", card)                   # found by channel and signal
+        self.assertNotIn("  curi6 5G", card)                    # not listed again as another network
+        self.assertIn("curi (5 GHz ch 149)", card)
+        self.assertIn("저장 안 됨", card)
+        self.assertIn("원인: AirDrop 무선(AWDL)", card)
+        self.assertIn("게임 ⚠️", card)
+        self.assertIn("→ 지금 와이파이 유지", card)

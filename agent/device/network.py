@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 
 from . import wifi_choice
 from .diagnosis import Finding, Report
-from .sources import bluetooth, wifi
+from .sources import bluetooth, continuity, wifi
 
 USES = {
     "game": "online games",
@@ -87,6 +87,9 @@ class Measurement:
     throughput: dict = field(default_factory=dict)
     scan: list[dict] = field(default_factory=list)
     known: set[str] = field(default_factory=set)     # networks this Mac has joined before
+    ssid: str | None = None                           # the joined network's name, when wdutil hides it
+    awdl_timeline: list[tuple[float, bool]] = field(default_factory=list)   # sampled every 0.5 s during the pings
+    continuity: dict[str, bool | None] = field(default_factory=dict)        # AirDrop, Handoff, widgets, AirPlay
     bluetooth: list[dict] | None = None
     seconds: float = 10.0
     notes: list[str] = field(default_factory=list)
@@ -120,13 +123,30 @@ def measure(shell, helper: str, question: str = "", ping_seconds: float | None =
         out = shell.run("wifi_watch", [helper, "watch", "5", str(min(seconds, 10))], timeout=30)
         results["link"] = wifi.parse_lines(out.text)
 
+    stop = threading.Event()
+
+    def awdl_watch():                     # games and calls: count AWDL wakes while the pings run (experiment C1)
+        while not stop.is_set():
+            state = awdl_active(shell.run("awdl", ["ifconfig", "awdl0"]).text)
+            if state is not None:
+                m.awdl_timeline.append((time.time(), bool(state)))
+            if stop.wait(0.5):
+                break
+
     threads = [threading.Thread(target=ping, args=("ping_internet", "1.1.1.1")), threading.Thread(target=watch)]
+    watcher = threading.Thread(target=awdl_watch, daemon=True) if {"game", "video_call"} & set(uses) else None
+    if watcher:
+        watcher.start()
     if m.gateway:
         threads.append(threading.Thread(target=ping, args=("ping_router", m.gateway)))
     for t in threads:
         t.start()
     for t in threads:
         t.join()
+    stop.set()
+    if watcher:
+        watcher.join(timeout=2)
+        m.continuity = continuity.features(continuity.read(shell))
     m.link, m.router, m.internet = results.get("link", []), results.get("ping_router", {}), results.get("ping_internet", {})
     m.awdl.append(awdl_active(shell.run("awdl", ["ifconfig", "awdl0"]).text))
     for k, host in enumerate([f"agent-{int(time.time())}.example.com", "apple.com"]):
@@ -151,6 +171,10 @@ def measure(shell, helper: str, question: str = "", ping_seconds: float | None =
         m.scan = [n for n in wifi.parse_lines(shell.run("wifi_scan", ["swift", str(wifi.HELPER_SOURCE), "scan"], timeout=120).text)
                   if "error" not in n]
         m.known = wifi_choice.parse_preferred(shell.run("preferred", ["networksetup", "-listpreferredwirelessnetworks", "en0"]).text)
+        if not (m.driver or {}).get("ssid"):
+            # Newer macOS hides the name from wdutil; CoreWLAN gives it to the Swift interpreter (as for the scan).
+            named = wifi.parse_lines(shell.run("wifi_link_named", ["swift", str(wifi.HELPER_SOURCE), "link"], timeout=90).text)
+            m.ssid = (named[0].get("ssid") or None) if named else None
     if re.search(BT_WORDS, q):
         m.bluetooth = bluetooth.parse(shell.run("bluetooth", ["system_profiler", "SPBluetoothDataType", "-json"], timeout=20).text)
     return m
@@ -166,10 +190,16 @@ def _verdict(use: str, m: Measurement) -> tuple[str, str]:
     if use == "game":
         rises, risen = i.get("rise_events", 0), i.get("rise_share", 0)
         where = _rise_where(m)
-        if loss > 2 or med > 80 or risen > 0.05:
-            return "not now", f"usual ping {med} ms, {rises} rises of 20 ms or more in {m.seconds:.0f} s, loss {loss}%{where}"
+        # Spikes alone give "with care", not "not now", until experiment G1 shows how many a game tolerates: the
+        # game's own ping display is averaged, and a player at 8 ms with frequent short spikes can still play.
+        late = f", {risen * 100:.0f}% of replies late" if risen > 0.02 else ""
+        # A steady share of late replies (C1, AirDrop set to Everyone: a quarter of them, for minutes) is reported
+        # with the verdict; it stays "with care" until G1 shows how much a game tolerates (the game's own ping
+        # display averages: 74% at 4 ms and 26% at about 50 ms reads as 15-20 ms, as the player sees in LoL).
+        if loss > 2 or med > 80:
+            return "not now", f"usual ping {med} ms, {rises} rises of 20 ms or more in {m.seconds:.0f} s{late}, loss {loss}%{where}"
         if rises or loss > 0.5 or med > 50:
-            return "with care", f"usual ping {med} ms, {rises} rises of 20 ms or more in {m.seconds:.0f} s, loss {loss}%{where}"
+            return "with care", f"usual ping {med} ms, {rises} rises of 20 ms or more in {m.seconds:.0f} s{late}, loss {loss}%{where}"
         return "yes", f"usual ping {med} ms, no rise of 20 ms or more in {m.seconds:.0f} s, loss {loss}%"
     t = m.throughput or {}
     down, up = t.get("down_mbps"), t.get("up_mbps")
@@ -249,7 +279,7 @@ def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | N
     current = next((c for c in (choice.candidates if choice else []) if c.current), None)
     mcs = d.get("mcs")
     rate = d.get("tx_mbps") or first.get("tx_mbps")
-    name = d.get("ssid") or (current.ssid if current else None) or ("연결된 와이파이" if korean else "joined network")
+    name = d.get("ssid") or m.ssid or (current.ssid if current else None) or ("연결된 와이파이" if korean else "joined network")
     chain = [f"{signal:.0f} dBm"]
     if snr is not None:
         chain.append(f"SNR {snr:.0f} dB" + (f" (SINR {current.sinr:.0f})" if current and abs(current.sinr - current.snr) >= 1 else ""))
@@ -270,8 +300,11 @@ def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | N
         if rises:
             place = ("와이파이 구간" if "Wi-Fi link" in where else "공유기 너머") if korean else ("Wi-Fi link" if "Wi-Fi link" in where else "beyond the router")
             place = f"({place})"
-        measured.append((f"평소 핑 {it['median_ms']:.0f} ms, 스파이크 {rises}회{place}, 손실 {it.get('loss_percent', 0):.0f}%" if korean
-                         else f"usual ping {it['median_ms']:.0f} ms, {rises} spikes{(' ' + place) if place else ''}, loss {it.get('loss_percent', 0):.0f}%"))
+        late = (it.get("rise_share") or 0) * 100
+        late_ko = f", 늦게 온 핑 {late:.0f}%" if late >= 2 else ""
+        late_en = f", {late:.0f}% of pings late" if late >= 2 else ""
+        measured.append((f"평소 핑 {it['median_ms']:.0f} ms, 스파이크 {rises}회{place}{late_ko}, 손실 {it.get('loss_percent', 0):.0f}%" if korean
+                         else f"usual ping {it['median_ms']:.0f} ms, {rises} spikes{(' ' + place) if place else ''}{late_en}, loss {it.get('loss_percent', 0):.0f}%"))
     if measured:
         lines.append(("측정: " if korean else "Measured: ") + ", ".join(measured))
 
@@ -291,19 +324,30 @@ def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | N
     if verdicts:
         lines.append("   ".join(verdicts))
 
+    on = continuity.on_list(m.continuity)
+    if on:
+        names = ", ".join((continuity.FEATURES_KO if korean else continuity.FEATURES)[k] for k in on)
+        lines.append(f"켜진 연속성 기능: {names}" if korean else f"Continuity features on: {names}")
+    if it.get("rise_events") and "with AWDL active" in _rise_where(m):
+        lines.append("원인: AirDrop 무선(AWDL) → 게임할 땐 python scripts/game_watch.py --awdl off 로 꺼 두기 (이 맥 실험 W2·Room A에서 대부분 사라짐)"
+                     if korean else "Cause: AirDrop's radio (AWDL); for a game run python scripts/game_watch.py --awdl off (removed most spikes in W2 and Room A)")
     where, why_en, why_ko = bottleneck(m, rate, snr)
     if where:
         label = {"wifi": ("병목: 와이파이 구간", "Bottleneck: the Wi-Fi link"), "line": ("병목: 공유기 너머 (회선·다른 트래픽)", "Bottleneck: beyond the router")}[where]
         lines.append(f"{label[0]} ({why_ko})" if korean else f"{label[1]} ({why_en})")
 
     if choice and choice.candidates:
-        others = [c for c in choice.candidates if not c.current][:3]
+        others = [c for c in choice.candidates if not c.current][:4]
         if others:
             lines.append("다른 와이파이:" if korean else "Other networks here:")
             for c in others:
+                unsaved = "" if c.saved else (" (이 맥에 저장 안 됨)" if korean else " (not saved on this Mac)")
                 lines.append(f"  {c.ssid} ({c.band_ghz} GHz ch {c.channel}): {c.signal:.0f} dBm, SINR {c.sinr:.0f} dB, "
                              + (f"예상 {wifi_choice.modulation(c.mcs)}, 링크 약 {c.rate:.0f} Mb/s" if korean
-                                else f"expected {wifi_choice.modulation(c.mcs)}, link about {c.rate:.0f} Mb/s"))
+                                else f"expected {wifi_choice.modulation(c.mcs)}, link about {c.rate:.0f} Mb/s") + unsaved)
+            if any(not c.saved for c in others):
+                lines.append("  (저장 안 된 와이파이는 추천에서 빠짐: 한 번 연결해 비밀번호를 저장하면 비교에 들어감)" if korean
+                             else "  (networks not saved on this Mac are not recommended: join one once to include it)")
         b = choice.best
         if choice.action == "switch" and b:
             lines.append(f"→ \"{b.ssid}\"로 바꾸면 신호 {b.signal:.0f} dBm, 예상 {wifi_choice.modulation(b.mcs)}, 링크 약 {b.rate:.0f} Mb/s" if korean
@@ -314,6 +358,11 @@ def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | N
         elif choice.action == "stay":
             lines.append("→ 지금 와이파이 유지" if korean else "→ Stay on the current network")
     return "\n".join(lines)
+
+
+def it_rose_on_wifi(m: Measurement) -> bool:
+    """The internet's rises showed on the router hop too."""
+    return "Wi-Fi link" in _rise_where(m)
 
 
 def _rise_where(m: Measurement) -> str:
@@ -431,6 +480,32 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
             findings.append(Finding("signal_below_usual", "info", "The signal is weaker than usual here.",
                                     {"signal": f["signal"], "usual signal": f["usual signal"]}, "The Mac is probably further from the router than usual."))
 
+    # Continuity features that wake AWDL, before a game or a call.
+    on = continuity.on_list(m.continuity)
+    wakes = continuity.awdl_wakes(m.awdl_timeline) if m.awdl_timeline else None
+    if m.continuity:
+        f["Continuity features on"] = ", ".join(continuity.FEATURES[k] for k in on) or "none"
+    if wakes is not None:
+        f["AWDL wakes during the measurement"] = str(wakes)
+    # C1 (2026-11-20) could not tie the spikes to any one of the four settings (the all-off round had as many), while
+    # keeping AWDL's interface down removed most of them (W2, Room A). So the advice is the proven step; the
+    # settings that are on are reported as information.
+    if awdl_on and it_rose_on_wifi(m):
+        names = ", ".join(continuity.FEATURES[k] for k in on)
+        evidence = {"AWDL (AirDrop, Handoff)": "active", "latency to the router": f.get("latency to the router", "")}
+        if on:
+            evidence["Continuity features on"] = f["Continuity features on"]
+        everyone = (m.continuity or {}).get("airdrop_everyone")
+        if everyone:
+            findings.append(Finding("airdrop_everyone", "warning", "AirDrop is set to Everyone, which keeps AWDL busy.",
+                                    {"AirDrop": "Everyone", "latency to the router": f.get("latency to the router", "")},
+                                    f"Set AirDrop to Contacts Only or No One before a game ({continuity.SETTINGS_PATH}): in C1 "
+                                    "'Everyone' delayed a quarter of the pings to the router by 20-90 ms for the whole 3 minutes."))
+        findings.append(Finding("awdl_game_advice", "warning", "The Wi-Fi spikes start on the router hop while AWDL is up.", evidence,
+                                "For a game, keep AWDL down while playing: python scripts/game_watch.py --awdl off "
+                                "(it takes AWDL down, watches the ping and brings AWDL back at the end)."
+                                + (f" {names} on as well; whether each one matters is not shown yet (C1)." if on else "")))
+
     # Uses.
     for use in uses_from_question(question):
         verdict, why = _verdict(use, m)
@@ -483,15 +558,19 @@ def _network_choice(m: Measurement, first: dict, findings: list, f: dict) -> wif
     named = [n for n in m.scan if (n.get("ssid") or "").strip()]
     if not named:
         return None
-    current = m.driver.get("ssid") if m.driver else None
+    current = (m.driver or {}).get("ssid") or m.ssid
     cands = wifi_choice.candidates(m.scan, first.get("noise_dbm") or -93, first.get("width_mhz") or 80, m.known or None, current)
     if not cands:
         return None
+    if not any(c.current for c in cands):
+        rssi = [s["rssi_dbm"] for s in m.link if s.get("rssi_dbm")]
+        if rssi:
+            wifi_choice.mark_current(cands, first.get("channel"), first.get("band_ghz"), statistics.fmean(rssi))
     choice = wifi_choice.decide(cands)
-    for c in cands[:4]:
+    for c in [c for c in cands if c.saved or c.current][:4]:
         f[f"network '{c.ssid}'"] = (f"{c.band_ghz} GHz channel {c.channel}, signal {c.signal:.0f} dBm, SNR {c.snr:.0f} dB, "
                                     f"SINR {c.sinr:.0f} dB, expected link rate {c.rate:.0f} Mb/s" + (" (joined)" if c.current else ""))
-    keys = {f"network '{c.ssid}'": f[f"network '{c.ssid}'"] for c in cands[:2]}
+    keys = dict([(k, v) for k, v in f.items() if k.startswith("network '")][:2])
     best = choice.best
     if choice.action == "switch":
         findings.append(Finding("network_switch", "warning", f"'{best.ssid}' is clearly better here than the joined network.", keys,

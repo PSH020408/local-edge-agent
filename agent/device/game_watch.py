@@ -10,7 +10,8 @@ before seeing the opponent. So the rule is relative to the player's own baseline
             delay was on the Wi-Fi link (AWDL, the shared channel, the signal); otherwise beyond the router (the
             internet line, other traffic in the home, the game server's route).
 - why:      AWDL (AirDrop's radio) state and link signal are sampled during the game; on this Mac AWDL caused the
-            latency spikes of experiment W2.
+            latency spikes of experiment W2. macOS wakes AWDL by itself for Continuity with the owner's iPhone
+            (Handoff, the clipboard, AirDrop), even with AirDrop off; a spike within 10 s of a wake counts as with AWDL.
 
 Verdict for a game session (thresholds to be calibrated with experiment G1):
   smooth: at most one spike per 5 minutes and loss <= 0.5%; occasional: up to one per minute; spiky: more.
@@ -110,8 +111,19 @@ def attribute(events: list[Spike], router: Series, rise_ms: float = RISE_MS,
         if peak is not None and base is not None:
             e.router_rise_ms = round(peak - base, 1)
             e.segment = "wifi" if e.router_rise_ms >= rise_ms / 2 else "beyond router"
-        e.awdl = _state_at(awdl, e.start)
+        e.awdl = _active_near(awdl, e.start, e.end)
         e.rssi_dbm = _state_at(rssi, e.start)
+
+
+AWDL_NEAR_S = 10.0
+
+
+def _active_near(timeline, start: float, end: float, near: float = AWDL_NEAR_S) -> bool | None:
+    """AWDL seen active within `near` seconds of the spike. Sampled once a second, and macOS can start waking it
+    before the interface reports active (idle runs of 2026-11-20: bursts 0-10 s before each wake was seen)."""
+    if not timeline:
+        return None
+    return any(active for t, active in timeline if start - near <= t <= end + near)
 
 
 def _state_at(timeline, t):
@@ -132,11 +144,21 @@ def summary(internet: Series, events: list[Spike]) -> dict:
     rises = [e.rise_ms for e in events if e.rise_ms is not None]
     per_min = len(events) / minutes
     loss = 100 * lost / len(internet.samples)
-    verdict = "smooth" if per_min <= 0.2 and loss <= 0.5 else ("occasional" if per_min <= 1 else "spiky")
+    # Share of replies risen: a steady pattern of delays (C1, AirDrop set to Everyone: a quarter of the replies
+    # 20-90 ms late, every 0.1-0.3 s for 3 minutes) merges into one long "event", so events alone undercount it.
+    base = statistics.median(got) if got else 0
+    risen = sum(ms > base + RISE_MS for ms in got) / len(got) if got else 0
+    if risen > 0.05 or per_min > 1 or loss > 2:
+        verdict = "spiky"
+    elif per_min <= 0.2 and loss <= 0.5 and risen <= 0.01:
+        verdict = "smooth"
+    else:
+        verdict = "occasional"
     return {"minutes": round(minutes, 1), "replies": len(internet.samples), "median_ms": round(statistics.median(got), 1) if got else None,
             "loss_percent": round(loss, 2), "spikes": len(events), "spikes_per_min": round(per_min, 2),
             "largest_rise_ms": max(rises) if rises else None,
             "seconds_in_spikes": round(sum(e.end - e.start + 0.1 for e in events), 1),
+            "risen_percent": round(100 * risen, 1),
             "on_wifi": sum(e.segment == "wifi" for e in events),
             "beyond_router": sum(e.segment == "beyond router" for e in events),
             "with_awdl_active": sum(bool(e.awdl) for e in events),
@@ -148,7 +170,7 @@ def explain(s: dict) -> str:
     if not s.get("replies"):
         return "No replies were recorded."
     parts = [f"{s['minutes']} min, usual ping {s['median_ms']} ms, {s['spikes']} spikes (+{RISE_MS:.0f} ms or more), "
-             f"{s['spikes_per_min']} per minute: {s['verdict']}."]
+             f"{s['spikes_per_min']} per minute, {s.get('risen_percent', 0)}% of replies late by +{RISE_MS:.0f} ms or more: {s['verdict']}."]
     if s["spikes"]:
         parts.append(f"Largest rise +{s['largest_rise_ms']} ms. On the Wi-Fi link: {s['on_wifi']}; beyond the router: "
                      f"{s['beyond_router']}; while AWDL was active: {s['with_awdl_active']}.")

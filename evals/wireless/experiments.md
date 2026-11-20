@@ -312,3 +312,90 @@ spikes on the Wi-Fi link fall by 80% or more.
 
 **Gate.** In both pairs, spikes on the Wi-Fi link per minute with AWDL down <= 0.2 x with AWDL left on. If spikes
 remain and are beyond the router, the cause is the line or other traffic, and the Wi-Fi choice cannot fix it.
+
+## Room A, the connection card and AWDL (2026-11-20)
+
+First real runs of `scripts/wifi_here.py --quick` in Room A, next to AP-A (30 s of pings at 10 a second):
+
+| | Spikes (+20 ms) | Jitter | Usual ping |
+|---|---|---|---|
+| AWDL as it is (active) | 69 | 29 ms | 10 ms |
+| AWDL kept down | 24 | 18 ms | 6 ms |
+
+Then two idle runs of `scripts/game_watch.py --awdl off --minutes 2` (20 pings a second, router and internet):
+
+- Run 1 (AirDrop on in Settings): macOS woke AWDL three times (54, 60, 66 s) although the script kept taking it
+  down (checked every 2 s). All 4 spike events fell between 50 and 62 s, every one on the router hop too (router
+  rise 64-97 ms); the other 100 s had no spike at all.
+- Run 2 (AirDrop off in Settings): one burst at 108-109 s (+80 ms on the router hop), and one AWDL wake seen at
+  118 s; nothing else in 110 s.
+- Reading: without an AWDL wake the link to the router was clean; each wake costs a burst of 1-2 s of +40-100 ms.
+  macOS wakes AWDL by itself for Continuity with the owner's iPhone (Handoff, the shared clipboard, AirDrop),
+  even with AirDrop switched off. Changes: AWDL checked every 0.5 s instead of 2; a spike within 10 s of a wake is
+  attributed to AWDL. Next: the same with Handoff off, and G1 in real games.
+
+## C1: which Continuity feature wakes AWDL (plan, 2026-11-20)
+
+Observed so far (Room A, one run each): AirDrop off alone, the spikes stayed; AirDrop, Handoff, iPhone widgets
+and mirroring, and AirPlay Receiver all off, 0 spikes in 110 s. Which of the four matters is not known.
+
+**Design.** `scripts/continuity_test.py`: six rounds of 3 minutes, all off, then each feature on alone (AirDrop
+"Contacts Only", Handoff, iPhone widgets, AirPlay Receiver), then all off again; the iPhone used as usual during
+every round; AWDL left alone and sampled every 0.5 s; router and internet pinged 20 times a second. The settings'
+preference domains are read before each round, so the key each switch changes is recorded (it gives the agent a
+way to read iPhone widgets, whose key is not known).
+
+**Prediction.** Handoff on: AWDL wakes and spike bursts whenever the iPhone changes app; AirDrop "Contacts Only":
+fewer wakes; AirPlay Receiver and widgets: few or none. Both all-off rounds: no wake, no spike.
+
+**Use in the agent.** Before a game or a call the network agent reads these settings and counts AWDL wakes during
+its 30 s of pings; when a feature is on and AWDL woke, the card says which to turn off. After C1, only the
+features shown to wake AWDL stay in that advice.
+
+**Result (2026-11-20 15:36-15:54, Room A, 3 minutes per round, iPhone in use).**
+
+| Round | Spikes | Router p99 | Router max | Router replies +20 ms (when) |
+|---|---|---|---|---|
+| all off | 5 | 4.9 ms | 127 ms | 9 (5-28 s, just after the switch) |
+| AirDrop (Contacts Only) | 2 | 13.7 ms | 34 ms | 6 (156-157 s) |
+| Handoff | 0 | 5.0 ms | 11 ms | 0 |
+| iPhone widgets | 4 | 55.1 ms | 84 ms | 47 (one episode, 33-65 s) |
+| AirPlay Receiver | 0 | 4.0 ms | 6 ms | 0 |
+| all off again | 1 | 4.3 ms | 11 ms | 0 |
+
+- Prediction not supported: Handoff, the favourite, gave no spike; the all-off round gave the most. With one round
+  each and the two all-off rounds differing (5 against 1), no feature can be blamed. iPhone widgets had the one
+  sustained episode (30 s of +20 ms on the router hop): the only candidate worth repeating.
+- AWDL's interface was up 100% of every round, all off included, so its up/down state says nothing about how busy
+  it is; earlier "wakes" were macOS bringing it back after the script had taken it down. The packet counters of
+  awdl0 (`netstat -I awdl0`) are recorded from now on.
+- The settings reader is confirmed: each switch changed exactly sharingd.DiscoverableMode,
+  useractivityd.ActivityAdvertisingAllowed/ActivityReceivingAllowed, chronod.remoteWidgetsEnabled,
+  controlcenter.AirplayReceiverEnabled.
+- Agent changed accordingly: the advice before a game is the step shown to work (AWDL kept down by game_watch
+  `--awdl off`: W2, Room A 69 -> 24 spikes); the Continuity settings that are on are reported, not blamed.
+- Next: `--feature widgets --repeat 2` (off, on, off, on) with the packet counters; G1 in real games.
+
+**Repeat (2026-11-20 16:03-16:21), AirDrop set to Everyone as used day to day.**
+
+| Round | Spikes | Router replies late by +20 ms | Router p99 | Router max |
+|---|---|---|---|---|
+| all off | 0 | 0% | 4.3 ms | 9 ms |
+| AirDrop (Everyone) | 1 | **26%, the whole 3 minutes** | **86.8 ms** | 92 ms |
+| Handoff | 3 | 0.03% | 4.6 ms | 54 ms |
+| iPhone widgets | 1 | 0.2% (first 2 s) | 5.8 ms | 83 ms |
+| AirPlay Receiver | 0 | 0% | 4.7 ms | 13 ms |
+| all off again | 0 | 0% | 4.4 ms | 8 ms |
+
+- AirDrop set to **Everyone**: a quarter of the pings to the router 20-90 ms late in every 30 s window (p75 25 ms,
+  p90 64 ms against a usual 3.7 ms), late again every 0.1-0.3 s: AWDL keeps leaving the Wi-Fi channel to be
+  discoverable. Set to Contacts Only (first run) it gave 6 late replies in 3 minutes. This is the clearest effect
+  of all C1 rounds, and the player's everyday setting.
+- Handoff and widgets: a few single late replies in both runs, like the all-off round of the first run; no
+  effect shown. AirPlay Receiver: clean in both runs. All off: clean in 3 of 4 rounds.
+- The spike count missed it: delays every 0.1-0.3 s merge into one 3-minute "event". Added the share of late
+  replies to game_watch, the agent's game verdict (reported, "with care" until G1) and the card; the agent names
+  AirDrop "Everyone" before a game. The AWDL packet counter read nothing (macOS prints no byte columns without
+  -b); the columns are now found from the header.
+- A game's ping display averages: 74% of replies at about 4 ms and 26% at about 50 ms reads as 15-20 ms, close to
+  the 10-15 ms the player sees in LoL with occasional jumps.
