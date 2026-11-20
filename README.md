@@ -227,8 +227,8 @@ Which of the home's networks to use at the current place, from SNR and SINR.
   ```
 - **Games and Apple's Continuity features:** day to day AirDrop, Handoff, iPhone widgets and AirPlay Receiver stay
   on. Asked about a game, the agent checks them: in experiment C1, AirDrop set to "Everyone" delayed a quarter of
-  the pings for minutes while the other three showed no effect, so the tip is "AirDrop to Contacts Only, leave
-  the rest on", with AirDrop's radio switched off during the game as the fallback.
+  the pings for minutes while the other three showed no effect, and six real LoL matches (G1) confirmed it, so
+  the tip is simply "turn AirDrop off", the rest left on.
 - **Criteria from the applications' makers:** calls from Microsoft Teams' network requirements (round trip under
   100 ms, jitter under 30 ms, loss under 1%, 1.5 Mb/s each way), 4K from Netflix (15 Mb/s, with headroom),
   downloads as a time. Verdicts come from what the application feels; the radio values explain and predict.

@@ -295,11 +295,11 @@ def game_advice(m: Measurement, snr: float | None, korean: bool) -> list[str]:
     path_ko, path_en = continuity.SETTINGS_PATH_KO, continuity.SETTINGS_PATH
     fallback_ko = "그래도 튀면 게임하는 동안만 AWDL 끄기: python scripts/game_watch.py --awdl off (끝나면 다시 켜짐)"
     fallback_en = "if it still spikes, keep AWDL down while playing: python scripts/game_watch.py --awdl off (back on at the end)"
-    if states.get("airdrop_everyone"):
+    if states.get("airdrop"):
         keep = [continuity.FEATURES_KO[k] if korean else continuity.FEATURES[k] for k in ("handoff", "widgets", "airplay") if states.get(k)]
         keep_txt = (f" 켜 둬도 되는 것: {', '.join(keep)}." if korean else f" {', '.join(keep)} can stay on.") if keep else ""
-        return [f"게임 조언: AirDrop '모든 사람' → '연락처만'으로 바꾸기 ({path_ko}). 실험 C1에서 핑 26%를 늦춘 원인.{keep_txt}" if korean
-                else f"Game: set AirDrop from Everyone to Contacts Only ({path_en}); in C1 it delayed 26% of the pings.{keep_txt}",
+        return [f"게임 조언: AirDrop 끄기 ({path_ko}). 실험 C1·G1에서 핑을 늦춘 유일한 원인.{keep_txt}" if korean
+                else f"Game: turn AirDrop off ({path_en}); the only cause of late pings in C1 and G1.{keep_txt}",
                 ("  " + fallback_ko) if korean else ("  " + fallback_en.capitalize())]
     on = continuity.on_list(states)
     if on:
@@ -383,9 +383,8 @@ def card_simple(m: Measurement, korean: bool, choice: wifi_choice.Choice | None 
         lines.append("핑이 튀는 이유: 맥이 근처 애플 기기(아이폰 등)와 연결하려고 와이파이를 잠깐씩 비워서 그래요" if korean
                      else "Why it jumps: the Mac briefly leaves the Wi-Fi to talk to nearby Apple devices (your iPhone)")
         if game_asked:
-            if states.get("airdrop_everyone"):
-                lines.append(f"게임 팁: AirDrop을 '모든 사람' → '연락처만'이나 '없음'으로 바꾸세요 ({path}). 다른 기능은 그대로 둬도 돼요 (실제 롤 6판으로 확인)" if korean
-                             else f"Game tip: set AirDrop from Everyone to Contacts Only or No One ({path}); leave the rest on (checked in six real matches)")
+            if states.get("airdrop"):
+                lines.append(f"게임 팁: AirDrop을 끄세요 ({path})" if korean else f"Game tip: turn AirDrop off ({path})")
             lines.append("그래도 끊기면: 게임할 때만 이 연결을 꺼 두세요 → python scripts/game_watch.py --awdl off (끝나면 다시 켜져요)" if korean
                          else "Still stuttering: switch it off while playing → python scripts/game_watch.py --awdl off (back on afterwards)")
         else:
@@ -645,12 +644,12 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
         evidence = {"AWDL (AirDrop, Handoff)": "active", "latency to the router": f.get("latency to the router", "")}
         if on:
             evidence["Continuity features on"] = f["Continuity features on"]
-        everyone = (m.continuity or {}).get("airdrop_everyone")
-        if everyone:
-            findings.append(Finding("airdrop_everyone", "warning", "AirDrop is set to Everyone, which keeps AWDL busy.",
-                                    {"AirDrop": "Everyone", "latency to the router": f.get("latency to the router", "")},
-                                    f"Set AirDrop to Contacts Only or No One before a game ({continuity.SETTINGS_PATH}): in C1 "
-                                    "'Everyone' delayed a quarter of the pings to the router by 20-90 ms for the whole 3 minutes."))
+        if (m.continuity or {}).get("airdrop"):
+            mode = "Everyone" if m.continuity.get("airdrop_everyone") else "Contacts Only"
+            findings.append(Finding("airdrop_on", "warning", "AirDrop is on, which keeps AWDL busy.",
+                                    {"AirDrop": mode, "latency to the router": f.get("latency to the router", "")},
+                                    f"Turn AirDrop off before a game ({continuity.SETTINGS_PATH}): in C1 and in six real LoL "
+                                    "matches (G1) it was the only setting that delayed the pings (13-26% late by 20-100 ms)."))
         findings.append(Finding("awdl_game_advice", "warning", "The Wi-Fi spikes start on the router hop while AWDL is up.", evidence,
                                 "For a game, keep AWDL down while playing: python scripts/game_watch.py --awdl off "
                                 "(it takes AWDL down, watches the ping and brings AWDL back at the end)."

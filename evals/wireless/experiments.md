@@ -436,5 +436,5 @@ were read by the script at the start of each match and matched the plan every ti
 - Same pattern as C1 (26% late with no game running, 13% here: the game's own traffic is the larger share of the
   Mac's sending, and AWDL's absences delay a smaller part of it).
 - Gate (written before): the advised setting removes at least four fifths of the late pings and matches all-off
-  within 1 point. Met: 13.7% -> 0.0%, equal to all off. The advice "AirDrop to Contacts Only or No One, leave the
-  rest on" stands; Contacts Only was clean in C1 (0.2%) but was not one of the six matches.
+  within 1 point. Met: 13.7% -> 0.0%, equal to all off. The advice is kept simple: "turn AirDrop off", the other
+  three left on (Contacts Only was clean in C1, 0.2%, but was not one of the six matches).
