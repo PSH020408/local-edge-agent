@@ -278,3 +278,19 @@ Same day, from the user's review of the guide: "can I run a document question?" 
   per wall on the straight line. The bathroom below the router's room is 3.7 m away through concrete but 6.4 m and
   two bends around it, which is why it gets almost nothing. Not true of the other two routers, whose walls are
   lighter. Found after the walks, so the next walk is the real test.
+
+## 2026-11-20 — Stage 8: what the connection can carry, starting with games
+
+- The per-use verdicts borrowed a voice guideline and "common guidance". Plan: requirements published by the
+  application makers (Teams for calls, Netflix for 4K), latency under load, upload, and a check against real
+  sessions of each application before any verdict is called reliable.
+- Games first, from the player's own experience: LoL ping 10-15 ms with moments at 40-50 ms that cost fights. The
+  old rule (replies above 50 ms, median against 40 ms) saw none of it. New rule: rises of 20 ms over the usual
+  ping, 10 pings a second in the agent; `game_watch.py` runs during a game at 20 a second, places each spike on the
+  Wi-Fi link or beyond the router and records the AWDL state. LoL, Valorant and PUBG questions now route to the
+  network agent. Experiment G1 planned: four games, AWDL alternated.
+- The connection card: one fixed-format answer per place that joins both layers. The radio chain (signal, SNR and
+  SINR, modulation, link rate) explains and predicts; what the applications feel (spikes, loss, download, upload)
+  decides each verdict. Calls judged by Teams' published requirements, 4K by Netflix's, downloads as a time for
+  10 GB. The bottleneck is placed on the Wi-Fi link or beyond the router, and the other networks heard here are
+  listed with their expected modulation. `wifi_here.py` joins the strong ones and compares measured values.

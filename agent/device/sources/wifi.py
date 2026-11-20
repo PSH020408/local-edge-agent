@@ -182,11 +182,18 @@ def percentile(values: list[float], q: float) -> float | None:
     return ordered[lo] + (ordered[hi] - ordered[lo]) * (k - lo)
 
 
-def latency_stats(times: list[float], sent: int, spike_ms: float = 50.0) -> dict:
-    """Median, 95th percentile, jitter (mean change between consecutive replies), spikes and loss."""
+def latency_stats(times: list[float], sent: int, spike_ms: float = 50.0, rise_ms: float = 20.0) -> dict:
+    """Median, 95th percentile, jitter (mean change between consecutive replies), spikes and loss.
+    Spikes two ways: replies above `spike_ms` (absolute), and rises of `rise_ms` above the median (relative: a
+    player at 10 ms who jumps to 45 ms is hit as hard as one at 30 ms who jumps to 65 ms); `rise_events` counts
+    runs of consecutive risen replies."""
     if not times:
         return {"sent": sent, "received": 0, "loss_percent": 100.0 if sent else None}
+    med = statistics.median(times)
+    risen = [t > med + rise_ms for t in times]
     return {"sent": sent, "received": len(times),
+            "rise_share": round(sum(risen) / len(times), 3),
+            "rise_events": sum(1 for i, r in enumerate(risen) if r and (i == 0 or not risen[i - 1])),
             "loss_percent": round(100 * (1 - len(times) / sent), 2) if sent else None,
             "median_ms": round(statistics.median(times), 2), "p95_ms": round(percentile(times, 0.95), 2),
             "max_ms": round(max(times), 2),

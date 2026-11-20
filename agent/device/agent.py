@@ -60,7 +60,8 @@ class DeviceAgent:
         self.on_event(f"device: {chosen.topic} ({chosen.method})")
         measure_started = time.perf_counter()
         if chosen.topic == "network":
-            self.on_event("device: measuring the Wi-Fi link and the path to the internet")
+            self.on_event("device: measuring the Wi-Fi link and the path to the internet"
+                          + (" (about 1 minute: pings, speed test, scan)" if re.search(network.OVERVIEW, question.lower()) else ""))
             measured = network.measure(self.shell, self._wifi_helper(), question)
             result.report = network.report(measured, question, network.baseline_from_store(self.store))
             result.timings["measure"] = round(time.perf_counter() - measure_started, 3)
@@ -102,6 +103,8 @@ class DeviceAgent:
         self.on_event(f"device: findings {', '.join(result.report.codes())}")
         written = writer.write(result.report, question, self.writer_llm)
         result.answer, result.method, result.unsupported = written.text, written.method, written.unsupported
+        if result.report.card:      # the fixed-format summary first, the written explanation after it
+            result.answer = result.report.card + "\n\n" + result.answer
         result.rejected, result.rejected_reason = written.first, written.reason
         result.timings["answer"] = round(written.seconds, 3)
         result.timings["total"] = round(time.perf_counter() - started, 3)

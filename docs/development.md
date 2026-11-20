@@ -108,6 +108,8 @@ python scripts/coverage_paths.py logs/home/walk_*.jsonl    # through the walls o
 python scripts/wifi_trial.py --label PLACE --rank-only     # which home network is best here (no disconnection)
 python scripts/wifi_trial.py --label PLACE                 # ... and a join-and-measure test of the candidates
 python scripts/wifi_choice_check.py WALK.jsonl --current SSID   # replay a walk through the network choice
+python scripts/game_watch.py --label lol [--awdl off]      # during a game: every latency spike and its cause
+python scripts/wifi_here.py --label PLACE [--quick]        # the connection card, then the strong networks joined and compared
 ```
 
 Long test-set runs start with the speed check and stop with a warning if the Mac is far below its normal speed

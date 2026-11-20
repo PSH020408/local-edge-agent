@@ -41,7 +41,8 @@ TOPICS = {
 TOPICS["network"] = [
     r"와이파이", r"와이 파이", r"(?<![a-z])wi-?fi(?![a-z])", r"인터넷", r"네트워크", r"공유기", r"라우터", r"(?<![가-힣])핑", r"레이턴시",
     r"끊겨", r"끊김", r"끊기", r"끊어", r"신호\s*(세기|강도)?", r"채널", r"블루투스", r"에어팟", r"에어드롭", r"(?<![a-z])dns(?![a-z])",
-    r"온라인\s*게임", r"다운로드\s*속도", r"업로드\s*속도", r"인터넷\s*속도", r"통신",
+    r"온라인\s*게임", r"(?<![가-힣])롤(?!백|러|링|케)", r"리그\s*오브\s*레전드", r"발로란트", r"배그", r"배틀\s*그라운드", r"오버워치",
+    r"(?<![a-z])lol(?![a-z])", r"league of legends", r"valorant", r"(?<![a-z])pubg(?![a-z])", r"overwatch", r"다운로드\s*속도", r"업로드\s*속도", r"인터넷\s*속도", r"통신",
     r"(?<![a-z])internet(?![a-z])", r"(?<![a-z])network(?![a-z])", r"(?<![a-z])router(?![a-z])", r"(?<![a-z])ping(?![a-z])",
     r"latency", r"jitter", r"packet loss", r"(?<![a-z])signal(?![a-z])", r"(?<![a-z])channel(?![a-z])", r"bluetooth", r"airpods", r"airdrop",
     r"online gam", r"download speed", r"upload speed", r"connection",

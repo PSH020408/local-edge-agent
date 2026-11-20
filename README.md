@@ -176,6 +176,7 @@ Which of the home's networks to use at the current place, from SNR and SINR.
 - `Is my internet connection good enough for a video call?`
 - `How fast is my internet? Can I stream 4K?`
 - `Which Wi-Fi should I use here?`
+- `롤 지금 해도 돼? 핑이 가끔 튀어`
 - `Is my Bluetooth speaker signal ok?`
 
 **What the measurements found on this Mac**
@@ -202,6 +203,28 @@ Which of the home's networks to use at the current place, from SNR and SINR.
   router as noise gives a SINR near 0 dB in the living area, yet the Mac used 64-QAM to 256-QAM there: the routers
   hear each other and take turns (CSMA/CA), so the cost is airtime, not SINR. The agent therefore adds to the noise
   only networks heard below the 802.11 CCA level (-82 dBm).
+- **One card per place:** "Which Wi-Fi should I use here and what can I do?" measures for about a minute and
+  answers in a fixed format: the radio chain (signal → SNR/SINR → modulation → link rate), download and upload,
+  usual ping and spikes, a verdict for games, calls, messaging and 4K, the time for 10 GB, the bottleneck (the
+  Wi-Fi link or the line beyond the router), and the other networks heard here with their expected modulation and
+  link rate. `scripts/wifi_here.py` joins the strong ones in turn and compares their measured values side by side.
+
+  ```
+  지금: curi6 5g, 신호 -69 dBm → SNR 25 dB (SINR 17) → 64-QAM 3/4 (MCS 6) → 링크 263 Mb/s
+  측정: 다운 120 / 업 40 Mb/s, 평소 핑 13 ms, 스파이크 1회(와이파이 구간), 손실 0%
+  게임 ⚠️ (와이파이 구간에서 튐)   화상회의 ✅   메신저 ✅   4K ✅   10 GB 다운 약 11분
+  병목: 와이파이 구간 (공유기까지 구간에서 이미 핑이 튐)
+  다른 와이파이:
+    curi (5 GHz ch 149): -44 dBm, SINR 50 dB, 예상 256-QAM 5/6, 링크 약 433 Mb/s
+  → "curi"로 바꾸면 신호 -44 dBm, 예상 256-QAM 5/6, 링크 약 433 Mb/s
+  ```
+- **Criteria from the applications' makers:** calls from Microsoft Teams' network requirements (round trip under
+  100 ms, jitter under 30 ms, loss under 1%, 1.5 Mb/s each way), 4K from Netflix (15 Mb/s, with headroom),
+  downloads as a time. Verdicts come from what the application feels; the radio values explain and predict.
+- **Games: spikes, not the average.** A player at 10-15 ms who jumps to 40-50 ms for a moment loses fights, yet
+  no reply passes 50 ms. The game verdict now counts rises of 20 ms over the player's usual ping, 10 pings a
+  second, and says whether each rose on the Wi-Fi link or beyond the router. `scripts/game_watch.py` runs during a
+  game and reports every spike with its cause (AWDL, Wi-Fi link, or the line).
 - **Which network to use:** ranked from one scan (SINR, then the link rate expected from the measured
   rate-against-SNR table); a short test of each candidate when the difference is within the 5 dB spread of the
   measurement. Replayed on the survey, every point with latency spikes was advised to switch and no point advised

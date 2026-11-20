@@ -293,3 +293,22 @@ doors (Dijkstra on the floor grid, pulled taut; `coverage.DoorPaths`) with its b
 - Caveats: the door-path model was proposed after the walks, so this is not a pre-registered pass; 4 held-out
   points; the Entry's opening is closed in the drawing (its route snaps 1.1 m). Next check: the points of a new walk
   or of the trial W4.
+
+## G1: latency spikes while playing League of Legends (plan, 2026-11-20)
+
+The player's ping in LoL is usually 10-15 ms and sometimes jumps to 40-50 ms for a moment (45 -> 50 -> 23 ->
+back), which has cost fights. The agent's old game rule could not see this: it counted replies above 50 ms and
+judged the median against 40 ms. New rule: a spike is a rise of 20 ms or more above the median of the last 30 s
+(`agent/device/game_watch.py`); the router is pinged at the same moment, so each spike is placed on the Wi-Fi link
+or beyond the router.
+
+**Design.** Four games on this Mac, AWDL alternated: left as it is, kept down, left, down
+(`python scripts/game_watch.py --label lol-on` / `--label lol-off --awdl off`), 20 pings a second to the router and
+to the internet. After each game: the number of moments the game felt laggy.
+
+**Prediction (written before the games).** With AWDL left on: at least one spike a minute, most of them on the
+Wi-Fi link while AWDL was active (W2: p95 to the router 60-170 ms with AWDL up, about 3 ms down). With AWDL down:
+spikes on the Wi-Fi link fall by 80% or more.
+
+**Gate.** In both pairs, spikes on the Wi-Fi link per minute with AWDL down <= 0.2 x with AWDL left on. If spikes
+remain and are beyond the router, the cause is the line or other traffic, and the Wi-Fi choice cannot fix it.

@@ -44,6 +44,28 @@ SUBCARRIERS = {20: 52, 40: 108, 80: 234, 160: 468}
 RATE_MCS7_80 = 325.0     # 64-QAM 5/6, the highest 802.11n modulation, at 80 MHz
 
 
+# 802.11ac (VHT): modulation and coding of each MCS, and the rate at 80 MHz, one stream, short guard interval.
+MODULATION = ["BPSK 1/2", "QPSK 1/2", "QPSK 3/4", "16-QAM 1/2", "16-QAM 3/4", "64-QAM 2/3", "64-QAM 3/4",
+              "64-QAM 5/6", "256-QAM 3/4", "256-QAM 5/6"]
+VHT_RATE_80 = [32.5, 65.0, 97.5, 130.0, 195.0, 260.0, 292.5, 325.0, 390.0, 433.3]
+
+
+def modulation(mcs: float | None) -> str | None:
+    return MODULATION[int(mcs)] if mcs is not None and 0 <= int(mcs) < len(MODULATION) else None
+
+
+def expected_mcs(rate: float, width_mhz: int = 80, band_ghz: str = "5") -> int:
+    """The highest MCS whose rate (scaled to the width) the expected link rate reaches; a long guard interval
+    gives 90% of the short-interval rate, so 88% of it counts as reached."""
+    scale = SUBCARRIERS.get(width_mhz, 234) / SUBCARRIERS[80]
+    top = 7 if band_ghz == "2.4" else 9
+    best = 0
+    for mcs, r in enumerate(VHT_RATE_80[:top + 1]):
+        if rate >= r * scale * 0.88:
+            best = mcs
+    return best
+
+
 def to_mw(dbm: float) -> float:
     return 10 ** (dbm / 10)
 
@@ -94,6 +116,10 @@ class Candidate:
     shared: int
     rate: float
     current: bool = False
+
+    @property
+    def mcs(self) -> int:
+        return expected_mcs(self.rate, self.width_mhz, self.band_ghz)
 
 
 @dataclass

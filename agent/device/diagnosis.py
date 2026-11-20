@@ -88,6 +88,7 @@ class Report:
     topic: str
     facts: dict[str, str] = field(default_factory=dict)
     findings: list[Finding] = field(default_factory=list)
+    card: str = ""   # a fixed-format summary shown above the written answer (network: the connection card)
 
     def codes(self) -> list[str]:
         return [f.code for f in self.findings]
