@@ -309,3 +309,7 @@ Same day, from the user's review of the guide: "can I run a document question?" 
 - Stage 8 closed: any game question goes to the network agent; Bluetooth answers list connected and paired
   devices with battery and the causes of dropouts; README section rewritten for anyone first, engineers second;
   six new live cases (N10-N15) for the final run.
+- Final live run (13:08): 15 of 15 routed right, every answer by the model, no number outside the measurements.
+  The written part still has small wording slips from the 4B model ("혼잡해 없습니다", an English phrase left in
+  one Korean answer); the card above it carries the verdicts. Twelve answers exported with names replaced to
+  docs/examples/network.md; a stage-by-stage user manual added (docs/manual.md).

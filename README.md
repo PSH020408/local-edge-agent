@@ -24,6 +24,9 @@ agent> Your battery health is good. The maximum capacity is 90% and the full-cha
 Both answers are from recorded test runs, slightly shortened ([document run](evals/documents/runs/run45.md),
 device Run D6).
 
+**New here?** The [user manual](docs/manual.md) walks through installing it and using each part, stage by
+stage, with the reason behind each design choice.
+
 **Contents**
 - [Quick start](#quick-start)
 - [User guide: what you can ask](#user-guide-what-you-can-ask)
@@ -51,7 +54,8 @@ python main.py --fast                      # start a session
 ```
 
 Type a question at `you>`. To ask about a file, put its path in the question. Ask in English or Korean; the
-answer comes in the language of the question. Session commands: `/tools`, `/reset`, `/exit`.
+answer comes in the language of the question. Session commands: `/tools`, `/reset`, `/exit`. Optional
+administrator rules, profiles and troubleshooting: [docs/manual.md](docs/manual.md).
 
 ---
 
@@ -248,6 +252,7 @@ values are approximate, comparisons on the same Mac are reliable. Repeat measure
 by 3 dB RMS between days. The Mac shows only its own transmit modulation; the router's side is seen through the
 download speed. The game rule (+20 ms over the usual ping) is calibrated on one player and one game.
 
+Twelve real answers from the final live run, as given (names replaced): [docs/examples/network.md](docs/examples/network.md).
 All maps (each router and band, both bands, Bluetooth LE from an iPhone): [docs/images/wifi/](docs/images/wifi/).
 Method, assumptions and results: [docs/wifi_method.md](docs/wifi_method.md). Every experiment with its prediction
 and gate: [evals/wireless/experiments.md](evals/wireless/experiments.md).
@@ -371,7 +376,10 @@ Dates and "done when" criteria: [docs/roadmap.md](docs/roadmap.md).
 
 | Document | Content |
 |---|---|
+| [docs/manual.md](docs/manual.md) | User manual: install, then each stage with what to ask, what you get and why |
 | [docs/device_questions.md](docs/device_questions.md) | User guide for questions about the Mac, its network and Bluetooth |
+| [docs/examples/network.md](docs/examples/network.md) | Real answers of the network agent from the final live run |
+| [docs/wifi_method.md](docs/wifi_method.md) | Wi-Fi and Bluetooth measurement: sources, assumptions, results |
 | [evals/wireless/experiments.md](evals/wireless/experiments.md) | Wi-Fi and Bluetooth experiments: predictions, results, decisions |
 | [docs/development.md](docs/development.md) | Tools, profiles, code layout, all test commands |
 | [docs/devlog.md](docs/devlog.md) | Development log: decisions, runs, fixes |
