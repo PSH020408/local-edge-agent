@@ -788,6 +788,10 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
         keep = {"bt_off", "bt_weak", "bt_battery_low", "bt_shares_band"}
         findings[:] = [x for x in findings if x.code in keep]
         _bt_device_findings(m, question, findings, f)
+        # Live run 11-21 (N07): with the Wi-Fi facts still given, the model read the Wi-Fi signal as the speaker's.
+        for key in list(f):
+            if not (key.startswith(("Bluetooth", "battery of", "paired", "Wi-Fi band")) or key.endswith("on this Mac")):
+                del f[key]
     order = {"problem": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda x: order[x.severity])
     if m.link:

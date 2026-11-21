@@ -102,17 +102,17 @@ class BluetoothTests(unittest.TestCase):
 
 class HomeBeaconTests(unittest.TestCase):
     def test_strongest_per_home_network(self):
-        nets = [{"ssid": "curi6", "rssi_dbm": -40, "band_ghz": "5", "channel": 44}, {"ssid": "curi6", "rssi_dbm": -55, "band_ghz": "5", "channel": 44},
-                {"ssid": "Curi", "rssi_dbm": -69, "band_ghz": "5", "channel": 149}, {"ssid": "SK_WiFi", "rssi_dbm": -60, "band_ghz": "2.4"},
+        nets = [{"ssid": "Home-A-5G", "rssi_dbm": -40, "band_ghz": "5", "channel": 44}, {"ssid": "Home-A-5G", "rssi_dbm": -55, "band_ghz": "5", "channel": 44},
+                {"ssid": "Home-C-5G", "rssi_dbm": -69, "band_ghz": "5", "channel": 149}, {"ssid": "SK_WiFi", "rssi_dbm": -60, "band_ghz": "2.4"},
                 {"ssid": "", "rssi_dbm": -30, "band_ghz": "2.4"}]
-        b = wifi.home_beacons(nets, "curi")
-        self.assertEqual(sorted(b), ["curi", "curi6"])
-        self.assertEqual(b["curi6"]["rssi_dbm"], -40)
+        b = wifi.home_beacons(nets, "Home-")
+        self.assertEqual(sorted(b), ["home-a-5g", "home-c-5g"])   # keys in lower case
+        self.assertEqual(b["home-a-5g"]["rssi_dbm"], -40)
 
     def test_ble_lines_and_windows(self):
         from agent.device.sources import ble
-        self.assertEqual(ble.parse("t=100.5 rssi=-37 id=ABCD1234 name=Parker"), (100.5, -37, "ABCD1234", "Parker"))
-        m = ble.BleMonitor("parker", command=["true"])
+        self.assertEqual(ble.parse("t=100.5 rssi=-37 id=ABCD1234 name=MyiPhone"), (100.5, -37, "ABCD1234", "MyiPhone"))
+        m = ble.BleMonitor("myiphone", command=["true"])
         m.heard = [(100.0, -40), (105.0, -42), (111.0, -50), (106.0, 127)]
         self.assertEqual(m.window(99, 110), [-40, -42])
         self.assertEqual(ble.summary([-40, -42, -44]), {"ble": -42.0, "ble_packets": 3})

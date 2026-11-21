@@ -1,6 +1,6 @@
 """Bluetooth LE pre-test: is the advertising device heard often and steadily enough for the walk?
 
-    python scripts/ble_pretest.py --name Parker --seconds 60
+    python scripts/ble_pretest.py --name MyiPhone --seconds 60
 
 Keep the device and the Mac still (for example 1 m apart) while it runs. Reported: packets per second, the
 signal's median and spread, how the mean of 5, 10 and 20 s windows differs from the whole (the walk averages

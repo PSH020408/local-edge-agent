@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from agent.device.sources import wifi  # noqa: E402
+from agent.device.sources import bluetooth, wifi  # noqa: E402
 
 BLE = r"""
 import CoreBluetooth
@@ -48,6 +48,10 @@ def short(name: str) -> str:
 
 
 def main() -> None:
+    home = ""                                # the home's network-name prefix, from the private floor plan if present
+    plan = ROOT / "logs" / "home" / "plan.json"
+    if plan.exists():
+        home = json.loads(plan.read_text()).get("home_prefix", "").lower()
     subprocess.run(["sudo", "-v"], check=True)
     drv = subprocess.run(["sudo", "-n", "wdutil", "info"], capture_output=True, text=True).stdout
     bssid = re.search(r"^\s*BSSID\s*:\s*(\S+)", drv, re.M)
@@ -65,10 +69,15 @@ def main() -> None:
         print(f"   {name}: {len(nets)} networks, {named} with a name, {with_bssid} with a BSSID, link's BSSID found: {bool(match)}")
     best = interpreted if sum(bool(n.get("ssid")) for n in interpreted) > sum(bool(n.get("ssid")) for n in compiled) else compiled
     print("\n   Strongest networks (name shortened):")
-    for n in sorted(best, key=lambda n: -n["rssi_dbm"])[:10]:
-        print(f"   {n['rssi_dbm']:>4} dBm  {n.get('band_ghz'):>3} GHz ch {n.get('channel'):>3} {n.get('width_mhz')} MHz  {short(n.get('ssid', ''))}")
+    for n in sorted(best, key=lambda n: -n["rssi_dbm"])[:12]:
+        name = n.get("ssid", "")
+        shown = name if home and name.lower().startswith(home) else short(name)   # the home's own networks in full
+        print(f"   {n['rssi_dbm']:>4} dBm  {n.get('band_ghz'):>3} GHz ch {n.get('channel'):>3} {n.get('width_mhz')} MHz  {shown}")
 
-    print("\n3. Bluetooth LE scan, 10 s (macOS may ask to allow Terminal to use Bluetooth: allow it) ...", flush=True)
+    print("\n3. Connected Bluetooth devices (system_profiler):")
+    for dev in bluetooth.connected():
+        print(f"   {dev['kind'] or 'device'} '{dev['name']}': signal {dev['rssi_dbm'] if dev['rssi_dbm'] is not None else 'not given'}")
+    print("\n4. Bluetooth LE scan, 10 s (macOS may ask to allow Terminal to use Bluetooth: allow it) ...", flush=True)
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "ble.swift"
         src.write_text(BLE, encoding="utf-8")

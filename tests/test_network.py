@@ -163,13 +163,13 @@ class ConnectionCardTests(unittest.TestCase):
     def room_c(self, down=120e6, up=40e6):
         def net(ssid, rssi, channel=44, band="5", width=80):
             return {"ssid": ssid, "rssi_dbm": rssi, "channel": channel, "band_ghz": band, "width_mhz": width}
-        scan = "\n".join(json.dumps(n) for n in [net("curi6 5g", -69), net("curi4 5g", -87), net("curi", -44, 149)])
+        scan = "\n".join(json.dumps(n) for n in [net("Home-A-5G", -69), net("Home-B-5G", -87), net("Home-C-5G", -44, 149)])
         internet, router = series(13, 300, seed=2), series(3.5, 300)
         internet[100:103], router[100:103] = [45.0, 50.0, 23.0], [36.0, 41.0, 12.0]
         nq = json.dumps({"dl_throughput": down, "ul_throughput": up, "responsiveness": 900.0, "base_rtt": 13.0})
-        wd = WDUTIL.format(rssi=-69, cca=3, mcs=6).replace("433", "263") + "    SSID : curi6 5g\n"
+        wd = WDUTIL.format(rssi=-69, cca=3, mcs=6).replace("433", "263") + "    SSID : Home-A-5G\n"
         sh = shell(rssi=-69, internet=internet, router=router, n=300, extra={
-            "wifi_scan": scan, "wdutil": wd, "networkquality": nq, "preferred": "Preferred networks on en0:\n\tcuri6 5g\n\tcuri\n\tcuri4 5g\n"})
+            "wifi_scan": scan, "wdutil": wd, "networkquality": nq, "preferred": "Preferred networks on en0:\n\tHome-A-5G\n\tHome-C-5G\n\tHome-B-5G\n"})
         q = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어? 자세히"
         m = network.measure(sh, "wifi_helper", q)
         return m, network.report(m, q)
@@ -177,7 +177,7 @@ class ConnectionCardTests(unittest.TestCase):
     def test_card_has_every_part(self):
         _, r = self.room_c()
         card = r.card
-        self.assertIn("지금: curi6 5g", card)
+        self.assertIn("지금: Home-A-5G", card)
         self.assertIn("64-QAM 3/4 (MCS 6)", card)
         self.assertIn("다운 120 / 업 40 Mb/s", card)
         self.assertIn("스파이크 1회(와이파이 구간)", card)
@@ -185,7 +185,7 @@ class ConnectionCardTests(unittest.TestCase):
         self.assertIn("화상회의 ✅", card)
         self.assertIn("10 GB 다운 약 11분", card)
         self.assertIn("병목: 와이파이 구간", card)
-        self.assertIn('→ "curi"로 바꾸면', card)
+        self.assertIn('→ "Home-C-5G"로 바꾸면', card)
 
     def test_bottleneck_beyond_the_router(self):
         m = network.Measurement(router={"received": 100, "loss_percent": 0}, internet={"received": 100, "loss_percent": 0},
@@ -212,18 +212,18 @@ class RoomATests(unittest.TestCase):
     def test_name_hidden_awdl_active_unsaved_networks(self):
         def net(ssid, rssi, channel=44, band="5", width=80):
             return {"ssid": ssid, "rssi_dbm": rssi, "channel": channel, "band_ghz": band, "width_mhz": width}
-        scan = "\n".join(json.dumps(n) for n in [net("curi6 5G", -46), net("curi4 5g", -83), net("curi", -70, 149)])
+        scan = "\n".join(json.dumps(n) for n in [net("Home-A-5G", -46), net("Home-B-5G", -83), net("Home-C-5G", -70, 149)])
         internet, router = series(8, 300, 0.2, seed=2), series(3, 300, 0.2, seed=2)
         nq = json.dumps({"dl_throughput": 194e6, "ul_throughput": 204e6, "responsiveness": 900.0, "base_rtt": 8.0})
         sh = shell(rssi=-50, awdl=AWDL_ON, internet=internet, router=router, n=300, extra={
             "wifi_scan": scan, "networkquality": nq, "wifi_link_named": None,
-            "preferred": "Preferred networks on en0:\n\tcuri6 5G\n\tcuri5\n"})
+            "preferred": "Preferred networks on en0:\n\tHome-A-5G\n\tHome-A-2.4G\n"})
         q = "여기서 어떤 와이파이 쓰는 게 좋고 뭐 할 수 있어? 자세히"
         r = network.report(network.measure(sh, "wifi_helper", q), q)
         card = r.card
-        self.assertIn("지금: curi6 5G", card)                   # found by channel and signal
-        self.assertNotIn("  curi6 5G", card)                    # not listed again as another network
-        self.assertIn("curi (5 GHz ch 149)", card)
+        self.assertIn("지금: Home-A-5G", card)                   # found by channel and signal
+        self.assertNotIn("  Home-A-5G", card)                    # not listed again as another network
+        self.assertIn("Home-C-5G (5 GHz ch 149)", card)
         self.assertIn("저장 안 됨", card)
         self.assertIn("원인: AirDrop 무선(AWDL)", card)
         self.assertIn("게임 ⚠️", card)
@@ -239,17 +239,17 @@ class PlainCardTests(unittest.TestCase):
         card = network.report(m, q).card
         for jargon in ("SNR", "SINR", "QAM", "MCS", "AWDL", "병목", "링크"):
             self.assertNotIn(jargon, card)
-        self.assertIn("와이파이: curi6 5g · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s", card)
+        self.assertIn("와이파이: Home-A-5G · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s", card)
         self.assertIn("게임 ⚠️ 가끔 끊길 수 있음", card)
-        self.assertIn('추천: "curi"로 바꾸면 더 빨라요', card)
+        self.assertIn('추천: "Home-C-5G"로 바꾸면 더 빨라요', card)
 
 
 class BluetoothCardTests(unittest.TestCase):
     BT = {"SPBluetoothDataType": [{"controller_properties": {"controller_state": "attrib_on", "controller_chipset": "BCM_4388C2"},
-          "device_connected": [{"JP_Mouse": {"device_minorType": "Mouse"}},
+          "device_connected": [{"Mouse": {"device_minorType": "Mouse"}},
                                {"AirPods Pro": {"device_minorType": "Headphones", "device_batteryLevelLeft": "80%",
                                                 "device_batteryLevelRight": "15%", "device_rssi": "-62"}}],
-          "device_not_connected": [{"EMBERTON": {"device_minorType": "Speaker"}}, {"Parker": {"device_rssi": "-53"}}]}]}
+          "device_not_connected": [{"Speaker": {"device_minorType": "Speaker"}}, {"MyiPhone": {"device_rssi": "-53"}}]}]}
 
     def ask(self, q, bt, **kw):
         sh = shell(awdl=AWDL_OFF, extra={"bluetooth": json.dumps(bt)}, **kw)
@@ -258,8 +258,8 @@ class BluetoothCardTests(unittest.TestCase):
     def test_devices_battery_and_in_range(self):
         r = self.ask("에어팟 자꾸 끊겨", self.BT)
         self.assertIn("bt_battery_low", r.codes())
-        self.assertIn("연결됨: JP_Mouse (마우스), AirPods Pro (헤드폰, 배터리 왼쪽 80% · 오른쪽 15%)", r.card)
-        self.assertIn("Parker (기기, 근처에 있음)", r.card)
+        self.assertIn("연결됨: Mouse (마우스), AirPods Pro (헤드폰, 배터리 왼쪽 80% · 오른쪽 15%)", r.card)
+        self.assertIn("MyiPhone (기기, 근처에 있음)", r.card)
         self.assertIn("AirPods Pro 배터리가 부족해요", r.card)
         self.assertNotIn("게임", r.card)                      # a Bluetooth question gets a short card
 
@@ -279,7 +279,7 @@ class LiveRunFixTests(unittest.TestCase):
     """Fixes after the live run of 2026-11-21 (N07, N08, N12)."""
 
     PAIRED = {"SPBluetoothDataType": [{"controller_properties": {"controller_state": "attrib_on"}, "device_connected": [],
-              "device_not_connected": [{"EMBERTON": {"device_minorType": "Speaker"}}, {"JP_Mouse": {"device_minorType": "Mouse"}}]}]}
+              "device_not_connected": [{"Speaker": {"device_minorType": "Speaker"}}, {"Mouse": {"device_minorType": "Mouse"}}]}]}
 
     def ask(self, q, **kw):
         sh = shell(awdl=AWDL_ON, n=300, router=series(3, 300, 0.15, seed=3), extra={"bluetooth": json.dumps(self.PAIRED)}, **kw)
@@ -293,8 +293,9 @@ class LiveRunFixTests(unittest.TestCase):
     def test_speaker_paired_not_connected(self):
         r = self.ask("블루투스 스피커 신호 괜찮아?")
         self.assertIn("bt_not_connected", r.codes())
-        self.assertIn("EMBERTON", r.findings[0].title)
+        self.assertIn("Speaker", r.findings[0].title)
         self.assertIn("스피커: 페어링돼 있지만 지금 연결 안 됨", r.card)
+        self.assertNotIn("signal", r.facts)                    # the Wi-Fi signal is not offered as the speaker's
 
     def test_ping_question_gets_the_card(self):
         sh = shell(awdl=AWDL_ON)

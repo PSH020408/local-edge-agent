@@ -181,21 +181,21 @@ this home.
 **What you get** (a measured place two rooms from the router, shortened)
 
 ```
-와이파이: curi6 5g · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s
+와이파이: Home-A-5G · 신호 보통 · 인터넷 속도 받기 120 / 보내기 40 Mb/s
 핑: 평소 13 ms, 가끔 튐 (30초에 1번)
 게임 ⚠️ 가끔 끊길 수 있음   화상회의 ✅   메신저 ✅   4K ✅   10 GB 받기 약 11분
 핑이 튀는 이유: 맥이 근처 애플 기기(아이폰 등)와 연결하려고 와이파이를 잠깐씩 비워서 그래요
-추천: "curi"로 바꾸면 더 빨라요 (신호 매우 좋음, 최대 약 433 Mb/s)
+추천: "Home-C-5G"로 바꾸면 더 빨라요 (신호 매우 좋음, 최대 약 433 Mb/s)
 ```
 
 With `자세히`, the same card shows the evidence:
 
 ```
-지금: curi6 5g, 신호 -69 dBm → SNR 25 dB (SINR 17) → 64-QAM 3/4 (MCS 6) → 링크 263 Mb/s
+지금: Home-A-5G, 신호 -69 dBm → SNR 25 dB (SINR 17) → 64-QAM 3/4 (MCS 6) → 링크 263 Mb/s
 측정: 다운 120 / 업 40 Mb/s, 평소 핑 13 ms, 스파이크 1회(와이파이 구간), 손실 0%
 병목: 와이파이 구간 (공유기까지 구간에서 이미 핑이 튐)
 다른 와이파이:
-  curi (5 GHz ch 149): -44 dBm, SINR 50 dB, 예상 256-QAM 5/6, 링크 약 433 Mb/s
+  Home-C-5G (5 GHz ch 149): -44 dBm, SINR 50 dB, 예상 256-QAM 5/6, 링크 약 433 Mb/s
 ```
 
 Asked about a game, the card adds one line when needed, e.g. `게임 팁: AirDrop을 끄세요`. Asked about Bluetooth, it

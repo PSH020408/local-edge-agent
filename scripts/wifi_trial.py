@@ -4,7 +4,7 @@ joining each candidate in turn.
     sudo -v
     python scripts/wifi_trial.py --label "Room C" --rank-only    # ranking only, the connection is not touched
     python scripts/wifi_trial.py --label "Room C"                # ranking, then a test of the closest candidates
-    python scripts/wifi_trial.py --label "Room C" --ssids "curi6 5g" curi   # test these networks
+    python scripts/wifi_trial.py --label "Room C" --ssids "Home-A-5G" Home-C-5G   # test these networks
 
 Ranking (agent/device/wifi_choice.py): SNR, SINR (co-channel networks heard above the CCA level of -82 dBm share
 airtime; weaker ones add to the noise) and the link rate expected from the rate-against-SNR table of walks 1-2.

@@ -1,7 +1,7 @@
 """Replay a survey walk through the network choice: what would the agent have advised at each point, and how did
 the joined network actually behave there?
 
-    python scripts/wifi_choice_check.py logs/home/walk_floor-5g_20261119_095217.jsonl --current "curi6 5g"
+    python scripts/wifi_choice_check.py logs/home/walk_floor-5g_20261119_095217.jsonl --current "Home-A-5G"
 
 The beacons recorded at each point stand in for the scan; the latency is that of the network joined during the walk.
 A good rule advises staying where the joined network had no latency spikes and switching where it had them.
