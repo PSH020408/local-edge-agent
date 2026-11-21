@@ -384,7 +384,16 @@ def card(m: Measurement, r: Report, korean: bool, choice: wifi_choice.Choice | N
         snr = statistics.fmean(rssi) - noise if rssi and noise else None
         band = (m.link[0] if m.link else {}).get("band_ghz")
         wifi_line = (f"와이파이: {band} GHz · 신호 {signal_label(snr, True)}" if korean else f"Wi-Fi: {band} GHz, signal {signal_label(snr, False)}") if rssi else ""
-        return "\n".join(([wifi_line] if wifi_line else []) + bt_lines(m, korean, detail))
+        status = []
+        for x in r.findings:
+            label = next(iter(x.evidence)).split("'")[1] if x.code in ("bt_not_paired", "bt_not_connected") else ""
+            if x.code == "bt_not_paired":
+                status.append(f"{label}: 이 맥에 페어링돼 있지 않아요 → 아이폰에서 끊긴다면 아이폰과 {label} 사이 문제예요" if korean
+                              else f"{label}: not paired with this Mac; if it cuts out on the iPhone, the cause is between the two")
+            elif x.code == "bt_not_connected":
+                status.append(f"{label}: 페어링돼 있지만 지금 연결 안 됨 → 제어 센터 → 블루투스에서 선택하세요" if korean
+                              else f"{label}: paired but not connected; pick it in Control Centre > Bluetooth")
+        return "\n".join(([wifi_line] if wifi_line else []) + bt_lines(m, korean, detail) + status)
     body = card_detail(m, r, korean, choice, game_asked) if detail else card_simple(m, korean, choice, game_asked)
     extra = bt_lines(m, korean, detail)
     return body + ("\n" + "\n".join(extra) if extra else "")
@@ -607,7 +616,7 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
         f["channel utilisation"] = f"{d.get('cca_percent'):.0f}%" if d.get("cca_percent") is not None else "not given"
     awdl = [a for a in m.awdl if a is not None]
     awdl_on = bool(awdl) and max(awdl) == 1
-    f["AWDL (AirDrop, Handoff)"] = "active" if awdl_on else ("inactive" if awdl else "not read")
+    f["AWDL (AirDrop's radio)"] = "active" if awdl_on else ("inactive" if awdl else "not read")
     ro, it = m.router, m.internet
     span = f"{m.seconds:.0f} s"
     if ro:
@@ -643,13 +652,14 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
         if spikes >= 0.03 or (ro.get("rise_share") or 0) >= 0.03:
             if awdl_on:
                 findings.append(Finding("awdl_spikes", "warning",
-                                        "The latency to the router jumps from time to time; AWDL (AirDrop and Handoff) is active and causes this on this Mac.",
-                                        {"latency to the router": f["latency to the router"], "AWDL (AirDrop, Handoff)": "active",
+                                        "The latency to the router jumps from time to time; AirDrop's radio (AWDL) is active and causes this on this Mac.",
+                                        {"latency to the router": f["latency to the router"], "AWDL (AirDrop's radio)": "active",
                                          "test on this Mac": "with AWDL off, p95 to the router fell to about 3 ms in 5 of 6 pairs (experiment W2)"},
-                                        "For a call or a game, turn AirDrop off and Handoff off (System Settings, General, AirDrop & Handoff)."))
+                                        "For a call or a game, turn AirDrop off (System Settings, General, AirDrop & Handoff): in six real "
+                                        "LoL matches it was the only setting that delayed the pings; Handoff can stay on."))
             else:
                 findings.append(Finding("wifi_spikes", "warning", "The latency to the router jumps from time to time; the cause is not identified.",
-                                        {"latency to the router": f["latency to the router"], "AWDL (AirDrop, Handoff)": f["AWDL (AirDrop, Handoff)"]},
+                                        {"latency to the router": f["latency to the router"], "AWDL (AirDrop's radio)": f["AWDL (AirDrop's radio)"]},
                                         "Other devices using the Wi-Fi heavily or interference can cause this."))
     # Beyond the router.
     if ro and it and ro.get("received") and it.get("received"):
@@ -697,7 +707,7 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
     # settings that are on are reported as information.
     if awdl_on and it_rose_on_wifi(m):
         names = ", ".join(continuity.FEATURES[k] for k in on)
-        evidence = {"AWDL (AirDrop, Handoff)": "active", "latency to the router": f.get("latency to the router", "")}
+        evidence = {"AWDL (AirDrop's radio)": "active", "latency to the router": f.get("latency to the router", "")}
         if on:
             evidence["Continuity features on"] = f["Continuity features on"]
         if (m.continuity or {}).get("airdrop"):
@@ -720,7 +730,7 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
                   "not now": "Not reliable now.", "not measured": "Ask about speed to measure it (about 20 s)."}[verdict]
         if verdict in ("with care", "not now") and use in ("game", "video_call") and (
                 any(x.code == "awdl_spikes" for x in findings) or "with AWDL active" in why):
-            advice += " Turning AirDrop and Handoff off should remove the spikes."
+            advice += " Turning AirDrop off should remove the spikes."
         findings.append(Finding(code, "info" if verdict == "yes" else "warning", f"{USES[use][0].upper() + USES[use][1:]}: {verdict}.",
                                 {f"verdict for {USES[use]}": f[f"verdict for {USES[use]}"]}, advice))
 
@@ -773,11 +783,16 @@ def report(m: Measurement, question: str = "", baseline: dict | None = None) -> 
     if not [x for x in findings if x.severity in ("warning", "problem")]:
         findings.append(Finding("network_ok", "info", "The Wi-Fi and the internet connection are fine.",
                                 {"signal": f["signal"], "latency to the internet": f.get("latency to the internet", "")}, "No action needed."))
+    if m.bt and bt_only_question(question, m):
+        # A Bluetooth question is answered about Bluetooth: the Wi-Fi findings stay in the facts, not in the answer.
+        keep = {"bt_off", "bt_weak", "bt_battery_low", "bt_shares_band"}
+        findings[:] = [x for x in findings if x.code in keep]
+        _bt_device_findings(m, question, findings, f)
     order = {"problem": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda x: order[x.severity])
-    if uses_from_question(question) or m.throughput or choice or m.bt:
+    if m.link:
         asked = [k for k, pattern in USE_WORDS if re.search(pattern, question.lower())]
-        bt_only = bool(m.bt) and not asked and not m.throughput and not choice and not re.search(OVERVIEW, question.lower())
+        bt_only = bt_only_question(question, m)
         r.card = card(m, r, bool(re.search(r"[가-힣]", question)), choice, game_asked="game" in asked,
                       detail=bool(re.search(DETAIL_WORDS, question.lower())), bt_only=bt_only)
     return r
@@ -815,6 +830,51 @@ def _network_choice(m: Measurement, first: dict, findings: list, f: dict) -> wif
         findings.append(Finding("network_rank", "info", f"'{best.ssid}' has the best expected rate here.", keys,
                                 "The joined network's name was not readable (wdutil needs the administrator password)."))
     return choice
+
+
+ASKED_DEVICES = [(r"에어팟|airpods", ("airpods",)), (r"버즈|buds", ("buds",)), (r"스피커|speaker", ("speaker",)),
+                 (r"마우스|mouse", ("mouse",)), (r"키보드|keyboard", ("keyboard",)),
+                 (r"헤드폰|헤드셋|이어폰|headphone|headset|earphone", ("headphones", "headset", "airpods", "buds"))]
+
+
+def bt_only_question(question: str, m: Measurement) -> bool:
+    q = question.lower()
+    asked = [k for k, pattern in USE_WORDS if re.search(pattern, q)]
+    return bool(m.bt) and bool(re.search(BT_WORDS, q)) and not asked and not m.throughput and not re.search(OVERVIEW, q)
+
+
+def _bt_device_findings(m: Measurement, question: str, findings: list, f: dict) -> None:
+    """The device the question is about: connected, paired but not connected, or not paired with this Mac."""
+    if m.bt.get("on") is False:
+        return
+    q = question.lower()
+    for pattern, words in ASKED_DEVICES:
+        if not re.search(pattern, q):
+            continue
+        def match(d):
+            return any(w in d["name"].lower() or w == d["kind"].lower() for w in words)
+        connected = [d for d in m.bt.get("connected") or [] if match(d)]
+        paired = [d for d in m.bt.get("paired") or [] if match(d)]
+        label = re.search(pattern, q).group()
+        if connected:
+            return
+        if paired:
+            names = ", ".join(d["name"] for d in paired)
+            f[f"'{label}' on this Mac"] = f"paired, not connected ({names})"
+            findings.append(Finding("bt_not_connected", "warning", f"The {label} ({names}) is paired but not connected to this Mac now.",
+                                    {f"'{label}' on this Mac": f[f"'{label}' on this Mac"]},
+                                    "Turn it on and pick it in Control Centre > Bluetooth. If it is connected to the iPhone, it is playing there."))
+        else:
+            f[f"'{label}' on this Mac"] = "not paired"
+            findings.append(Finding("bt_not_paired", "warning", f"No {label} is paired with this Mac, so its dropouts cannot be measured here.",
+                                    {f"'{label}' on this Mac": "not paired"},
+                                    "If it cuts out on the iPhone, the cause is between it and the iPhone; to use it with the Mac, "
+                                    "pair it in System Settings > Bluetooth."))
+        return
+    if not m.bt.get("connected"):
+        f["Bluetooth devices connected"] = "none"
+        findings.append(Finding("bt_none_connected", "info", "No Bluetooth device is connected to this Mac now.",
+                                {"Bluetooth devices connected": "none"}, "Connect the device first; its signal can then be read."))
 
 
 def baseline_from_store(store) -> dict | None:

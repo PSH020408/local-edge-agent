@@ -58,7 +58,7 @@ class DiagnosisTests(unittest.TestCase):
     def test_awdl_spikes_named(self):
         r = diagnose("와이파이 왜 이렇게 느려?", router=series(3.6, 50, 0.1), internet=series(12, 50, 0.1, seed=2))
         self.assertIn("awdl_spikes", r.codes())
-        self.assertEqual(r.facts["AWDL (AirDrop, Handoff)"], "active")
+        self.assertEqual(r.facts["AWDL (AirDrop's radio)"], "active")
 
     def test_spikes_without_awdl_have_no_cause(self):
         r = diagnose("Why is my Wi-Fi slow?", awdl=AWDL_OFF, router=series(3.6, 50, 0.1), internet=series(12, 50, 0.1, seed=2))
@@ -273,3 +273,37 @@ class BluetoothCardTests(unittest.TestCase):
         r = self.ask("마우스가 버벅여 블루투스 문제야?", self.BT, band="2.4")
         self.assertIn("bt_shares_band", r.codes())
         self.assertIn("5 GHz 와이파이로 바꾸세요", r.card)
+
+
+class LiveRunFixTests(unittest.TestCase):
+    """Fixes after the live run of 2026-11-21 (N07, N08, N12)."""
+
+    PAIRED = {"SPBluetoothDataType": [{"controller_properties": {"controller_state": "attrib_on"}, "device_connected": [],
+              "device_not_connected": [{"EMBERTON": {"device_minorType": "Speaker"}}, {"JP_Mouse": {"device_minorType": "Mouse"}}]}]}
+
+    def ask(self, q, **kw):
+        sh = shell(awdl=AWDL_ON, n=300, router=series(3, 300, 0.15, seed=3), extra={"bluetooth": json.dumps(self.PAIRED)}, **kw)
+        return network.report(network.measure(sh, "wifi_helper", q), q)
+
+    def test_airpods_not_paired(self):
+        r = self.ask("에어팟 자꾸 끊겨")
+        self.assertEqual(r.codes(), ["bt_not_paired"])            # no Wi-Fi spikes in a Bluetooth answer
+        self.assertIn("에어팟: 이 맥에 페어링돼 있지 않아요", r.card)
+
+    def test_speaker_paired_not_connected(self):
+        r = self.ask("블루투스 스피커 신호 괜찮아?")
+        self.assertIn("bt_not_connected", r.codes())
+        self.assertIn("EMBERTON", r.findings[0].title)
+        self.assertIn("스피커: 페어링돼 있지만 지금 연결 안 됨", r.card)
+
+    def test_ping_question_gets_the_card(self):
+        sh = shell(awdl=AWDL_ON)
+        q = "핑 몇이야?"
+        r = network.report(network.measure(sh, "wifi_helper", q), q)
+        self.assertRegex(r.card, r"핑: 평소 \d+ ms")
+
+    def test_no_handoff_in_the_advice(self):
+        sh = shell(awdl=AWDL_ON, n=300, router=series(3, 300, 0.15, seed=3))
+        q = "와이파이 왜 이렇게 느려?"
+        r = network.report(network.measure(sh, "wifi_helper", q), q)
+        self.assertFalse(any("Handoff off" in x.advice or "AirDrop and Handoff" in x.title for x in r.findings))

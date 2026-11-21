@@ -438,3 +438,17 @@ were read by the script at the start of each match and matched the plan every ti
 - Gate (written before): the advised setting removes at least four fifths of the late pings and matches all-off
   within 1 point. Met: 13.7% -> 0.0%, equal to all off. The advice is kept simple: "turn AirDrop off", the other
   three left on (Contacts Only was clean in C1, 0.2%, but was not one of the six matches).
+
+## Live agent run N01-N15 (2026-11-21 12:27)
+
+16 questions to the full agent on this Mac (AirDrop as used day to day): route right 16 of 16, every answer by
+the model, no number outside the measurements, expected strings 4 of 4; 13-70 s per answer (the cards with a
+speed test and a scan take about a minute). Read by hand, five faults, all fixed the same day:
+
+| Fault | Cases | Fix |
+|---|---|---|
+| The text told the user to turn Handoff off too, against C1 and G1 | N01-N14 | Findings name AirDrop only; "Handoff can stay on" |
+| "Bluetooth speaker signal fine" with no speaker connected | N07 | Bluetooth questions answered about Bluetooth only; the asked device found as connected, paired but not connected, or not paired |
+| AirPods asked about, not paired with this Mac; the answer was about Wi-Fi spikes | N12 | Same; the card says it is not paired and where the dropout must then be |
+| "What is my ping?" answered without the ping | N08 | Every network answer starts with the card |
+| Mistranslations in long Korean text ("stutter" as 스티커, "spikes" as 뜨거운) | N03, N11, N14 | Terms given to the model; with the card above, the text is held to 2-3 sentences |

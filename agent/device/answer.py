@@ -43,6 +43,9 @@ KOREAN_TERMS = (
     ("p95", "상위 5% 지연"), ("loss", "패킷 손실"), ("AWDL", "AWDL (AirDrop·Handoff용 무선 기능)"), ("channel utilisation", "채널 사용률"),
     ("DNS lookup", "DNS 조회 시간"), ("latency under load", "부하 중 지연"), ("spatial streams", "공간 스트림 수"),
     ("SINR", "신호 대 간섭·잡음비(SINR)"), ("expected link rate", "예상 링크 속도"),
+    # Run N (11-21): "stutters" came out as 스티커 (sticker) and "spikes" as 뜨거운 (hot).
+    ("stutter", "끊김"), ("spikes", "핑 튐"), ("rises of 20 ms", "20 ms 이상 튐"), ("AWDL", "AirDrop 무선(AWDL)"),
+    ("paired", "페어링됨"),
     ("with care", "주의하면 가능"), ("not now", "지금은 어려움"),
 )
 
@@ -161,6 +164,11 @@ def write(report: Report, question: str, llm=None) -> Written:
     text = report_text(report)
     terms = korean_terms(text) if korean else ""
     content = f"Question: {question}\n\n{text}\n\n" + (terms + "\n\n" if terms else "") + f"Answer in {'Korean' if korean else 'English'}."
+    if report.card:
+        # Run N (11-21): with the card above it, a 5-6 sentence answer repeated its numbers and drifted; the text
+        # now only explains.
+        content += (" A summary card with the numbers is shown above your answer: in 2 or 3 sentences, answer the "
+                    "question directly, give the cause and what to do; repeat at most two numbers.")
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": content}]
     try:
         first = clean(llm.chat(messages)["message"]["content"])
