@@ -24,7 +24,8 @@ what you get back, and, briefly, why it works the way it does.
 ## 1. Install
 
 **You need:** a Mac with Apple silicon (developed on an M4 Pro with 24 GB of memory), Homebrew, Python 3.11 or
-later, and about 25 GB of free disk space for the models.
+later, Apple's Command Line Tools (`xcode-select --install`: the Wi-Fi and Bluetooth readers are small Swift
+programs compiled on first use), and about 25 GB of free disk space for the models.
 
 | Step | Command | Why |
 |---|---|---|
@@ -33,7 +34,8 @@ later, and about 25 GB of free disk space for the models.
 | 3. Download the models | see the table below | Each job uses the smallest model that passed its tests |
 | 4. Python environment | `python3 -m venv .venv && source .venv/bin/activate` | Keeps the agent's libraries apart from the system's |
 | 5. Libraries | `pip install -r requirements.txt` | NumPy, SciPy, SymPy and Pint for the math tools; Pillow, pypdfium2 and python-pptx for images and documents. The agent core itself uses only the Python standard library |
-| 6. First start | `python main.py --fast` | |
+| 6. Check | `python -m unittest discover -s tests` | About 450 offline tests, no model or network needed: confirms the install |
+| 7. First start | `python main.py --fast` | |
 
 | Model | Size | Used for | Why this one |
 |---|---|---|---|

@@ -80,7 +80,7 @@ Defined in `config.toml`.
 ## Tests and measurements
 
 ```bash
-python -m unittest discover -s tests -v                    # 375 offline tests, no Ollama needed
+python -m unittest discover -s tests -v                    # about 450 offline tests, no Ollama needed
 
 # answer quality
 python scripts/run_eval_set.py --set documents --fast      # documents
