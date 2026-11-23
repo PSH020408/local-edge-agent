@@ -8,7 +8,7 @@ English or Korean; the answer comes in the language of the question.
 ```bash
 source .venv/bin/activate
 python main.py
-you> How is my battery health?
+edge·auto> How is my battery health?
 ```
 
 Battery questions are answered in about 5 seconds; questions about performance take about 15 seconds, because

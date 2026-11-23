@@ -34,8 +34,9 @@ programs compiled on first use), and about 25 GB of free disk space for the mode
 | 3. Download the models | see the table below | Each job uses the smallest model that passed its tests |
 | 4. Python environment | `python3 -m venv .venv && source .venv/bin/activate` | Keeps the agent's libraries apart from the system's |
 | 5. Libraries | `pip install -r requirements.txt` | NumPy, SciPy, SymPy and Pint for the math tools; Pillow, pypdfium2 and python-pptx for images and documents. The agent core itself uses only the Python standard library |
-| 6. Check | `python -m unittest discover -s tests` | About 450 offline tests, no model or network needed: confirms the install |
-| 7. First start | `python main.py --fast` | |
+| 6. Check | `python -m unittest discover -s tests` | About 460 offline tests, no model or network needed: confirms the install |
+| 7. The `edge` command | `./scripts/install_shell.sh` | Starts the agent from any folder by typing `edge`, or a Korean question straight at the prompt (section 2) |
+| 8. First start | `edge` (or `python main.py`) | |
 
 | Model | Size | Used for | Why this one |
 |---|---|---|---|
@@ -63,13 +64,40 @@ for your password once per session instead (`sudo -v`), because Apple's Wi-Fi to
 ## 2. Start a session
 
 ```bash
-source .venv/bin/activate
-python main.py --fast
+edge                          # the menu below
+edge 배터리 상태 어때?           # answered at once, then the session goes on in the detected mode
+배터리 상태 어때?               # the same without "edge" (Korean questions only, see below)
 ```
 
-- Type at `you>`. To ask about a file, put its path in the question: `notes/lecture4.pdf Summarize this lecture.`
-- Ask in English or Korean; the answer comes back in the same language.
-- Commands: `/tools` lists the tools, `/reset` starts a new conversation, `/exit` ends the session.
+Without the shell command: `source .venv/bin/activate && python main.py` (the same options).
+
+**The menu.** `edge` alone shows what the agent does, one mode per kind of question:
+
+| No. | Mode | What it covers | Engine |
+|---|---|---|---|
+| 1 | Device diagnosis (this Mac) | battery health and charging, energy mode, CPU/GPU load, heat, memory, storage and ports | sensor readings + `qwen3:4b` |
+| 2 | Network diagnosis (Wi-Fi, Bluetooth) | connection quality, whether a game, call or 4K stream will work, which router to join, Bluetooth dropouts | measurements (ping, speed, scan) + `qwen3:4b` |
+| 3 | Image analysis | describing photos, boards and circuits, charts, handwriting and signs, equations to LaTeX | `qwen3-vl:8b` + `qwen3:14b` planning |
+| 4 | Documents and papers (PDF, PPT) | summaries, equations explained, tables and financial statements, exam questions, page citations | `qwen3:14b` + page reading |
+| 5 | Engineering calculation | units, dB and link budgets, circuits, complex numbers, dates and time zones | tools + `qwen3:8b` / `qwen3:14b` |
+| 6 | Free question (auto) | any question; the mode is chosen for you | keyword routing |
+
+- Type a number to enter a mode, or type a question straight away (mode 6). The prompt shows the mode
+  (`edge·network>`); `/menu` shows the menu again, `?` examples, `/reset` a new conversation, `/exit` ends.
+- *Why modes:* inside a mode the question skips routing and goes straight to that mode's agent, and choosing the
+  mode loads its models into memory in the background while you type, so the first answer does not wait for a
+  model to load (20-40 s for the larger ones). Routing is still applied inside a mode where it matters: a battery
+  question asked in the network mode is answered as a battery question.
+- **Files:** drag a file onto the terminal to put its path in the question: `~/Downloads/paper.pdf 요약해줘`.
+  A file outside the project folder is copied into `inbox/` first (the file tools read only inside the project),
+  and the question is rewritten to that copy. Only files named in the question are copied.
+- Ask in English or Korean; the answer comes back in the same language. English questions start with `edge`.
+- **Typing a question without `edge`:** zsh calls a hook when the first word is not a command; the hook passes
+  the line to the agent only when that word is Korean, so a typo like `gti status` still says "command not
+  found". The installer also sets `no_nomatch`, so a `?` at the end is not read as a file pattern. Quotes and
+  brackets are still read by the shell: use `edge` with the question in quotes for those. Remove the hook with
+  `./scripts/install_shell.sh --no-hook`, everything with `--remove`.
+- Options: `--mode network` starts in a mode, `--once` answers and exits (for scripts).
 - **Which model answers:** each kind of question has its own (the Mac and its network: a 4B model over code;
   images and documents: the vision model and the 14B planner). For everything else the model is chosen per
   question: the light `qwen3:8b`, or the heavy `qwen3:14b` when the question looks hard (four or more quantities,
@@ -255,7 +283,9 @@ game.
 | Symptom | What to do |
 |---|---|
 | An error about connecting to Ollama | Ollama is not running: open the Ollama app or run `ollama serve` |
-| The first answer takes 20-40 s | The model is loading into memory; the next answers are faster |
+| The first answer takes 20-40 s | The model is loading into memory; the next answers are faster. Choosing a mode from the menu loads it while you type |
+| `zsh: no matches found` | The question has a `?` and was typed without the installed `edge`: run `./scripts/install_shell.sh` and open a new tab, or put the question in quotes |
+| A Korean question says "command not found" | The hook is not loaded: open a new terminal tab; if another tool also defines `command_not_found_handler` in `~/.zshrc`, the later one wins |
 | "Run `sudo -v` first" | Wi-Fi measurements need your password; it is remembered for about 5 minutes |
 | "연결된 와이파이" instead of the network's name | Newer macOS hides it from `wdutil`; the agent then reads it through CoreWLAN, which may ask to allow Location Services for Terminal |
 | A Bluetooth permission window | Allow Terminal to use Bluetooth (needed for the iPhone signal scan) |

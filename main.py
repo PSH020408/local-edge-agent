@@ -1,8 +1,14 @@
 """Interactive command-line entry point for the local agent.
 
 Usage:
-    python3 main.py            # the model chosen per question: light (8B), heavy (14B) when the question is hard
-    python3 main.py --fast     # the same (auto model choice); --model fixes one model
+    edge                       # the menu (scripts/install_shell.sh adds the edge command to zsh)
+    edge 배터리 상태 어때         # answer at once, then go on in the detected mode
+    python3 main.py            # the same menu without the shell command
+    python3 main.py --mode network "게임 해도 돼?"
+    python3 main.py --once "뉴욕은 지금 몇 시?"   # answer and exit
+
+Models: general questions get light (8B) or heavy (14B) per question.
+    python3 main.py --fast     # auto model choice as well; --model fixes one model
     python3 main.py --model qwen3:8b
     python3 main.py --fast --planner-model qwen3:8b   # also plan image questions with the fast model
     python3 main.py --accurate # accuracy over speed: verified image answers (profiles in config.toml)
@@ -12,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -23,6 +30,7 @@ from agent.device.shell import LiveShell
 from agent.device.store import Store
 from agent.document_planner import DocumentQuestionPlanner
 from agent.image_planner import ImageQuestionPlanner, PlannerOptions
+from agent.launcher import BY_KEY, BY_NUMBER, MODES, Session, examples, menu
 from agent.model_choice import ModelChooser
 from agent.vision_tools import VisionConfig
 
@@ -238,8 +246,30 @@ def describe_setup(model: str, vision_config, planner, planner_model: str, profi
     return " | ".join(parts)
 
 
+def mode_models(cfg: dict, model: str, planner_model: str, vision_config) -> dict[str, str]:
+    """The model names each launcher mode loads ahead of the first question."""
+    device_cfg = cfg.get("device", {})
+    return {"light": model, "planner": planner_model, "vision": vision_config.model if vision_config else "",
+            "device_writer": device_cfg.get("answer_model", ""), "device_router": device_cfg.get("router_model", "")}
+
+
+def ask(session: Session, question: str) -> str | None:
+    try:
+        answer, mode = session.ask(question)
+        print(f"agent> {answer}\n")
+        return mode
+    except LLMError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return None
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Local LLM agent")
+    parser = argparse.ArgumentParser(
+        description="Local Edge Agent. Run with no question for the menu, or with a question to answer it at once.")
+    parser.add_argument("question", nargs="*", help="a question in plain language, e.g. 배터리 상태 어때")
+    parser.add_argument("--mode", choices=[m.key for m in MODES], help="start in one mode: " +
+                        ", ".join(f"{m.key} ({m.title})" for m in MODES))
+    parser.add_argument("--once", action="store_true", help="answer the question and exit")
     parser.add_argument("--config", default=str(ROOT / "config.toml"))
     parser.add_argument("--model", help="override the model name")
     parser.add_argument("--fast", action="store_true", help="profile 'fast' from config.toml")
@@ -256,19 +286,52 @@ def main() -> None:
         cfg, model, args.planner_model, profile=profile
     )
     chooser = build_chooser(cfg, agent, auto[1]) if auto else None
+    models = mode_models(cfg, model, planner_model, vision_config)
+    session = Session(agent, planner, chooser, workspace, Path(os.environ.get("EDGE_CWD") or Path.cwd()), models, cfg["llm"]["host"],
+                      on_event=lambda m: print(format_event(m)))
 
-    print(f"{describe_setup(model, vision_config, planner, planner_model, profile, auto[1] if auto else None)} | Tools: {', '.join(registry.names())} | Workspace: {workspace}")
-    print("Commands: /reset  /tools  /exit\n")
+    try:
+        import readline  # noqa: F401 - line editing and history for input(), Korean included
+    except ImportError:
+        pass
+    question = " ".join(args.question).strip()
+    if args.mode:
+        session.set_mode(args.mode)
+    if question:
+        mode = ask(session, question)
+        if args.once:
+            return
+        if mode and not args.mode:
+            session.set_mode(mode)
+        print(f"{DIM}(계속 질문하세요. 지금 모드: {BY_KEY[session.mode].title} · /menu 메뉴 · /exit 종료){RESET}")
+    else:
+        print(f"{DIM}{describe_setup(model, vision_config, planner, planner_model, profile, auto[1] if auto else None)}"
+              f" | Workspace: {workspace}{RESET}")
+        print(menu())
+
     while True:
         try:
-            user_input = input("you> ").strip()
+            user_input = input(f"\001{CYAN}\002edge·{session.mode}>\001{RESET}\002 ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
         if not user_input:
             continue
-        if user_input == "/exit":
+        if user_input in ("/exit", "/quit", "exit", "종료"):
             break
+        if user_input in BY_NUMBER:
+            chosen = BY_NUMBER[user_input]
+            session.set_mode(chosen.key)
+            print(f"{DIM}→ {chosen.title}: {chosen.engine} 준비 중 (첫 답부터 빠르게){RESET}")
+            if chosen.examples:
+                print(f"{DIM}  예) {chosen.examples[0]}{RESET}")
+            continue
+        if user_input in ("/menu", "0", "메뉴"):
+            print(menu())
+            continue
+        if user_input in ("?", "/examples", "예시"):
+            print(examples())
+            continue
         if user_input == "/reset":
             agent.reset()
             print("(conversation cleared)")
@@ -277,15 +340,7 @@ def main() -> None:
             for tool in registry.schemas():
                 print(f"- {tool['function']['name']}: {tool['function']['description']}")
             continue
-        try:
-            answer = planner.run(user_input) if planner else None
-            if answer is not None:
-                agent.remember(user_input, answer)
-            else:
-                answer = chooser.run(user_input) if chooser else agent.run(user_input)
-            print(f"agent> {answer}\n")
-        except LLMError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
+        ask(session, user_input)
 
 
 if __name__ == "__main__":

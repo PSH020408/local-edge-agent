@@ -130,6 +130,7 @@ held-out points within a stated error. Met: the card names the segment and the f
 4.4 dB on the held-out points (proposed after the walks, so a new walk is its real test).
 
 - [x] Model per question (11-23): light 8B, heavy 14B for hard questions or when the light one does not finish; experiment Q1 to compare with each model alone
+- [x] Terminal front door (11-23): `edge` menu of six modes with models loaded ahead, `edge <question>`, Korean questions at the zsh prompt, files copied in from anywhere
 
 Planned from the design review of 11-23 ([reviews.md](reviews.md)): experiment L1, whether the language model
 adds anything to the network answers (new phrasings routed by rules alone against rules plus the model; the card

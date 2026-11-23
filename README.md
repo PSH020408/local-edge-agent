@@ -9,12 +9,12 @@ locally through Ollama; nothing is sent to a cloud service.
 Author: PARK, SEHO
 
 ```
-you> reports/apple_10k_2025.pdf Check that Apple's total assets equal total liabilities plus shareholders' equity.
+edge·auto> reports/apple_10k_2025.pdf Check that Apple's total assets equal total liabilities plus shareholders' equity.
 agent> Apple's total assets at September 27, 2025, are $359,241 million [p.34]. The total liabilities are
        $285,508 million [p.34] and the total shareholders' equity is $73,733 million [p.34].
        285,508 + 73,733 = 359,241. This matches the total assets.
 
-you> How is my battery health?
+edge·auto> How is my battery health?
 agent> Your battery health is good. The maximum capacity is 90% and the full-charge capacity is 86.0% of the
        design capacity. The battery has undergone 286 charge cycles, well below the 1,000-cycle threshold, and
        is operating at 30.5 °C. Charging is currently paused by macOS at 90% to maintain battery longevity.
@@ -50,10 +50,14 @@ ollama pull qwen3:1.7b                     # routing when the keyword rules tie
 python3 -m venv .venv && source .venv/bin/activate   # Python 3.11+
 pip install -r requirements.txt
 
-python main.py --fast                      # start a session
+./scripts/install_shell.sh                 # adds the edge command to zsh
+edge                                       # menu: device, network, image, document, calculation, auto
+edge 게임 해도 돼?                           # or ask at once (Korean also works without "edge")
 ```
 
-Type a question at `you>`. To ask about a file, put its path in the question. Ask in English or Korean; the
+`edge` shows a menu of six modes; choosing one sends questions straight to that agent and loads its models while
+you type, so the first answer does not wait for a model to load. Or type a question right away and the mode is
+chosen for you. To ask about a file, drag it onto the terminal; files from elsewhere are copied into `inbox/`. Ask in English or Korean; the
 answer comes in the language of the question. The model is chosen per question: the light 8B, or the 14B when
 the question looks hard (several quantities or parts, a derivation) or the light one could not finish. Session
 commands: `/tools`, `/reset`, `/exit`. Optional

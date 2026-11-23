@@ -326,3 +326,9 @@ Same day, from the user's review of the guide: "can I run a document question?" 
   --fast; --model fixes one model. The 18-question set (evals/general/cases.toml) was written together with the
   rule, so its 18 of 18 judgments are a check, not a test; experiment Q1 measures right answers and time against
   each model alone.
+- Terminal front door (`agent/launcher.py`, `scripts/install_shell.sh`): `edge` opens a menu of six modes (device,
+  network, image, document, calculation, auto); `edge <question>` or a Korean question typed straight at the zsh
+  prompt is answered at once and the session continues in the detected mode. A mode skips routing and loads its
+  models in the background (Ollama keep_alive), so the first answer does not wait for loading. Files dragged in
+  from outside the project are copied into inbox/, since the file tools read only inside the workspace. The zsh
+  hook takes a line only when its first word is Korean, so mistyped commands still fail as before.
