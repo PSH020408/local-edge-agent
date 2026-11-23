@@ -1,8 +1,8 @@
 """Interactive command-line entry point for the local agent.
 
 Usage:
-    python3 main.py            # main model
-    python3 main.py --fast     # fast model for quick checks
+    python3 main.py            # the model chosen per question: light (8B), heavy (14B) when the question is hard
+    python3 main.py --fast     # the same (auto model choice); --model fixes one model
     python3 main.py --model qwen3:8b
     python3 main.py --fast --planner-model qwen3:8b   # also plan image questions with the fast model
     python3 main.py --accurate # accuracy over speed: verified image answers (profiles in config.toml)
@@ -23,6 +23,7 @@ from agent.device.shell import LiveShell
 from agent.device.store import Store
 from agent.document_planner import DocumentQuestionPlanner
 from agent.image_planner import ImageQuestionPlanner, PlannerOptions
+from agent.model_choice import ModelChooser
 from agent.vision_tools import VisionConfig
 
 ROOT = Path(__file__).resolve().parent
@@ -205,8 +206,24 @@ def select_model(cfg: dict, args, profile: dict) -> str:
     return llm_cfg["fast_model"] if args.fast else llm_cfg["model"]
 
 
-def describe_setup(model: str, vision_config, planner, planner_model: str, profile: dict) -> str:
-    parts = [f"Model: {model}"]
+def auto_models(cfg: dict, args, profile: dict) -> tuple[str, str] | None:
+    """(light, heavy) when the model is chosen per question: on by default and with --fast; off with --model or an
+    experiment profile that fixes a model."""
+    llm_cfg = cfg["llm"]
+    if not llm_cfg.get("auto_model", False) or args.model or profile_name(args) not in (None, "fast"):
+        return None
+    return llm_cfg["fast_model"], llm_cfg["model"]
+
+
+def build_chooser(cfg: dict, agent, heavy_model: str, on_event=lambda m: print(format_event(m))) -> ModelChooser:
+    llm_cfg = cfg["llm"]
+    heavy = OllamaClient(model=heavy_model, host=llm_cfg["host"], think=llm_cfg.get("think", False),
+                         options={"temperature": llm_cfg.get("temperature", 0.2), "num_ctx": llm_cfg.get("num_ctx", 8192)})
+    return ModelChooser(agent, agent.llm, heavy, on_event=on_event)
+
+
+def describe_setup(model: str, vision_config, planner, planner_model: str, profile: dict, heavy: str | None = None) -> str:
+    parts = [f"Model: {model}" + (f" (light), {heavy} (heavy questions)" if heavy else "")]
     if profile:
         parts.insert(0, f"Profile: {profile['name']}")
     if vision_config:
@@ -233,12 +250,14 @@ def main() -> None:
 
     cfg = load_config(Path(args.config))
     profile = resolve_profile(cfg, profile_name(args))
-    model = select_model(cfg, args, profile)
+    auto = auto_models(cfg, args, profile)
+    model = auto[0] if auto else select_model(cfg, args, profile)
     agent, planner, registry, workspace, vision_config, planner_model = build_session(
         cfg, model, args.planner_model, profile=profile
     )
+    chooser = build_chooser(cfg, agent, auto[1]) if auto else None
 
-    print(f"{describe_setup(model, vision_config, planner, planner_model, profile)} | Tools: {', '.join(registry.names())} | Workspace: {workspace}")
+    print(f"{describe_setup(model, vision_config, planner, planner_model, profile, auto[1] if auto else None)} | Tools: {', '.join(registry.names())} | Workspace: {workspace}")
     print("Commands: /reset  /tools  /exit\n")
     while True:
         try:
@@ -263,7 +282,7 @@ def main() -> None:
             if answer is not None:
                 agent.remember(user_input, answer)
             else:
-                answer = agent.run(user_input)
+                answer = chooser.run(user_input) if chooser else agent.run(user_input)
             print(f"agent> {answer}\n")
         except LLMError as exc:
             print(f"Error: {exc}", file=sys.stderr)

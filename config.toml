@@ -2,6 +2,8 @@
 host = "http://localhost:11434"
 model = "qwen3:14b"       # main model: quality checks and real use
 fast_model = "qwen3:8b"   # fast model: quick checks while developing (--fast)
+auto_model = true         # general questions: fast_model, or model when the question looks hard or the fast one
+                          # could not finish (agent/model_choice.py); off with --model or an experiment profile
 think = false             # Qwen3 "thinking" mode; slower but can help multi-step tasks
 temperature = 0.2         # low = more consistent tool calls
 num_ctx = 8192            # context window in tokens

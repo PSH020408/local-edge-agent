@@ -73,6 +73,11 @@ what the Mac sends?"**
   | `qwen3-vl:8b-instruct` | Reading images and document pages | 10-60 s per question |
   | `qwen3:14b` | Documents and planning image questions, where search and citation needed the larger model | 1-2 min per question |
 
+- *Added after this review:* within the general tier, the model is now chosen per question as well
+  (`agent/model_choice.py`). Code judges the question before any model runs (four or more quantities, several
+  parts, a derivation or comparison mean heavy; a lookup means light) and sends it to `qwen3:8b` or `qwen3:14b`;
+  when the light model stops without an answer, the question is run again on the heavy one. Experiment Q1
+  (`scripts/run_model_choice.py`, 18 questions with known answers) compares this against each model alone.
 - *What the logs show for the network agent:* it sits at the light end. In the final live run all 15 questions
   were routed by the rules (the 1.7B router was never needed) and the card is built by code; the 4B model wrote
   only the two or three sentences under it.

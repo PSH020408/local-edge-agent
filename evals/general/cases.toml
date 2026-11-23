@@ -1,0 +1,113 @@
+# General questions with known answers (experiment Q1: the model chosen per question).
+#     python scripts/run_model_choice.py              (light, heavy and auto, one after another)
+# level: what the question should be judged as (a check of agent/model_choice.py, not of the answer)
+# expected: numbers that must appear in the answer (within 1%, or 0.05 for small values); contains: any of
+#   these strings must appear (dates, weekdays). Answers computed independently when the set was written.
+
+[[case]]
+id = "L1"
+level = "light"
+question = "Convert 72 km/h to m/s."
+expected = [20.0]
+
+[[case]]
+id = "L2"
+level = "light"
+question = "What is 15% of 240?"
+expected = [36.0]
+
+[[case]]
+id = "L3"
+level = "light"
+question = "What date is 100 days after 2026-03-03?"
+contains = ["2026-06-11", "June 11", "6월 11일"]
+
+[[case]]
+id = "L4"
+level = "light"
+question = "How many dBm is 1 W?"
+expected = [30.0]
+
+[[case]]
+id = "L5"
+level = "light"
+question = "What is 2 to the power of 16?"
+expected = [65536.0]
+
+[[case]]
+id = "L6"
+level = "light"
+question = "Convert 100 °F to °C."
+expected = [37.78]
+
+[[case]]
+id = "L7"
+level = "light"
+question = "What weekday was 2026-01-01?"
+contains = ["Thursday", "목요일"]
+
+[[case]]
+id = "L8"
+level = "light"
+question = "3.3 V across 220 Ω: what current in mA?"
+expected = [15.0]
+
+[[case]]
+id = "H1"
+level = "heavy"
+question = "A 1,200 kg car brakes from 90 km/h to 0 in 40 m. What is the braking force in newtons?"
+expected = [9375.0]
+
+[[case]]
+id = "H2"
+level = "heavy"
+question = "A 2 W transmitter, +10 dBi antenna, 100 dB path loss, +3 dBi receive antenna: received power in dBm?"
+expected = [-54.0]
+
+[[case]]
+id = "H3"
+level = "heavy"
+question = "Resistors of 100 Ω, 220 Ω and 470 Ω in parallel, then in series with 50 Ω: what is the total resistance?"
+expected = [109.98]
+
+[[case]]
+id = "H4"
+level = "heavy"
+question = "How many minutes does a 2 kW kettle take to heat 1.5 L of water from 20 to 100 °C if 85% of the energy goes into the water?"
+expected = [4.92]
+
+[[case]]
+id = "H5"
+level = "heavy"
+question = "An RC low-pass filter has R = 10 kΩ and C = 4.7 nF. What is the cutoff frequency, and the attenuation in dB at 10 kHz?"
+expected = [3386.0, -9.88]
+
+[[case]]
+id = "H6"
+level = "heavy"
+question = "A 5,000 mAh battery at 3.7 V powers a 2.5 W load through an 88% efficient converter. How many hours does it last?"
+expected = [6.51]
+
+[[case]]
+id = "H7"
+level = "heavy"
+question = "What is the thermal noise power in dBm for a 20 MHz bandwidth at 290 K, and the SNR of a -70 dBm signal with a 7 dB noise figure?"
+expected = [-101.0, 24.0]
+
+[[case]]
+id = "H8"
+level = "heavy"
+question = "A sine of 2 V peak at 50 Hz across a 100 Ω resistor: RMS voltage, average power in mW?"
+expected = [1.414, 20.0]
+
+[[case]]
+id = "K1"
+level = "light"
+question = "1 마일은 몇 km야?"
+expected = [1.609]
+
+[[case]]
+id = "K2"
+level = "heavy"
+question = "송신 출력 1 W, 송신 안테나 이득 6 dBi, 경로 손실 90 dB, 수신 안테나 이득 2 dBi일 때 수신 전력은 몇 dBm이고 잡음이 -95 dBm이면 SNR은?"
+expected = [-52.0, 43.0]

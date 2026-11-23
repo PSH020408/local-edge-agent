@@ -70,9 +70,15 @@ python main.py --fast
 - Type at `you>`. To ask about a file, put its path in the question: `notes/lecture4.pdf Summarize this lecture.`
 - Ask in English or Korean; the answer comes back in the same language.
 - Commands: `/tools` lists the tools, `/reset` starts a new conversation, `/exit` ends the session.
-- **Profiles:** `--fast` is the one to use (the 8B model leads, images are planned by the 14B model). Without a
-  flag the 14B model leads, which is slower. `--accurate` is a recorded experiment (second
-  looks and votes) that was 3-4 times slower and less accurate; it is kept for comparison.
+- **Which model answers:** each kind of question has its own (the Mac and its network: a 4B model over code;
+  images and documents: the vision model and the 14B planner). For everything else the model is chosen per
+  question: the light `qwen3:8b`, or the heavy `qwen3:14b` when the question looks hard (four or more quantities,
+  several parts, a derivation or a comparison) or the light model could not finish. A line under your question
+  shows which one and why, e.g. `model: qwen3:14b (heavy: 4 quantities)`. *Why:* most everyday questions are
+  lookups and single conversions that the light model answers in seconds; the heavy one is slower and takes
+  more memory, so it is called only when needed.
+- **Options:** `--fast` and no flag both choose per question; `--model qwen3:14b` fixes one model; `--accurate` is
+  a recorded experiment (second looks and votes) that was 3-4 times slower and less accurate, kept for comparison.
 
 **How every answer is made.** A keyword router sends the question to the right agent; code does the exact work
 (computes, reads twice and compares, measures, diagnoses); a local model writes the answer from that result;

@@ -54,7 +54,9 @@ python main.py --fast                      # start a session
 ```
 
 Type a question at `you>`. To ask about a file, put its path in the question. Ask in English or Korean; the
-answer comes in the language of the question. Session commands: `/tools`, `/reset`, `/exit`. Optional
+answer comes in the language of the question. The model is chosen per question: the light 8B, or the 14B when
+the question looks hard (several quantities or parts, a derivation) or the light one could not finish. Session
+commands: `/tools`, `/reset`, `/exit`. Optional
 administrator rules, profiles and troubleshooting: [docs/manual.md](docs/manual.md).
 
 ---

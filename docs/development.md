@@ -65,8 +65,8 @@ Defined in `config.toml`.
 
 | Command | Profile |
 |---|---|
-| `python main.py --fast` | `qwen3:8b` main model; images planned by `qwen3:14b`. Use this for real work |
-| `python main.py` | `qwen3:14b` main model |
+| `python main.py --fast` or `python main.py` | Model per question: `qwen3:8b`, or `qwen3:14b` when the question looks hard or 8B did not finish (`agent/model_choice.py`); images and documents planned by `qwen3:14b`. Use this for real work |
+| `python main.py --model qwen3:14b` | One fixed model for every general question |
 | `python main.py --accurate` | Experiment: second looks with a majority vote, tile scans, the thinking vision model. In Run 24 it was 3-4× slower and less accurate; kept for the record ([benchmarks.md](benchmarks.md)) |
 
 ## Safety

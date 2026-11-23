@@ -320,3 +320,9 @@ Same day, from the user's review of the guide: "can I run a document question?" 
   decide. Recorded with the answers, the data behind them and the plan in docs/reviews.md. The honest finding:
   in the network agent the rules already decide and route (15 of 15 in the final run); the model only explains.
   Experiment L1 will measure whether that explanation, and the model's fallback understanding, earn their place.
+- Model per question (after the review): `agent/model_choice.py` judges a general question in code before any model
+  runs (quantities, parts, reasoning words, length; lookups are light) and sends it to qwen3:8b or qwen3:14b; a
+  light run that stops without an answer is redone on 14B with the failed attempt removed. On by default and with
+  --fast; --model fixes one model. The 18-question set (evals/general/cases.toml) was written together with the
+  rule, so its 18 of 18 judgments are a check, not a test; experiment Q1 measures right answers and time against
+  each model alone.
