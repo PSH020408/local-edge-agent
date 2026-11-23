@@ -380,6 +380,7 @@ Dates and "done when" criteria: [docs/roadmap.md](docs/roadmap.md).
 | [docs/device_questions.md](docs/device_questions.md) | User guide for questions about the Mac, its network and Bluetooth |
 | [docs/examples/network.md](docs/examples/network.md) | Real answers of the network agent from the final live run |
 | [docs/wifi_method.md](docs/wifi_method.md) | Wi-Fi and Bluetooth measurement: sources, assumptions, results |
+| [docs/reviews.md](docs/reviews.md) | Design reviews: the questions the project was challenged with, the answers, what changed |
 | [evals/wireless/experiments.md](evals/wireless/experiments.md) | Wi-Fi and Bluetooth experiments: predictions, results, decisions |
 | [docs/development.md](docs/development.md) | Tools, profiles, code layout, all test commands |
 | [docs/devlog.md](docs/devlog.md) | Development log: decisions, runs, fixes |

@@ -313,3 +313,10 @@ Same day, from the user's review of the guide: "can I run a document question?" 
   The written part still has small wording slips from the 4B model ("혼잡해 없습니다", an English phrase left in
   one Korean answer); the card above it carries the verdicts. Twelve answers exported with names replaced to
   docs/examples/network.md; a stage-by-stage user manual added (docs/manual.md).
+
+## 2026-11-23 — Design review 2
+
+- Asked why build this when the Wi-Fi menu already ranks networks, and why use an LLM when a classifier could
+  decide. Recorded with the answers, the data behind them and the plan in docs/reviews.md. The honest finding:
+  in the network agent the rules already decide and route (15 of 15 in the final run); the model only explains.
+  Experiment L1 will measure whether that explanation, and the model's fallback understanding, earn their place.

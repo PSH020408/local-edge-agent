@@ -129,6 +129,10 @@ Done when: "why is my Wi-Fi slow?" returns the faulty segment, a verdict and a f
 held-out points within a stated error. Met: the card names the segment and the fix; the door-path model 3.1 and
 4.4 dB on the held-out points (proposed after the walks, so a new walk is its real test).
 
+Planned from the design review of 11-23 ([reviews.md](reviews.md)): experiment L1, whether the language model
+adds anything to the network answers (new phrasings routed by rules alone against rules plus the model; the card
+alone against the card with the model's text, judged by people without the background).
+
 ## Stage 9 — iPhone client (11-27 to 11-28)
 
 - [ ] Local HTTP endpoint on the Mac (home network only, shared key)
