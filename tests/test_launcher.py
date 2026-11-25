@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from agent import launcher
-from agent.launcher import MODES, Session, detect_mode, device_topic, import_files, menu
+from agent.launcher import MODES, Session, detect_mode, device_topic, import_files, looks_like_shell, menu
 
 NO = lambda q: False  # noqa: E731
 
@@ -46,6 +46,16 @@ class MenuTests(unittest.TestCase):
         for m in MODES:
             self.assertIn(f"{m.number}  {m.title}", text)
         self.assertEqual(len({m.number for m in MODES}), len(MODES))
+
+
+class ShellTests(unittest.TestCase):
+    def test_commands_caught(self):
+        for cmd in ("source .venv/bin/activate", "python scripts/run_model_choice.py", "git status", "./scripts/install_shell.sh"):
+            self.assertTrue(looks_like_shell(cmd), cmd)
+
+    def test_questions_pass(self):
+        for q in ("python으로 피보나치 짜줘", "게임 해도 돼?", "open loop gain이 뭐야?", "What is a git rebase?", "~/Downloads/paper.pdf 요약해줘", "./paper.pdf 요약"):
+            self.assertFalse(looks_like_shell(q), q)
 
 
 class DetectTests(unittest.TestCase):

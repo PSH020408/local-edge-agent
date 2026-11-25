@@ -44,11 +44,24 @@ class AssessTests(unittest.TestCase):
 
 
 class ChooserTests(unittest.TestCase):
-    def make(self, light_answer):
+    def make(self, light_answer, loaded=None):
         light, heavy = FakeModel("light-8b", light_answer), FakeModel("heavy-14b", "heavy answer")
         agent = Agent(light, ToolRegistry(), max_steps=3)
         events = []
-        return ModelChooser(agent, light, heavy, on_event=events.append), light, heavy, agent, events
+        return ModelChooser(agent, light, heavy, on_event=events.append, loaded=loaded), light, heavy, agent, events
+
+    def test_light_question_kept_on_loaded_heavy(self):
+        chooser, light, heavy, _, events = self.make("20 m/s", loaded=lambda: {"heavy-14b"})
+        self.assertEqual(chooser.run("Convert 72 km/h to m/s."), "heavy answer")
+        self.assertEqual((light.calls, heavy.calls), (0, 1))
+        self.assertTrue(chooser.last.kept_loaded)
+        self.assertIn("no reload", events[0])
+
+    def test_both_loaded_or_none_known_uses_judgement(self):
+        for loaded in (lambda: {"heavy-14b", "light-8b"}, lambda: set(), lambda: {"light-8b"}):
+            chooser, light, heavy, _, _ = self.make("20 m/s", loaded=loaded)
+            self.assertEqual(chooser.run("Convert 72 km/h to m/s."), "20 m/s")
+            self.assertFalse(chooser.last.kept_loaded)
 
     def test_light_question_stays_light(self):
         chooser, light, heavy, agent, _ = self.make("20 m/s")

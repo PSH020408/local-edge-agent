@@ -78,6 +78,22 @@ what the Mac sends?"**
   parts, a derivation or comparison mean heavy; a lookup means light) and sends it to `qwen3:8b` or `qwen3:14b`;
   when the light model stops without an answer, the question is run again on the heavy one. Experiment Q1
   (`scripts/run_model_choice.py`, 18 questions with known answers) compares this against each model alone.
+- *Experiment Q1 (2026-11-25), 18 questions with known answers:*
+
+  | Mode | Right | Total time | Median per question |
+  |---|---|---|---|
+  | `qwen3:8b` only | 12 of 18 | 57 s | 2.0 s |
+  | `qwen3:14b` only | 15 of 18 | 112 s | 3.8 s |
+  | Chosen per question | 15 of 18 | 178 s | 6.7 s |
+
+  The choice gave the heavy model's accuracy (five of the light model's six misses were on questions judged heavy;
+  the sixth was an empty answer, which escalation caught), but it was the slowest of the three. The cause was switching:
+  the two models were not kept in memory together on this 24 GB Mac, so each of the six switches reloaded a model,
+  about 15 s each and about 90 s in all. Three questions (a kettle's heating time, an RC filter's attenuation, a
+  noise-figure SNR) were wrong with both models: those need better tools, not a larger model.
+- *Changed after Q1:* a question judged light that arrives while only the heavy model is loaded is answered by
+  the heavy one (a few seconds slower at most, against about 15 s to load the light one). Experiment Q1b repeats
+  the auto mode from a cold start with this rule.
 - *What the logs show for the network agent:* it sits at the light end. In the final live run all 15 questions
   were routed by the rules (the 1.7B router was never needed) and the card is built by code; the 4B model wrote
   only the two or three sentences under it.

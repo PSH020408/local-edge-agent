@@ -57,6 +57,14 @@ MODE_MODELS = {"device": ["device_writer", "device_router"], "network": ["device
                "image": ["planner", "vision"], "document": ["planner", "vision"], "math": ["light"], "auto": ["light"]}
 
 
+SHELL = re.compile(r"^(?:(?:source|python3?|pip3?|cd|git|ls|ollama|sudo|brew|chmod)(?:\s|$)|\./\S+\.(?:sh|py)(?:\s|$)|\.venv/)")
+
+
+def looks_like_shell(text: str) -> bool:
+    """A terminal command typed at the agent's prompt (e.g. after forgetting to /exit)."""
+    return bool(SHELL.match(text.strip()))
+
+
 def menu() -> str:
     lines = ["", "  Local Edge Agent — 무엇을 도와드릴까요?  (모든 처리는 이 맥 안에서만)", ""]
     for m in MODES:

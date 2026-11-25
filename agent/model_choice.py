@@ -15,6 +15,12 @@ Questions about the Mac, its network, images and documents already go to their o
    the step limit, repeated a failing tool call, or returned nothing. The light attempt is removed from the
    conversation, so the heavy model starts from the question.
 
+3. Switching costs a reload. Experiment Q1 (2026-11-25): on this Mac the two models were not kept in memory together,
+   so every switch reloaded one (about 15 s each; six switches cost about 90 s of the 178 s). So when a question
+   judged light arrives while only the heavy model is loaded, the heavy one answers it: a few seconds slower than
+   the light model at most, against about 15 s for loading the light one, and at least as accurate. A question
+   judged heavy still loads the heavy model.
+
 Why: the heavy model (qwen3:14b) is slower and needs more memory; most everyday questions are lookups and single
 conversions that the light model (qwen3:8b) answers with a tool in seconds. Experiment Q1 (scripts/run_model_choice.py)
 compares auto against each model alone on a set with known answers.
@@ -78,15 +84,39 @@ class Choice:
     assessment: Assessment
     escalated: bool = False
     first_answer: str = ""
+    kept_loaded: bool = False          # judged light, answered by the heavy model already in memory
+
+
+def loaded_models(host: str, timeout: float = 2.0) -> set[str]:
+    """Models Ollama has in memory now (GET /api/ps); empty when Ollama cannot be asked."""
+    import json
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"{host}/api/ps", timeout=timeout) as response:
+            data = json.loads(response.read())
+    except Exception:  # noqa: BLE001 - the check only saves time; without it the judged model is used
+        return set()
+    return {m.get("name") or m.get("model", "") for m in data.get("models", [])}
 
 
 class ModelChooser:
-    """Runs a question on the agent loop with the model the question needs."""
+    """Runs a question on the agent loop with the model the question needs.
 
-    def __init__(self, agent, light, heavy, on_event=None) -> None:
+    loaded: a function returning the model names in memory (loaded_models), or None to skip the reload check.
+    """
+
+    def __init__(self, agent, light, heavy, on_event=None, loaded=None) -> None:
         self.agent, self.light, self.heavy = agent, light, heavy
         self.on_event = on_event or (lambda message: None)
+        self.loaded = loaded
         self.last: Choice | None = None
+
+    def _keep_heavy(self) -> bool:
+        """Only the heavy model is in memory: answering with it avoids a reload."""
+        if not self.loaded or self.light is self.heavy:
+            return False
+        names = self.loaded()
+        return self._name(self.heavy) in names and self._name(self.light) not in names
 
     def _name(self, llm) -> str:
         return getattr(llm, "model", str(llm))
@@ -95,17 +125,21 @@ class ModelChooser:
         a = assess(question)
         first = self.heavy if a.level == "heavy" else self.light
         why = ", ".join(a.reasons) or "a short question"
+        kept = first is self.light and self._keep_heavy()
+        if kept:
+            first = self.heavy
+            why += "; only the heavy model is loaded, no reload"
         self.on_event(f"model: {self._name(first)} ({a.level}: {why})")
         start = len(self.agent.messages)
         answer = self._run_with(first, question)
-        choice = Choice(self._name(first), a)
+        choice = Choice(self._name(first), a, kept_loaded=kept)
         if first is self.light and self.light is not self.heavy and needs_escalation(answer):
             self.on_event(f"model: {self._name(self.heavy)} (the light model did not finish: {answer[:60]})")
             del self.agent.messages[start:]
             choice = Choice(self._name(self.heavy), a, escalated=True, first_answer=answer)
             answer = self._run_with(self.heavy, question)
         self.agent.logger.log("model_choice", model=choice.model, level=a.level, score=a.score,
-                              reasons=a.reasons, escalated=choice.escalated)
+                              reasons=a.reasons, escalated=choice.escalated, kept_loaded=choice.kept_loaded)
         self.last = choice
         return answer
 

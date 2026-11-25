@@ -332,3 +332,13 @@ Same day, from the user's review of the guide: "can I run a document question?" 
   models in the background (Ollama keep_alive), so the first answer does not wait for loading. Files dragged in
   from outside the project are copied into inbox/, since the file tools read only inside the workspace. The zsh
   hook takes a line only when its first word is Korean, so mistyped commands still fail as before.
+
+## 2026-11-25 — Experiment Q1: model per question
+
+- 18 questions, three modes: 8B only 12 of 18 in 57 s; 14B only 15 of 18 in 112 s; chosen per question 15 of 18
+  in 178 s. Same accuracy as 14B, but slowest: the models did not stay in memory together, and the six switches
+  each reloaded one (about 15 s each). Rule added: a light question goes to the heavy model when only that one is
+  loaded. Q1b re-runs auto from a cold start. Three questions failed with both models (unit handling in the
+  calculation tools), recorded as tool work, not model size.
+- Launcher: a terminal command typed at the agent prompt (after forgetting /exit) gets a hint instead of an answer.
+

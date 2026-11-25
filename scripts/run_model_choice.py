@@ -82,19 +82,20 @@ def main():
             seconds = time.monotonic() - start
             used = chooser.last.model if chooser and chooser.last else model
             escalated = bool(chooser and chooser.last and chooser.last.escalated)
+            kept = bool(chooser and chooser.last and chooser.last.kept_loaded)
             ok = grade(answer, c)
-            rows.append({"id": c["id"], "ok": ok, "seconds": round(seconds, 1), "model": used, "escalated": escalated,
+            rows.append({"id": c["id"], "ok": ok, "seconds": round(seconds, 1), "model": used, "escalated": escalated, "kept": kept,
                          "answer": answer.strip()})
-            print(f"  {c['id']:3} {'right' if ok else 'WRONG':5} {seconds:5.1f} s  {used}{'  (escalated)' if escalated else ''}")
+            print(f"  {c['id']:3} {'right' if ok else 'WRONG':5} {seconds:5.1f} s  {used}{'  (escalated)' if escalated else ''}{'  (kept loaded)' if kept else ''}")
         results[mode] = rows
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     lines = [f"# Q1: model per question ({stamp})", "", f"Light {light}, heavy {heavy}; {len(cases)} questions.", "",
-             "| Mode | Right | Total time | Median per question | Answered by the heavy model | Escalations |", "|---|---|---|---|---|---|"]
+             "| Mode | Right | Total time | Median per question | Answered by the heavy model | Escalations | Kept on the loaded heavy model |", "|---|---|---|---|---|---|---|"]
     for mode, rows in results.items():
         heavy_share = sum(r["model"] == heavy for r in rows)
         lines.append(f"| {mode} | {sum(r['ok'] for r in rows)} of {len(rows)} | {sum(r['seconds'] for r in rows):.0f} s | "
-                     f"{statistics.median(r['seconds'] for r in rows):.1f} s | {heavy_share} | {sum(r['escalated'] for r in rows)} |")
+                     f"{statistics.median(r['seconds'] for r in rows):.1f} s | {heavy_share} | {sum(r['escalated'] for r in rows)} | {sum(r.get('kept', False) for r in rows)} |")
     lines += ["", "| Case | Judged | " + " | ".join(results) + " |", "|---|---|" + "---|" * len(results)]
     for i, c in enumerate(cases):
         cells = [f"{'right' if results[m][i]['ok'] else 'wrong'}, {results[m][i]['seconds']} s" for m in results]

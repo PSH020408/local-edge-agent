@@ -30,8 +30,8 @@ from agent.device.shell import LiveShell
 from agent.device.store import Store
 from agent.document_planner import DocumentQuestionPlanner
 from agent.image_planner import ImageQuestionPlanner, PlannerOptions
-from agent.launcher import BY_KEY, BY_NUMBER, MODES, Session, examples, menu
-from agent.model_choice import ModelChooser
+from agent.launcher import BY_KEY, BY_NUMBER, MODES, Session, examples, looks_like_shell, menu
+from agent.model_choice import ModelChooser, loaded_models
 from agent.vision_tools import VisionConfig
 
 ROOT = Path(__file__).resolve().parent
@@ -227,7 +227,8 @@ def build_chooser(cfg: dict, agent, heavy_model: str, on_event=lambda m: print(f
     llm_cfg = cfg["llm"]
     heavy = OllamaClient(model=heavy_model, host=llm_cfg["host"], think=llm_cfg.get("think", False),
                          options={"temperature": llm_cfg.get("temperature", 0.2), "num_ctx": llm_cfg.get("num_ctx", 8192)})
-    return ModelChooser(agent, agent.llm, heavy, on_event=on_event)
+    host = llm_cfg["host"]
+    return ModelChooser(agent, agent.llm, heavy, on_event=on_event, loaded=lambda: loaded_models(host))
 
 
 def describe_setup(model: str, vision_config, planner, planner_model: str, profile: dict, heavy: str | None = None) -> str:
@@ -339,6 +340,9 @@ def main() -> None:
         if user_input == "/tools":
             for tool in registry.schemas():
                 print(f"- {tool['function']['name']}: {tool['function']['description']}")
+            continue
+        if looks_like_shell(user_input):
+            print(f"{DIM}터미널 명령 같아요. /exit 로 나온 뒤 실행하세요. (This looks like a terminal command: /exit first.){RESET}")
             continue
         ask(session, user_input)
 
